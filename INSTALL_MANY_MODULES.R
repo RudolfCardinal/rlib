@@ -70,6 +70,7 @@ DESIRED_LIBRARIES = c(
     "sqldf",
     "TTR",
     "visreg",
+    "XLConnect",
     "xlsx",
     "xtermStyle",
     "zoo"
