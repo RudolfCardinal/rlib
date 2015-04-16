@@ -14,17 +14,23 @@
 # Then, for a uniform prior, the posterior is
 # - f(p | x rewards and y punishments in N trials) = ( (N+1)! / x! y! ) * p^x * (1 - p)^y ... or a beta-distribution alternative that won't break computationally.
 
+#==============================================================================
+# Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
+#==============================================================================
+
+rpm = new.env()
+
 #-------------------------------------------------------------------------------
 # Posteriors for binomial things
 #-------------------------------------------------------------------------------
 
-posterior_pdf_given_uniform_prior_with_two_outcomes <- function(p, N, x)
+rpm$posterior_pdf_given_uniform_prior_with_two_outcomes <- function(p, N, x)
 {
     y = N - x
     (1 / beta(x + 1, y + 1) ) * p^x * (1 - p)^y
 }
 
-best_estimator_of_p_given_uniform_prior_with_two_outcomes <- function(N, x)
+rpm$best_estimator_of_p_given_uniform_prior_with_two_outcomes <- function(N, x)
 {
     x/N # obviously
     # maximum a posteriori (MAP) estimate
@@ -35,7 +41,7 @@ best_estimator_of_p_given_uniform_prior_with_two_outcomes <- function(N, x)
 # Illustration
 #-------------------------------------------------------------------------------
 
-demo.posterior.binomial <- function()
+rpm$demo.posterior.binomial <- function()
 {
     p = seq(0,1,0.01)
     plot(p, posterior_pdf_given_uniform_prior_with_two_outcomes(p, 5, 1))
@@ -60,7 +66,7 @@ demo.posterior.binomial <- function()
 #   y = cumulative number of successes for each action = vector of length N_ACTIONS containing number of wins for each action
 #   n = cumulative number of trials for each action = vector of length N_ACTIONS containing number of trials for each action (thus, number of losses = n - y)
 
-compute.probopt <- function(y, n)
+rpm$compute.probopt <- function(y, n)
 {
     k <- length(y) # k is the number of actions
     ans <- numeric(k) # zero vector of length k
@@ -78,7 +84,7 @@ compute.probopt <- function(y, n)
     return(ans)
 }
 
-sim.post <- function(y, n, ndraws)
+rpm$sim.post <- function(y, n, ndraws)
 {
     k <- length(y)
     ans <- matrix(nrow = ndraws, ncol = k)
@@ -89,14 +95,14 @@ sim.post <- function(y, n, ndraws)
     return(ans)
 }
 
-prob.winner <- function(post)
+rpm$prob.winner <- function(post)
 {
     k <- length(y) # RNC: was ncol(y) in the original but that fails for vectors
     w <- table(factor(max.col(post), levels = 1:k))
     return( w / sum(w) )
 }
 
-compute.win.prob <- function(y, n, ndraws)
+rpm$compute.win.prob <- function(y, n, ndraws)
 {
     return( prob.winner( sim.post(y, n, ndraws) ) )
 }
@@ -105,7 +111,7 @@ compute.win.prob <- function(y, n, ndraws)
 # Illustration
 #-------------------------------------------------------------------------------
 
-demo.rpm <- function()
+rpm$demo.rpm <- function()
 {
     y = c(20 - 1, 20 - 1)
     no = c(30 - 1, 10 - 1)
@@ -115,3 +121,9 @@ demo.rpm <- function()
     compute.win.prob(y, n, 1000)
 }
 
+#==============================================================================
+# Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
+#==============================================================================
+
+if ("rpm" %in% search()) detach("rpm")
+attach(rpm)  # subsequent additions not found, so attach at the end

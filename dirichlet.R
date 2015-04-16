@@ -1,10 +1,16 @@
 # dirichlet.R
 
 #==============================================================================
+# Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
+#==============================================================================
+
+dirichlet = new.env()
+
+#==============================================================================
 # Stephan et al. (2009) Neuroimage: Dirichlet parameter estimation
 #==============================================================================
 
-dirichlet_exceedance_by_sampling <- function(alpha, Nsamp=1e6) {
+dirichlet$dirichlet_exceedance_by_sampling <- function(alpha, Nsamp=1e6) {
     # See https://github.com/neurodebian/spm8/blob/octave/spm_dirichlet_exceedance.m
     cat("dirichlet_exceedance, Nsamp =", Nsamp, "...\n")
     NK = length(alpha)
@@ -32,14 +38,14 @@ dirichlet_exceedance_by_sampling <- function(alpha, Nsamp=1e6) {
     return(wincounts / Nsamp)
 }
 
-dirichlet_exceedance_2_models <- function(alpha) {
+dirichlet$dirichlet_exceedance_2_models <- function(alpha) {
     c(
         pbeta(0.5, alpha[2], alpha[1]),
         pbeta(0.5, alpha[1], alpha[2])
     )
 }
 
-dirichlet_posterior_alpha <- function(
+dirichlet$dirichlet_posterior_alpha <- function(
     ln_p, # matrix, N rows, K columns: one value of ln(P(data|fitted model)) for each
     alpha_0 = NULL, # Dirichlet prior (NULL gives default as below)
     Nsamp = 1e6
@@ -75,10 +81,10 @@ dirichlet_posterior_alpha <- function(
     }
     exp_r = alpha / sum(alpha)
     if (K == 2) {
-        xp = dirichlet_exceedance_2_models(alpha)
+        xp = dirichlet$dirichlet_exceedance_2_models(alpha)
     }
     else {
-        xp = dirichlet_exceedance_by_sampling(alpha, Nsamp)
+        xp = dirichlet$dirichlet_exceedance_by_sampling(alpha, Nsamp)
     }
     return(list(
         alpha = alpha, # Dirichlet posterior
@@ -87,7 +93,7 @@ dirichlet_posterior_alpha <- function(
     ))
 }
 
-demo.dirichlet <- function() {
+dirichlet$demo.dirichlet <- function() {
     ll_matrix_1 <- matrix(
         c(
             -500, -200, # subject 1
@@ -108,7 +114,7 @@ demo.dirichlet <- function() {
         ncol = 3,
         byrow = TRUE
     )
-    dirichlet_posterior_alpha(ll_matrix_1, alpha_0 = NULL)
+    dirichlet$dirichlet_posterior_alpha(ll_matrix_1, alpha_0 = NULL)
 }
 
 # There's also a sampling verification for 2 models, which I've not implemented
@@ -118,3 +124,10 @@ demo.dirichlet <- function() {
 # spm_BMS(LL)
 # spm_BMS(LL, 1e6, 1, 1, 1)
 
+
+#==============================================================================
+# Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
+#==============================================================================
+
+if ("dirichlet" %in% search()) detach("dirichlet")
+attach(dirichlet)  # subsequent additions not found, so attach at the end

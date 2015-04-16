@@ -3,10 +3,16 @@
 library(xtermStyle)
 
 #==============================================================================
+# Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
+#==============================================================================
+
+debugfunc <- new.env()
+
+#==============================================================================
 # Debug message
 #==============================================================================
 
-debug_message <- function(..., file="", filename="", append=TRUE) {
+debugfunc$debug_message <- function(..., file="", filename="", append=TRUE) {
     # Use the file parameter OR the filename parameter OR neither.
     mode = "console"
     if (file != "") {
@@ -32,8 +38,10 @@ debug_message <- function(..., file="", filename="", append=TRUE) {
 # Debug a thing
 #==============================================================================
 
-debug_quantity <- function(x, file="", filename="", append=TRUE,
-                           progress_to_console=TRUE) {
+debugfunc$debug_quantity <- function(
+        x, file="", filename="", append=TRUE,
+        progress_to_console=TRUE, print_only=FALSE
+) {
     # Use the file parameter OR the filename parameter OR neither.
 
     # To write to file, can use:
@@ -76,8 +84,10 @@ debug_quantity <- function(x, file="", filename="", append=TRUE,
     cat(LINEBREAK, "DEBUGGING QUANTITY: ", x_name, "\n", sep="")
     cat("... print(", x_name, "):\n", sep="")
     print(x)
-    cat("... dput(", x_name, "):\n", sep="")
-    dput(x, file=file)
+    if (!print_only) {
+        cat("... dput(", x_name, "):\n", sep="")
+        dput(x, file=file)
+    }
     cat(LINEBREAK, "\n", file=file, sep="")
 
     if (mode == "file" || mode == "filename") {
@@ -95,7 +105,7 @@ debug_quantity <- function(x, file="", filename="", append=TRUE,
 # Output columns
 #==============================================================================
 
-wideScreen <- function(howWide=Sys.getenv("COLUMNS")) {
+debugfunc$wideScreen <- function(howWide=Sys.getenv("COLUMNS")) {
   options(width=as.integer(howWide))
 }
 
@@ -103,13 +113,13 @@ wideScreen <- function(howWide=Sys.getenv("COLUMNS")) {
 # Nested status messages
 #==============================================================================
 
-STATUS_DISPLAY_LEVEL <- 0
+debugfunc$STATUS_DISPLAY_LEVEL <- 0
 
-status <- function(msg, ellipsis=FALSE, increment=FALSE, colour="blue") {
+debugfunc$status <- function(msg, ellipsis=FALSE, increment=FALSE, colour="blue") {
     cat(
         style(
             paste(
-                paste(rep("  ", STATUS_DISPLAY_LEVEL), collapse=""),
+                paste(rep("  ", debugfunc$STATUS_DISPLAY_LEVEL), collapse=""),
                 msg,
                 ifelse(ellipsis, "...", ""),
                 "\n",
@@ -119,7 +129,7 @@ status <- function(msg, ellipsis=FALSE, increment=FALSE, colour="blue") {
         )
     )
     if (increment) {
-        STATUS_DISPLAY_LEVEL <<- STATUS_DISPLAY_LEVEL + 1
+        debugfunc$STATUS_DISPLAY_LEVEL <<- debugfunc$STATUS_DISPLAY_LEVEL + 1
     }
 }
 
@@ -127,20 +137,23 @@ status_start <- function(msg, ellipsis=TRUE, colour="red") {
     status(msg, increment=TRUE, ellipsis=ellipsis, colour=colour)
 }
 
-status_end <- function(msg="... done", announce=TRUE, colour="green") {
-    STATUS_DISPLAY_LEVEL <<- STATUS_DISPLAY_LEVEL - 1
+debugfunc$status_end <- function(msg="... done", announce=TRUE, colour="green") {
+    debugfunc$STATUS_DISPLAY_LEVEL <<- debugfunc$STATUS_DISPLAY_LEVEL - 1
     if (announce) {
-        cat(
-            style(
-                paste(
-                    paste(rep("  ", STATUS_DISPLAY_LEVEL), collapse=""),
-                    msg,
-                    "\n",
-                    sep=""
-                ),
-                fg=colour
-            )
-        )
+        cat(style(
+            paste(
+                paste(rep("  ", debugfunc$STATUS_DISPLAY_LEVEL), collapse=""),
+                msg,
+                "\n",
+                sep=""
+            ),
+            fg=colour))
     }
 }
 
+#==============================================================================
+# Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
+#==============================================================================
+
+if ("debugfunc" %in% search()) detach("debugfunc")
+attach(debugfunc)  # subsequent additions not found, so attach at the end

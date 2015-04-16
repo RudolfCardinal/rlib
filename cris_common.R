@@ -13,6 +13,12 @@ library(sqldf)
 source("http://egret.psychol.cam.ac.uk/rlib/miscstat.R") # for half_confidence_interval_t
 
 #==============================================================================
+# Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
+#==============================================================================
+
+cris = new.env()
+
+#==============================================================================
 # Database connection
 #==============================================================================
 
@@ -20,7 +26,7 @@ source("http://egret.psychol.cam.ac.uk/rlib/miscstat.R") # for half_confidence_i
 # CRIS_USER
 # CRIS_PASSWORD
 
-cris.connect = function()
+cris$connect = function()
 {
     # Connect to CRIS database, using login details from environment variables
     USER = Sys.getenv("CRIS_USER")
@@ -54,7 +60,7 @@ cris.connect = function()
 # Email
 #==============================================================================
 
-cris.send_email = function(recipients, subject, body, filenames = c() )
+cris$send_email = function(recipients, subject, body, filenames = c() )
 {
     # DOES NOT WORK - blocked by SLAM firewall.
     EMAIL_SCRIPT = Sys.getenv("EMAIL_SCRIPT")
@@ -82,7 +88,7 @@ cris.send_email = function(recipients, subject, body, filenames = c() )
 }
 
 
-cris.route_email = function(
+cris$route_email = function(
     url # specify your custom mail routing server script here
     , sender
     , recipient
@@ -135,51 +141,51 @@ cris.route_email = function(
 # Times, dates
 #==============================================================================
 
-cris.DAYS_PER_YEAR = 365.25 # ... on average
-cris.SECONDS_PER_DAY = 24 * 60 * 60
-cris.UNIX_EPOCH = "1970-01-01"
+cris$DAYS_PER_YEAR = 365.25 # ... on average
+cris$SECONDS_PER_DAY = 24 * 60 * 60
+cris$UNIX_EPOCH = "1970-01-01"
 
-cris.posixct_from_unix_datetime_in_seconds = function(x)
+cris$posixct_from_unix_datetime_in_seconds = function(x)
 {
     # When sqldf mangles a DATETIME or POSIXct field to an integer, unmangle it with this
-    as.POSIXct(as.integer(x), origin = cris.UNIX_EPOCH)
+    as.POSIXct(as.integer(x), origin = cris$UNIX_EPOCH)
 }
 
-cris.date_from_unix_date_in_days = function(x)
+cris$date_from_unix_date_in_days = function(x)
 {
     # When sqldf mangles a DATE or Date field to an integer, unmangle it with this
-    as.Date(as.integer(x), origin = cris.UNIX_EPOCH)
+    as.Date(as.integer(x), origin = cris$UNIX_EPOCH)
 }
 
-cris.days_between = function(start, end)
+cris$days_between = function(start, end)
 {
     # Works for POSIXct and Date
     as.numeric( difftime(end, start, units="days") )
 }
 
-cris.years_between = function(start, end)
+cris$years_between = function(start, end)
 {
     # Works for POSIXct and Date
-    cris.days_between(start, end) / cris.DAYS_PER_YEAR
+    cris$days_between(start, end) / cris$DAYS_PER_YEAR
 }
 
-cris.round_date_to_days = function(d)
+cris$round_date_to_days = function(d)
 {
     round(d)
 }
 
-cris.date_halfway_between = function(start, end)
+cris$date_halfway_between = function(start, end)
 {
     halfspan = end - start
     round(start + halfspan)
 }
 
-cris.year_from_date = function(d)
+cris$year_from_date = function(d)
 {
     as.numeric(format(d, "%Y"))
 }
 
-cris.date_range_inclusive = function(start_date, end_date)
+cris$date_range_inclusive = function(start_date, end_date)
 {
     seq(start_date, end_date, by=1)
 }
@@ -188,7 +194,7 @@ cris.date_range_inclusive = function(start_date, end_date)
 # Drugs
 #==============================================================================
 
-cris.FGA = c(
+cris$FGA = c(
     "benperidol"
     , "chlorpromazine"
     , "flupentixol"
@@ -205,7 +211,7 @@ cris.FGA = c(
     , "trifluoperazine"
     , "zuclopenthixol"
 )
-cris.FGA_DEPOT = c(
+cris$FGA_DEPOT = c(
     "haloperidol_depot"
     , "flupentixol_depot"
     , "fluphenazine_depot"
@@ -213,7 +219,7 @@ cris.FGA_DEPOT = c(
     , "pipotiazine_depot"
     , "zuclopenthixol_depot"
 )
-cris.SGA_NOT_CLOZAPINE = c(
+cris$SGA_NOT_CLOZAPINE = c(
     "amisulpride"
     , "aripiprazole"
     , "asenapine"
@@ -227,15 +233,15 @@ cris.SGA_NOT_CLOZAPINE = c(
     , "ziprasidone"
     , "zotepine"
 )
-cris.SGA = c(
-    cris.SGA_NOT_CLOZAPINE
+cris$SGA = c(
+    cris$SGA_NOT_CLOZAPINE
     , "clozapine"
 )
-cris.SGA_DEPOT = c(
+cris$SGA_DEPOT = c(
     "olanzapine_depot"
     , "risperidone_depot"
 )
-cris.SSRI = c(
+cris$SSRI = c(
     "citalopram"
     , "escitalopram"
     , "fluoxetine"
@@ -243,7 +249,7 @@ cris.SSRI = c(
     , "paroxetine"
     , "sertraline"
 )
-cris.NON_SSRI_MODERN_ANTIDEPRESSANT = c(
+cris$NON_SSRI_MODERN_ANTIDEPRESSANT = c(
     "agomelatine"
     , "bupropion"
     , "duloxetine"
@@ -252,13 +258,13 @@ cris.NON_SSRI_MODERN_ANTIDEPRESSANT = c(
     , "tryptophan"
     , "venlafaxine"
 )
-cris.MAOI = c(
+cris$MAOI = c(
     "phenelzine"
     , "isocarboxazid"
     , "moclobemide" # reversible
     , "tranylcypromine"
 )
-cris.TCA = c(
+cris$TCA = c(
     "amitriptyline"
     , "amitriptyline_with_perphenazine"
     , "clomipramine"
@@ -269,87 +275,87 @@ cris.TCA = c(
     , "nortriptyline"
     , "trimipramine"
 )
-cris.TCA_RELATED = c(
+cris$TCA_RELATED = c(
     "mianserin"
     , "trazodone"
 )
-cris.ANTIDEPRESSANT_EXC_FLUPENTIXOL = c(
-    cris.SSRI
-    , cris.NON_SSRI_MODERN_ANTIDEPRESSANT
-    , cris.MAOI
-    , cris.TCA
-    , cris.TCA_RELATED
+cris$ANTIDEPRESSANT_EXC_FLUPENTIXOL = c(
+    cris$SSRI
+    , cris$NON_SSRI_MODERN_ANTIDEPRESSANT
+    , cris$MAOI
+    , cris$TCA
+    , cris$TCA_RELATED
 )
-cris.ANTIDEPRESSANT_INC_FLUPENTIXOL = c(
-    cris.SSRI
-    , cris.NON_SSRI_MODERN_ANTIDEPRESSANT
-    , cris.MAOI
-    , cris.TCA
-    , cris.TCA_RELATED
+cris$ANTIDEPRESSANT_INC_FLUPENTIXOL = c(
+    cris$SSRI
+    , cris$NON_SSRI_MODERN_ANTIDEPRESSANT
+    , cris$MAOI
+    , cris$TCA
+    , cris$TCA_RELATED
     , "flupentixol"
 )
-cris.OTHER_ANTIMANIC = c(
+cris$OTHER_ANTIMANIC = c(
     "carbamazepine"
     , "valproate"
     , "lithium"
 )
-cris.BZ_HYPNOTIC = c(
+cris$BZ_HYPNOTIC = c(
     "nitrazepam"
     , "flurazepam"
     , "loprazolam"
     , "lormetazepam"
     , "temazepam"
 )
-cris.BZ_EPILEPSY = c(
+cris$BZ_EPILEPSY = c(
     "clobazam"
     , "clonazepam"
 )
-cris.BZ_ANXIOLYTIC = c(
+cris$BZ_ANXIOLYTIC = c(
     "diazepam"
     , "alprazolam"
     , "lorazepam"
     , "oxazepam"
 )
-cris.BZ_ANXIOLYTIC_WITHDRAWAL = c(
+cris$BZ_ANXIOLYTIC_WITHDRAWAL = c(
     "chlordiazepoxide"
 )
-cris.BZ_OTHER_PERIOPERATIVE = c(
+cris$BZ_OTHER_PERIOPERATIVE = c(
     "midazolam"
 )
-cris.BZ = c(
-    cris.BZ_HYPNOTIC
-    , cris.BZ_EPILEPSY
-    , cris.BZ_ANXIOLYTIC
-    , cris.BZ_ANXIOLYTIC_WITHDRAWAL
-    , cris.BZ_OTHER_PERIOPERATIVE
+cris$BZ = c(
+    cris$BZ_HYPNOTIC
+    , cris$BZ_EPILEPSY
+    , cris$BZ_ANXIOLYTIC
+    , cris$BZ_ANXIOLYTIC_WITHDRAWAL
+    , cris$BZ_OTHER_PERIOPERATIVE
 )
-cris.Z_DRUG = c(
+cris$Z_DRUG = c(
     "zaleplon"
     , "zolpidem"
     , "zopiclone"
 )
-cris.STIMULANT = c(
+cris$STIMULANT = c(
     "amfetamine"
     , "methylphenidate"
     , "modafinil"
 )
-cris.ANTICHOLINERGIC = c(
+cris$ANTICHOLINERGIC = c(
     "benzatropine"
     , "orphenadrine"
     , "procyclidine"
     , "trihexyphenidyl"
 )
-cris.SULFONYLUREA = c(
+cris$SULFONYLUREA = c(
     "glibenclamide"
     , "gliclazide"
     , "glimepiride"
     , "glipizide"
     , "tolbutamide"
 )
-cris.BIGUANIDE = c(
+cris$BIGUANIDE = c(
     "metformin"
 )
-cris.ORAL_HYPOGLYCAEMIC_OTHER = c(
+cris$ORAL_HYPOGLYCAEMIC_OTHER = c(
     "acarbose"
     , "dapagliflozin"
     , "exenatide"
@@ -368,10 +374,10 @@ cris.ORAL_HYPOGLYCAEMIC_OTHER = c(
     , "vildagliptin"
     , "vildagliptin_with_metformin"
 )
-cris.INSULIN = c(
+cris$INSULIN = c(
     "insulin" # done collectively
 )
-cris.STATIN = c(
+cris$STATIN = c(
     "atorvastatin"
     , "fluvastatin"
     , "pravastatin"
@@ -380,12 +386,12 @@ cris.STATIN = c(
     , "simvastatin_with_ezetimibe"
 )
 
-cris.get_any_of_several_drugs_sql = function(druglist)
+cris$get_any_of_several_drugs_sql = function(druglist)
 {
     ndrugs = length(druglist)
     individualdrugs = rep(NA, ndrugs)
     for (i in 1:ndrugs) {
-        individualdrugs[i] = cris.get_drug_sql(druglist[i])
+        individualdrugs[i] = cris$get_drug_sql(druglist[i])
     }
     return(
         paste(
@@ -397,7 +403,7 @@ cris.get_any_of_several_drugs_sql = function(druglist)
     )
 }
 
-cris.get_drug_sql = function(drug, fieldname="drug")
+cris$get_drug_sql = function(drug, fieldname="drug")
 {
     # Takes drug details as a specific drug or a drug class.
     # Returns an SQL fragment, such as "(drug = 'chlorpromazine' OR drug = 'Largactil')",
@@ -974,85 +980,85 @@ cris.get_drug_sql = function(drug, fieldname="drug")
     # CATEGORIES, NOT INDIVIDUAL DRUGS -- NB partly recursive, so beware self-inclusion!
     #
     # Note intended use: e.g.
-    #   - use everything in cris.SSRI, separately...
+    #   - use everything in cris$SSRI, separately...
     #   - or use "ssri" here to get them collectively.
     #--------------------------------------------------------------------------
     else if (drug == "antipsychotic") {
-        sql = cris.get_any_of_several_drugs_sql(c(
-            cris.FGA
-            , cris.SGA
+        sql = cris$get_any_of_several_drugs_sql(c(
+            cris$FGA
+            , cris$SGA
         ))
     }
     else if (drug == "antipsychotic_depot") {
-        sql = cris.get_any_of_several_drugs_sql(c(
-            cris.FGA_DEPOT
-            , cris.SGA_DEPOT
+        sql = cris$get_any_of_several_drugs_sql(c(
+            cris$FGA_DEPOT
+            , cris$SGA_DEPOT
         ))
     }
     else if (drug == "fga") {
-        sql = cris.get_any_of_several_drugs_sql(cris.FGA)
+        sql = cris$get_any_of_several_drugs_sql(cris$FGA)
     }
     else if (drug == "fga_depot") {
-        sql = cris.get_any_of_several_drugs_sql(cris.FGA_DEPOT)
+        sql = cris$get_any_of_several_drugs_sql(cris$FGA_DEPOT)
     }
     else if (drug == "sga") {
-        sql = cris.get_any_of_several_drugs_sql(cris.SGA)
+        sql = cris$get_any_of_several_drugs_sql(cris$SGA)
     }
     else if (drug == "sga_not_clozapine") {
-        sql = cris.get_any_of_several_drugs_sql(cris.SGA_NOT_CLOZAPINE)
+        sql = cris$get_any_of_several_drugs_sql(cris$SGA_NOT_CLOZAPINE)
     }
     else if (drug == "sga_depot") {
-        sql = cris.get_any_of_several_drugs_sql(cris.SGA_DEPOT)
+        sql = cris$get_any_of_several_drugs_sql(cris$SGA_DEPOT)
     }
     else if (drug == "ssri") {
-        sql = cris.get_any_of_several_drugs_sql(cris.SSRI)
+        sql = cris$get_any_of_several_drugs_sql(cris$SSRI)
     }
     else if (drug == "non_ssri_modern_antidepressant") {
-        sql = cris.get_any_of_several_drugs_sql(cris.NON_SSRI_MODERN_ANTIDEPRESSANT)
+        sql = cris$get_any_of_several_drugs_sql(cris$NON_SSRI_MODERN_ANTIDEPRESSANT)
     }
     else if (drug == "maoi") {
-        sql = cris.get_any_of_several_drugs_sql(cris.MAOI)
+        sql = cris$get_any_of_several_drugs_sql(cris$MAOI)
     }
     else if (drug == "tca") {
-        sql = cris.get_any_of_several_drugs_sql(cris.TCA)
+        sql = cris$get_any_of_several_drugs_sql(cris$TCA)
     }
     else if (drug == "tca_related") {
-        sql = cris.get_any_of_several_drugs_sql(cris.TCA_RELATED)
+        sql = cris$get_any_of_several_drugs_sql(cris$TCA_RELATED)
     }
     else if (drug == "bz") {
-        sql = cris.get_any_of_several_drugs_sql(cris.BZ)
+        sql = cris$get_any_of_several_drugs_sql(cris$BZ)
     }
     else if (drug == "z_drug") {
-        sql = cris.get_any_of_several_drugs_sql(cris.Z_DRUG)
+        sql = cris$get_any_of_several_drugs_sql(cris$Z_DRUG)
     }
     else if (drug == "stimulant") {
-        sql = cris.get_any_of_several_drugs_sql(cris.STIMULANT)
+        sql = cris$get_any_of_several_drugs_sql(cris$STIMULANT)
     }
     else if (drug == "anticholinergic") {
-        sql = cris.get_any_of_several_drugs_sql(cris.ANTICHOLINERGIC)
+        sql = cris$get_any_of_several_drugs_sql(cris$ANTICHOLINERGIC)
     }
     
     else if (drug == "sulfonylurea") {
-        sql = cris.get_any_of_several_drugs_sql(cris.SULFONYLUREA)
+        sql = cris$get_any_of_several_drugs_sql(cris$SULFONYLUREA)
     }
     else if (drug == "biguanide") {
-        sql = cris.get_any_of_several_drugs_sql(cris.BIGUANIDE)
+        sql = cris$get_any_of_several_drugs_sql(cris$BIGUANIDE)
     }
     else if (drug == "oral_hypoglycaemic_other") {
-        sql = cris.get_any_of_several_drugs_sql(cris.ORAL_HYPOGLYCAEMIC_OTHER)
+        sql = cris$get_any_of_several_drugs_sql(cris$ORAL_HYPOGLYCAEMIC_OTHER)
     }
     else if (drug == "diabetes_mellitus") {
-        sql = cris.get_any_of_several_drugs_sql(
+        sql = cris$get_any_of_several_drugs_sql(
             c(
-                cris.SULFONYLUREA
-                , cris.BIGUANIDE
-                , cris.ORAL_HYPOGLYCAEMIC_OTHER
-                , cris.INSULIN
+                cris$SULFONYLUREA
+                , cris$BIGUANIDE
+                , cris$ORAL_HYPOGLYCAEMIC_OTHER
+                , cris$INSULIN
             )
         )
     }
     else if (drug == "statin") {
-        sql = cris.get_any_of_several_drugs_sql(cris.STATIN)
+        sql = cris$get_any_of_several_drugs_sql(cris$STATIN)
     }
 
     #--------------------------------------------------------------------------
@@ -1065,7 +1071,7 @@ cris.get_drug_sql = function(drug, fieldname="drug")
     return(paste("(", gsub("drug ", paste(fieldname, " ", sep=""), sql), ")", sep=""))
 }
 
-cris.map_drugs_to_uniform_names_sql = function(fieldname, druglist)
+cris$map_drugs_to_uniform_names_sql = function(fieldname, druglist)
 {
     sql = paste("
             CASE
@@ -1074,7 +1080,7 @@ cris.map_drugs_to_uniform_names_sql = function(fieldname, druglist)
     )
     for (drug in druglist) {
         sql = paste(sql, "
-                WHEN ", cris.get_drug_sql(drug, fieldname), " THEN '", drug, "'
+                WHEN ", cris$get_drug_sql(drug, fieldname), " THEN '", drug, "'
             ",
             sep=""
         )
@@ -1092,7 +1098,7 @@ cris.map_drugs_to_uniform_names_sql = function(fieldname, druglist)
 # Diagnoses by ICD-10 code
 #==============================================================================
 
-cris.get_icd10code_sql = function(condition, fieldname="code")
+cris$get_icd10code_sql = function(condition, fieldname="code")
 {
     # Returns an SQL fragment, such as "(code LIKE 'F20%')"
     if (condition == "schizophrenia") {
@@ -1117,7 +1123,7 @@ cris.get_icd10code_sql = function(condition, fieldname="code")
     return(paste("(", gsub("code ", paste(fieldname, " ", sep=""), sql), ")", sep=""))
 }
 
-cris.cpft.most_popular_icd10_diagnoses = function(dbhandle)
+cris$cpft.most_popular_icd10_diagnoses = function(dbhandle)
 {
     sqlQuery(dbhandle, "
         SELECT code, description, COUNT(*) AS NumInstancesOfDiagnosis
@@ -1127,7 +1133,7 @@ cris.cpft.most_popular_icd10_diagnoses = function(dbhandle)
     ")
 }
 
-cris.cpft.n_patients = function(dbhandle)
+cris$cpft.n_patients = function(dbhandle)
 {
     r = sqlQuery(dbhandle, "
         SELECT COUNT(DISTINCT brcid)
@@ -1136,7 +1142,7 @@ cris.cpft.n_patients = function(dbhandle)
     return(r[1,1])
 }
 
-cris.cpft.n_patients_with_any_diagnosis = function(dbhandle)
+cris$cpft.n_patients_with_any_diagnosis = function(dbhandle)
 {
     r = sqlQuery(dbhandle, "
         SELECT COUNT(DISTINCT brcid)
@@ -1145,18 +1151,18 @@ cris.cpft.n_patients_with_any_diagnosis = function(dbhandle)
     return(r[1,1])
 }
 
-cris.cpft.n_patients_with_any_diagnosis_from_list = function(dbhandle, idlist)
+cris$cpft.n_patients_with_any_diagnosis_from_list = function(dbhandle, idlist)
 {
     # Beware with very long lists - will crash the SQL engine
     r = sqlQuery(dbhandle, paste("
         SELECT COUNT(DISTINCT brcid)
         FROM cpft_endsql.dbo.diagnosis
-        WHERE ", cris.sql_id_in_list(idlist, "BrcId"), "
+        WHERE ", cris$sql_id_in_list(idlist, "BrcId"), "
     ", sep=""))
     return(r[1,1])
 }
 
-cris.cpft.n_patients_with_any_diagnosis_alive_on_or_after = function(dbhandle, startdate)
+cris$cpft.n_patients_with_any_diagnosis_alive_on_or_after = function(dbhandle, startdate)
 {
     start_date_as_text = as.character(startdate)
     r = sqlQuery(dbhandle, paste("
@@ -1173,7 +1179,7 @@ cris.cpft.n_patients_with_any_diagnosis_alive_on_or_after = function(dbhandle, s
     return(r[1,1])
 }
 
-cris.cpft.n_patients_alive_on_or_after = function(dbhandle, startdate)
+cris$cpft.n_patients_alive_on_or_after = function(dbhandle, startdate)
 {
     start_date_as_text = as.character(startdate)
     r = sqlQuery(dbhandle, paste("
@@ -1186,13 +1192,13 @@ cris.cpft.n_patients_alive_on_or_after = function(dbhandle, startdate)
     return(r[1,1])
 }
 
-cris.cpft.diagnosis_frequency_for_specified_patients = function(dbhandle, idlist)
+cris$cpft.diagnosis_frequency_for_specified_patients = function(dbhandle, idlist)
 {
     # Beware with very long lists - will crash the SQL engine
     r = sqlQuery(dbhandle, paste("
         SELECT code, description, COUNT(DISTINCT brcid) AS n_patients
         FROM cpft_endsql.dbo.diagnosis
-        WHERE ", cris.sql_id_in_list(idlist, "BrcId"), "
+        WHERE ", cris$sql_id_in_list(idlist, "BrcId"), "
         GROUP BY code, description
         ORDER BY COUNT(DISTINCT brcid) DESC
     ", sep=""))
@@ -1203,7 +1209,7 @@ cris.cpft.diagnosis_frequency_for_specified_patients = function(dbhandle, idlist
 # SQL manipulation
 #==============================================================================
 
-cris.sql_id_in_list = function(idlist, fieldname)
+cris$sql_id_in_list = function(idlist, fieldname)
 {
     paste(
         fieldname
@@ -1214,7 +1220,7 @@ cris.sql_id_in_list = function(idlist, fieldname)
     )
 }
 
-cris.sql_id_not_in_list = function(idlist, fieldname)
+cris$sql_id_not_in_list = function(idlist, fieldname)
 {
     paste(
         fieldname
@@ -1232,7 +1238,7 @@ cris.sql_id_not_in_list = function(idlist, fieldname)
 #
 #==============================================================================
 
-cris.cpft.approx_total_admission_days_per_year_all_patients = function(dbhandle)
+cris$cpft.approx_total_admission_days_per_year_all_patients = function(dbhandle)
 {
     sqlQuery(dbhandle, "
         SELECT
@@ -1250,7 +1256,7 @@ cris.cpft.approx_total_admission_days_per_year_all_patients = function(dbhandle)
     ")
 }
 
-cris.cpft.total_documents_per_year_all_patients = function(dbhandle)
+cris$cpft.total_documents_per_year_all_patients = function(dbhandle)
 {
     sqlQuery(dbhandle, "
         SELECT
@@ -1266,9 +1272,9 @@ cris.cpft.total_documents_per_year_all_patients = function(dbhandle)
     ")
 }
 
-cris.cpft.get_patients_by_startdate_diagnosis = function(dbhandle, startdate, condition)
+cris$cpft.get_patients_by_startdate_diagnosis = function(dbhandle, startdate, condition)
 {
-    icd10where = cris.get_icd10code_sql(condition, fieldname="D.CODE")
+    icd10where = cris$get_icd10code_sql(condition, fieldname="D.CODE")
     start_date_as_text = as.character(startdate)
     x = sqlQuery(dbhandle, paste("
         SELECT
@@ -1335,13 +1341,13 @@ cris.cpft.get_patients_by_startdate_diagnosis = function(dbhandle, startdate, co
         first_admission_date_in_time_range = as.Date(first_admission_date_in_time_range)
         
         died = !is.na(dod)
-        age_at_death = cris.years_between(dob, dod)
-        age_at_first_diagnosis = cris.years_between(dob, first_diagnosis_date)
-        age_at_end = cris.years_between(dob, final_date)
+        age_at_death = cris$years_between(dob, dod)
+        age_at_first_diagnosis = cris$years_between(dob, first_diagnosis_date)
+        age_at_end = cris$years_between(dob, final_date)
     })
 }
 
-cris.cpft.get_patients_by_startdate_excluding_idlist = function(dbhandle, startdate, idlist)
+cris$cpft.get_patients_by_startdate_excluding_idlist = function(dbhandle, startdate, idlist)
 {
     start_date_as_text = as.character(startdate)
     x = sqlQuery(dbhandle, paste("
@@ -1378,7 +1384,7 @@ cris.cpft.get_patients_by_startdate_excluding_idlist = function(dbhandle, startd
             cpft_endsql.dbo.MPI M
         WHERE
             /* the ID is NOT in a specified list */
-            ", cris.sql_id_not_in_list(idlist, "M.BrcId"), "
+            ", cris$sql_id_not_in_list(idlist, "M.BrcId"), "
             /* We don't want people who died before our period of interest: */
             AND (
                 M.truncated_dttm = 0 /* not dead */
@@ -1396,13 +1402,13 @@ cris.cpft.get_patients_by_startdate_excluding_idlist = function(dbhandle, startd
         first_admission_date_in_time_range = as.Date(first_admission_date_in_time_range)
         
         died = !is.na(dod)
-        age_at_death = cris.years_between(dob, dod)
-        age_at_first_diagnosis = as.numeric(NA) # COERCED IN # cris.years_between(dob, first_diagnosis_date)
-        age_at_end = cris.years_between(dob, final_date)
+        age_at_death = cris$years_between(dob, dod)
+        age_at_first_diagnosis = as.numeric(NA) # COERCED IN # cris$years_between(dob, first_diagnosis_date)
+        age_at_end = cris$years_between(dob, final_date)
     })
 }
 
-cris.cpft.all_admissions_between = function(dbhandle, idlist, startdate, enddate)
+cris$cpft.all_admissions_between = function(dbhandle, idlist, startdate, enddate)
 {
     # NOTE: may produce admissions starting well before the apparent start date,
     # which is fine (e.g. admitted continuously 1998-2010).
@@ -1421,7 +1427,7 @@ cris.cpft.all_admissions_between = function(dbhandle, idlist, startdate, enddate
             AND W.end_dttm <> 0 /* eliminate quasi-NULL values */
             AND W.end_dttm >= '", start_date_as_text, "'
             AND W.start_dttm <= '", end_date_as_text, "'
-            AND ", cris.sql_id_in_list(idlist, "W.BrcId"), "
+            AND ", cris$sql_id_in_list(idlist, "W.BrcId"), "
         ORDER BY
             brcid,
             start_dttm
@@ -1433,7 +1439,7 @@ cris.cpft.all_admissions_between = function(dbhandle, idlist, startdate, enddate
     })
 }
 
-cris.cpft.admissions_between_inclusive = function(admissions_df, patient_id, startdate, enddate)
+cris$cpft.admissions_between_inclusive = function(admissions_df, patient_id, startdate, enddate)
 {
     # ASSUMES NO OVERLAPS
     # An admission from 1-2 Jan counts as 1 day, not 2
@@ -1480,7 +1486,7 @@ cris.cpft.admissions_between_inclusive = function(admissions_df, patient_id, sta
     )
 }
 
-cris.cpft.admissions_as_binary = function(admissions_df, patient_id, alldates)
+cris$cpft.admissions_as_binary = function(admissions_df, patient_id, alldates)
 {
     # alldates must be a sorted vector of dates
     n = length(alldates)
@@ -1501,7 +1507,7 @@ cris.cpft.admissions_as_binary = function(admissions_df, patient_id, alldates)
     return(admitted)
 }
 
-cris.cpft.admissions_by_patient_year = function(
+cris$cpft.admissions_by_patient_year = function(
     admissions_df
     , patient_df
     , years
@@ -1541,7 +1547,7 @@ cris.cpft.admissions_by_patient_year = function(
     admissions = numeric(n)
     admission_days = numeric(n)
     for (i in 1:n) {
-        a = cris.cpft.admissions_between_inclusive(
+        a = cris$cpft.admissions_between_inclusive(
             admissions_df
             , id[i]
             , year_starts[i]
@@ -1555,7 +1561,7 @@ cris.cpft.admissions_by_patient_year = function(
     return(d)
 }
 
-cris.cpft.get_gate_medication_current = function(
+cris$cpft.get_gate_medication_current = function(
     dbhandle
     , idlist
     , druglist
@@ -1595,7 +1601,7 @@ cris.cpft.get_gate_medication_current = function(
             , dose_unit
             , frequency
             , time_unit
-            , ", cris.map_drugs_to_uniform_names_sql("drug", druglist), " AS drugname
+            , ", cris$map_drugs_to_uniform_names_sql("drug", druglist), " AS drugname
             , cn_doc_id
             , src_table
             , src_col
@@ -1605,7 +1611,7 @@ cris.cpft.get_gate_medication_current = function(
         FROM
             GateDB_Camb.dbo.gate_medication_current
         WHERE
-            ", cris.sql_id_in_list(idlist, "BrcId"), "
+            ", cris$sql_id_in_list(idlist, "BrcId"), "
             AND CAST(date AS DATE) IS NOT NULL
             AND CAST(date AS DATE) <> '1900-01-01' /* quasi-NULL value */
             AND CAST(date AS DATE) >= '", start_date_as_text, "'
@@ -1619,7 +1625,7 @@ cris.cpft.get_gate_medication_current = function(
     })
 }
 
-cris.cpft.get_gate_medication_current_by_exclusion_id = function(
+cris$cpft.get_gate_medication_current_by_exclusion_id = function(
     dbhandle
     , druglist
     , drug_startdate
@@ -1642,7 +1648,7 @@ cris.cpft.get_gate_medication_current_by_exclusion_id = function(
             dose_unit,
             frequency,
             time_unit,
-            ", cris.map_drugs_to_uniform_names_sql("drug", druglist), " AS drugname
+            ", cris$map_drugs_to_uniform_names_sql("drug", druglist), " AS drugname
         FROM
             GateDB_Camb.dbo.gate_medication_current
         WHERE
@@ -1651,7 +1657,7 @@ cris.cpft.get_gate_medication_current_by_exclusion_id = function(
                 FROM cpft_endsql.dbo.mpi M
                 WHERE
                 /* the ID is NOT in a specified list */
-                ", cris.sql_id_not_in_list(exclusion_idlist, "M.brcid"), "
+                ", cris$sql_id_not_in_list(exclusion_idlist, "M.brcid"), "
                 /* We don't want people who died before our period of interest: */
                 AND (
                     M.truncated_dttm = 0 /* not dead */
@@ -1670,13 +1676,13 @@ cris.cpft.get_gate_medication_current_by_exclusion_id = function(
     })
 }
 
-cris.patients_which_drugs_taken = function(druglist, druginfo_df, patient_df)
+cris$patients_which_drugs_taken = function(druglist, druginfo_df, patient_df)
 {
     # Start: id, date, drug, ...
     # End: id, drug1, drug2, drug3, ... (each cell: boolean was-it-taken)
     result = data.frame(id = patient_df$id)
     for (drugname in druglist) {
-        cat("cris.patients_which_drugs_taken processing:", drugname, "\n")
+        cat("cris$patients_which_drugs_taken processing:", drugname, "\n")
         tmp = sqldf(paste("
             SELECT
                 id
@@ -1696,7 +1702,7 @@ cris.patients_which_drugs_taken = function(druglist, druginfo_df, patient_df)
     return(result)
 }
 
-cris.cpft.per_patient_drug_stats = function(drugname, druginfo_df, patient_df)
+cris$cpft.per_patient_drug_stats = function(drugname, druginfo_df, patient_df)
 {
     x = sqldf( paste("
         SELECT
@@ -1732,16 +1738,16 @@ cris.cpft.per_patient_drug_stats = function(drugname, druginfo_df, patient_df)
             patient_df P
     ", sep="") )
     within(x, {
-        first_use = cris.date_from_unix_date_in_days(first_use)
-        last_use = cris.date_from_unix_date_in_days(last_use)
+        first_use = cris$date_from_unix_date_in_days(first_use)
+        last_use = cris$date_from_unix_date_in_days(last_use)
 
         used = as.logical(used)
-        age_at_first_use = cris.years_between(dob, first_use)
-        age_at_last_use = cris.years_between(dob, last_use)
+        age_at_first_use = cris$years_between(dob, first_use)
+        age_at_last_use = cris$years_between(dob, last_use)
     })
 }
 
-cris.cpft.used_drug_between = function(druginfo_df, patient_id, drugname_string, startdate, enddate)
+cris$cpft.used_drug_between = function(druginfo_df, patient_id, drugname_string, startdate, enddate)
 {
     any(
         druginfo_df$id == patient_id
@@ -1752,7 +1758,7 @@ cris.cpft.used_drug_between = function(druginfo_df, patient_id, drugname_string,
     )
 }
 
-cris.cpft.attempt_daily_dose = function(druginfo_df)
+cris$cpft.attempt_daily_dose = function(druginfo_df)
 {
     within(druginfo_df, {
         time_unit_days = ifelse(
@@ -1797,7 +1803,7 @@ cris.cpft.attempt_daily_dose = function(druginfo_df)
     })
 }
 
-cris.cpft.summarize_daily_doses = function(druginfo_df)
+cris$cpft.summarize_daily_doses = function(druginfo_df)
 {
     d = subset(druginfo_df, !is.na(daily_dose_mg) & !is.na(drugname))
     # Down to per-patient level
@@ -1819,7 +1825,7 @@ cris.cpft.summarize_daily_doses = function(druginfo_df)
 # Very general graphical methods
 #==============================================================================
 
-cris.visualize_fixed_effects_from_lmer_mcmc = function(
+cris$visualize_fixed_effects_from_lmer_mcmc = function(
     pvals_fnc_result
     , exclude_factors = c()
     , sort_by_effect_size = TRUE
@@ -1885,7 +1891,7 @@ cris.visualize_fixed_effects_from_lmer_mcmc = function(
     }
 }
 
-cris.visualize_fixed_effects_from_lmer_z = function(
+cris$visualize_fixed_effects_from_lmer_z = function(
     lmer_result
     , exclude_factors = c()
     , sort_by_effect_size = TRUE
@@ -1973,7 +1979,7 @@ cris.visualize_fixed_effects_from_lmer_z = function(
 # Specific analytical methods
 #==============================================================================
 
-cris.cpft.print_simple_patient_summary = function(patient_df)
+cris$cpft.print_simple_patient_summary = function(patient_df)
 {
     n = nrow(patient_df)
     n_male = nrow(subset(patient_df, sex=="Male"))
@@ -2004,7 +2010,7 @@ cris.cpft.print_simple_patient_summary = function(patient_df)
     cat("Mean age at death (female):", mean_age_at_death_female, "\n")
 }
 
-cris.cpft.admissions_by_year_plot_by_patient = function(admissions_by_patient_year_df, firstyear, lastyear)
+cris$cpft.admissions_by_year_plot_by_patient = function(admissions_by_patient_year_df, firstyear, lastyear)
 {
     # Pass in an admissions df that DOES exclude years not within each patient's date range
     SUMMARY_ADMDAYS_BY_YEAR = ddply(
@@ -2027,7 +2033,7 @@ cris.cpft.admissions_by_year_plot_by_patient = function(admissions_by_patient_ye
     )
 }
 
-cris.cpft.admissions_by_year_plot_as_institution_proportion = function(admissions_by_patient_year_df, available_beds_by_year_df, firstyear, lastyear)
+cris$cpft.admissions_by_year_plot_as_institution_proportion = function(admissions_by_patient_year_df, available_beds_by_year_df, firstyear, lastyear)
 {
     # Pass in an admissions df that does NOT exclude years not within each patient's date range
     SUMMARY_ADMDAYS_TOTAL_BY_YEAR = ddply(
@@ -2038,7 +2044,7 @@ cris.cpft.admissions_by_year_plot_as_institution_proportion = function(admission
     )
     SUMMARY_ADMDAYS_TOTAL_BY_YEAR = merge(SUMMARY_ADMDAYS_TOTAL_BY_YEAR, available_beds_by_year_df)
     SUMMARY_ADMDAYS_TOTAL_BY_YEAR = within(SUMMARY_ADMDAYS_TOTAL_BY_YEAR, {
-        available_bed_days = beds * cris.DAYS_PER_YEAR
+        available_bed_days = beds * cris$DAYS_PER_YEAR
         proportion_bed_days_used = total_admission_days / available_bed_days
     })
     return(
@@ -2053,10 +2059,10 @@ cris.cpft.admissions_by_year_plot_as_institution_proportion = function(admission
     )
 }
 
-cris.cpft.simple_drug_stats = function(drugname, druginfo, patient_df)
+cris$cpft.simple_drug_stats = function(drugname, druginfo, patient_df)
 {
-    cat("cris.cpft.simple_drug_stats:", drugname, "\n")
-    P = cris.cpft.per_patient_drug_stats(drugname, druginfo, patient_df)
+    cat("cris$cpft.simple_drug_stats:", drugname, "\n")
+    P = cris$cpft.per_patient_drug_stats(drugname, druginfo, patient_df)
     n_pts = nrow(P)
     n_male = nrow(subset(P, sex == "Male"))
     n_female = nrow(subset(P, sex == "Female"))
@@ -2102,11 +2108,11 @@ cris.cpft.simple_drug_stats = function(drugname, druginfo, patient_df)
     ))
 }
 
-cris.cpft.drug_use_by_diagnosis = function(drugname, druginfo_df_diagnosis, patient_df_diagnosis, druginfo_df_no_diagnosis, patient_df_no_diagnosis)
+cris$cpft.drug_use_by_diagnosis = function(drugname, druginfo_df_diagnosis, patient_df_diagnosis, druginfo_df_no_diagnosis, patient_df_no_diagnosis)
 {
-    DP = cris.cpft.per_patient_drug_stats(drugname, druginfo_df_diagnosis, patient_df_diagnosis)
+    DP = cris$cpft.per_patient_drug_stats(drugname, druginfo_df_diagnosis, patient_df_diagnosis)
     DP$diagnosis = TRUE
-    NP = cris.cpft.per_patient_drug_stats(drugname, druginfo_df_no_diagnosis, patient_df_no_diagnosis)
+    NP = cris$cpft.per_patient_drug_stats(drugname, druginfo_df_no_diagnosis, patient_df_no_diagnosis)
     NP$diagnosis = FALSE
     n_diagnosis = nrow(DP)
     n_no_diagnosis = nrow(NP)
@@ -2132,7 +2138,7 @@ cris.cpft.drug_use_by_diagnosis = function(drugname, druginfo_df_diagnosis, pati
     ))
 }
 
-cris.cpft.admissions_by_drug_onset_mirror = function(
+cris$cpft.admissions_by_drug_onset_mirror = function(
     drugname, druginfo_df, patient_df, admissions_df
     , mirroryears_before
     , mirroryears_after
@@ -2142,19 +2148,19 @@ cris.cpft.admissions_by_drug_onset_mirror = function(
 {
     # Returns data frame for a single drug
     # Use mirroryears=NA for "as far back/forward as possible" -- in which case specify min_component_length_days (or a single day that's an admission before drug will give a measure of about 365 days/year beforehand)
-    cat("cris.cpft.admissions_by_drug_onset_mirror:", drugname, "\n")
-    mirrordays_before = mirroryears_before * cris.DAYS_PER_YEAR
-    mirrordays_after = mirroryears_after * cris.DAYS_PER_YEAR
-    P = cris.cpft.per_patient_drug_stats(drugname, druginfo_df, patient_df)
+    cat("cris$cpft.admissions_by_drug_onset_mirror:", drugname, "\n")
+    mirrordays_before = mirroryears_before * cris$DAYS_PER_YEAR
+    mirrordays_after = mirroryears_after * cris$DAYS_PER_YEAR
+    P = cris$cpft.per_patient_drug_stats(drugname, druginfo_df, patient_df)
     # Restrict to those who used the drug
     P = subset(P, used)
     P = within(P, {
         # We don't care about time before diagnosis:
-        start_date = cris.date_from_unix_date_in_days(
+        start_date = cris$date_from_unix_date_in_days(
             ifelse(FIRST_DATE_AS_DATE > first_diagnosis_date, FIRST_DATE_AS_DATE, first_diagnosis_date)
         )
         # We don't care about time after death:
-        end_date = cris.date_from_unix_date_in_days(
+        end_date = cris$date_from_unix_date_in_days(
             ifelse(!is.na(dod) & dod < CRIS_EXPORT_DATE_AS_DATE, dod, CRIS_EXPORT_DATE_AS_DATE)
         )
         mirror_1_end   = first_use - central_gap_days_before
@@ -2181,8 +2187,8 @@ cris.cpft.admissions_by_drug_onset_mirror = function(
     # Exclude anything silly
     P = subset(P, mirror_1_start <= mirror_1_end & mirror_2_start <= mirror_2_end)
     if (!is.na(min_component_length_days)) {
-        P = subset(P, cris.days_between(mirror_1_start, mirror_1_end) >= min_component_length_days)
-        P = subset(P, cris.days_between(mirror_2_start, mirror_2_end) >= min_component_length_days)
+        P = subset(P, cris$days_between(mirror_1_start, mirror_1_end) >= min_component_length_days)
+        P = subset(P, cris$days_between(mirror_2_start, mirror_2_end) >= min_component_length_days)
     }
     
     n = nrow(P)
@@ -2203,13 +2209,13 @@ cris.cpft.admissions_by_drug_onset_mirror = function(
     stringent_drug_req_start = P$stringent_drug_req_start
     stringent_drug_req_end = P$stringent_drug_req_end
     for (i in 1:n) {
-        a1 = cris.cpft.admissions_between_inclusive(admissions_df, id[i], mirror_1_start[i], mirror_1_end[i])
+        a1 = cris$cpft.admissions_between_inclusive(admissions_df, id[i], mirror_1_start[i], mirror_1_end[i])
         adm_before[i] = a1["admissions"]
         adm_days_before[i] = a1["admission_days"]
-        a2 = cris.cpft.admissions_between_inclusive(admissions_df, id[i], mirror_2_start[i], mirror_2_end[i])
+        a2 = cris$cpft.admissions_between_inclusive(admissions_df, id[i], mirror_2_start[i], mirror_2_end[i])
         adm_after[i] = a2["admissions"]
         adm_days_after[i] = a2["admission_days"]
-        used_in_stringent_period[i] = cris.cpft.used_drug_between(
+        used_in_stringent_period[i] = cris$cpft.used_drug_between(
             druginfo_df
             , id[i]
             , drugname
@@ -2217,10 +2223,10 @@ cris.cpft.admissions_by_drug_onset_mirror = function(
             , stringent_drug_req_end[i]
         )
         
-        allpts1 = cris.cpft.admissions_between_inclusive(admissions_df, NA, mirror_1_start[i], mirror_1_end[i]) # all patients
+        allpts1 = cris$cpft.admissions_between_inclusive(admissions_df, NA, mirror_1_start[i], mirror_1_end[i]) # all patients
         allpts_adm_before[i] = allpts1["admissions"]
         allpts_adm_days_before[i] = allpts1["admission_days"]
-        allpts2 = cris.cpft.admissions_between_inclusive(admissions_df, NA, mirror_2_start[i], mirror_2_end[i]) # all patients
+        allpts2 = cris$cpft.admissions_between_inclusive(admissions_df, NA, mirror_2_start[i], mirror_2_end[i]) # all patients
         allpts_adm_after[i] = allpts2["admissions"]
         allpts_adm_days_after[i] = allpts2["admission_days"]
     }
@@ -2239,8 +2245,8 @@ cris.cpft.admissions_by_drug_onset_mirror = function(
         drugname = drugname
         planned_mirroryears_before = mirroryears_before
         planned_mirroryears_after  = mirroryears_after
-        mirror_years_before = cris.years_between(mirror_1_start, mirror_1_end)
-        mirror_years_after  = cris.years_between(mirror_2_start, mirror_2_end)
+        mirror_years_before = cris$years_between(mirror_1_start, mirror_1_end)
+        mirror_years_after  = cris$years_between(mirror_2_start, mirror_2_end)
         
         adm_per_year_before = adm_before / mirror_years_before
         adm_per_year_after = adm_after / mirror_years_after
@@ -2258,9 +2264,9 @@ cris.cpft.admissions_by_drug_onset_mirror = function(
     })
 }
 
-cris.summarize_drug_mirror = function(MIRROR, ci = 0.95, only_if_adm_before = FALSE, stringent = FALSE, patient_idlist = NA)
+cris$summarize_drug_mirror = function(MIRROR, ci = 0.95, only_if_adm_before = FALSE, stringent = FALSE, patient_idlist = NA)
 {
-    cat("cris.summarize_drug_mirror:", MIRROR$drugname[1], "\n")
+    cat("cris$summarize_drug_mirror:", MIRROR$drugname[1], "\n")
     if (only_if_adm_before) {
         MIRROR = subset(MIRROR, adm_days_before > 0)
     }
@@ -2296,7 +2302,7 @@ cris.summarize_drug_mirror = function(MIRROR, ci = 0.95, only_if_adm_before = FA
     )
 }
 
-cris.drug_mirror_plot = function(MIRROR_SUMMARY, DRUGLIST = NA, corrected = FALSE, sort_by_effect_size = TRUE, title = "", visual_style = 1)
+cris$drug_mirror_plot = function(MIRROR_SUMMARY, DRUGLIST = NA, corrected = FALSE, sort_by_effect_size = TRUE, title = "", visual_style = 1)
 {
     # second y axis tricky: http://rpubs.com/kohske/dual_axis_in_ggplot2
     if (!is.na(DRUGLIST[1])) { # pass NA for all drugs, or specify a list
@@ -2361,7 +2367,7 @@ cris.drug_mirror_plot = function(MIRROR_SUMMARY, DRUGLIST = NA, corrected = FALS
     }
 }
 
-cris.drug_mirror_stringent_comparison = function(MIRROR, only_if_adm_before = TRUE)
+cris$drug_mirror_stringent_comparison = function(MIRROR, only_if_adm_before = TRUE)
 {
     # Asks the question: for those that used a drug, is the impact on admission days
     # affected by whether they clearly used the drug in the second half of the post-drug phase
@@ -2386,7 +2392,7 @@ cris.drug_mirror_stringent_comparison = function(MIRROR, only_if_adm_before = TR
     )
 }
 
-cris.admissions_and_drug_use_by_calendar_periods = function(
+cris$admissions_and_drug_use_by_calendar_periods = function(
     patient_df
     , druginfo_df
     , admissions_df
@@ -2399,12 +2405,12 @@ cris.admissions_and_drug_use_by_calendar_periods = function(
     )
 {
     # Optimizing: http://stackoverflow.com/questions/2908822/speed-up-the-loop-operation-in-r
-    cat("cris.admissions_and_drug_use_by_calendar_periods...\n")
+    cat("cris$admissions_and_drug_use_by_calendar_periods...\n")
     druginfo_df = subset(druginfo_df, drugname %in% druglist) # for speed later
-    timespan_days = cris.days_between(startdate, enddate)
+    timespan_days = cris$days_between(startdate, enddate)
     chunk_size = timespan_days/n_chunks
-    period_start = cris.round_date_to_days( startdate + chunk_size * seq(0, n_chunks - 1) )
-    period_end = cris.round_date_to_days( c(period_start[2:length(period_start)] - 1, enddate) )
+    period_start = cris$round_date_to_days( startdate + chunk_size * seq(0, n_chunks - 1) )
+    period_end = cris$round_date_to_days( c(period_start[2:length(period_start)] - 1, enddate) )
     n_periods = length(period_start)
     if (drug_in_preceding_or_same_period) {
         # drug use in the SAME OR THE IMMEDIATELY PRECEDING PERIOD
@@ -2480,10 +2486,10 @@ cris.admissions_and_drug_use_by_calendar_periods = function(
         relevant_drug_period_start = as.Date(relevant_drug_period_start)
         relevant_drug_period_end = as.Date(relevant_drug_period_end)
         first_diagnosis_date = as.Date(first_diagnosis_date)
-        estimated_illness_duration = cris.years_between(first_diagnosis_date, cris.date_halfway_between(period_start, period_end) )
+        estimated_illness_duration = cris$years_between(first_diagnosis_date, cris$date_halfway_between(period_start, period_end) )
     })
 
-    cat("cris.admissions_and_drug_use_by_calendar_periods... collecting admission information\n")
+    cat("cris$admissions_and_drug_use_by_calendar_periods... collecting admission information\n")
     n = nrow(data)
     patient_id = data$id
     period_start = data$period_start
@@ -2492,18 +2498,18 @@ cris.admissions_and_drug_use_by_calendar_periods = function(
     admission_days = numeric(n)
     for (i in 1:n) {
         if (i %% 100 == 0) cat("... admissions for record", i, "of", n, "\n")
-        a = cris.cpft.admissions_between_inclusive(admissions_df, patient_id[i], period_start[i], period_end[i])
+        a = cris$cpft.admissions_between_inclusive(admissions_df, patient_id[i], period_start[i], period_end[i])
         admissions[i] = a["admissions"]
         admission_days[i] = a["admission_days"]
     }
     data$admissions = admissions
     data$admission_days = admission_days
     data = within(data, {
-        admission_days_per_year = admission_days * cris.DAYS_PER_YEAR / period_length_days
+        admission_days_per_year = admission_days * cris$DAYS_PER_YEAR / period_length_days
     })
     
     for (drugname in druglist) {
-        cat("cris.admissions_and_drug_use_by_calendar_periods... processing", drugname, "\n")
+        cat("cris$admissions_and_drug_use_by_calendar_periods... processing", drugname, "\n")
         # *VERY* much faster to farm this out to SQL.
         drugresult = sqldf(paste("
             SELECT
@@ -2531,17 +2537,17 @@ cris.admissions_and_drug_use_by_calendar_periods = function(
     return(data)
 }
 
-cris.admissions_and_drug_use_by_day = function(patient_df, druginfo_df, admissions_df, druglist, start_date, end_date)
+cris$admissions_and_drug_use_by_day = function(patient_df, druginfo_df, admissions_df, druglist, start_date, end_date)
 {
-    cat("cris.admissions_and_drug_use_by_day...\n")
+    cat("cris$admissions_and_drug_use_by_day...\n")
     n_patients = nrow(patient_df)
-    alldates = cris.date_range_inclusive(start_date, end_date)
+    alldates = cris$date_range_inclusive(start_date, end_date)
     n_dates = length(alldates)
     n_everything = n_patients * n_dates
     patient_ids = patient_df$id
     sexes = patient_df$sex
     first_diagnosis_dates = patient_df$first_diagnosis_date
-    cat("cris.admissions_and_drug_use_by_day.. building big data frame\n")
+    cat("cris$admissions_and_drug_use_by_day.. building big data frame\n")
     big_df = data.frame(
         patient_id = rep(patient_ids, each = n_dates)
         , sex = rep(sexes, each = n_dates)
@@ -2577,9 +2583,9 @@ cris.admissions_and_drug_use_by_day = function(patient_df, druginfo_df, admissio
     return(big_df)
 }
 
-cris.age_at_death_by_year_diagnosis = function(dead_patient_df, ci = 0.95)
+cris$age_at_death_by_year_diagnosis = function(dead_patient_df, ci = 0.95)
 {
-    cat("cris.age_at_death_by_year_diagnosis\n")
+    cat("cris$age_at_death_by_year_diagnosis\n")
     data = ddply(
         dead_patient_df
         , ~ sex * yod * diagnosis
@@ -2590,7 +2596,7 @@ cris.age_at_death_by_year_diagnosis = function(dead_patient_df, ci = 0.95)
             )
         }
     )
-    cat("cris.age_at_death_by_year_diagnosis -- ddply done\n")
+    cat("cris$age_at_death_by_year_diagnosis -- ddply done\n")
     return(
         ggplot(
             data = data
@@ -2615,9 +2621,9 @@ cris.age_at_death_by_year_diagnosis = function(dead_patient_df, ci = 0.95)
 #     ... more complex because e.g. then have to obtain a per-patient average (across time periods),
 #     before combining across patients.
 
-cris.TIMESCALE_OPTIONS = c("ever") # , "same_calendar_year")
+cris$TIMESCALE_OPTIONS = c("ever") # , "same_calendar_year")
 
-cris.p_ever_took_drug_B_if_ever_took_drug_A = function(druginfo_df, drug_A, drug_B)
+cris$p_ever_took_drug_B_if_ever_took_drug_A = function(druginfo_df, drug_A, drug_B)
 {
     patients_who_took_A = unique( subset(druginfo_df, drugname == drug_A)$id )
     n_patients_who_took_A = length(patients_who_took_A)
@@ -2626,9 +2632,9 @@ cris.p_ever_took_drug_B_if_ever_took_drug_A = function(druginfo_df, drug_A, drug
     return(n_patients_who_took_both / n_patients_who_took_A)
 }
 
-cris.concurrent_drug_use = function(druginfo_df, druglist, timescale = cris.TIMESCALE_OPTIONS)
+cris$concurrent_drug_use = function(druginfo_df, druglist, timescale = cris$TIMESCALE_OPTIONS)
 {
-    cat("cris.concurrent_drug_use...\n")
+    cat("cris$concurrent_drug_use...\n")
     n_drugs = length(druglist)
     m = matrix(NA, nrow = n_drugs, ncol = n_drugs)
     rownames(m) = paste("IF_TOOK", druglist)
@@ -2639,7 +2645,7 @@ cris.concurrent_drug_use = function(druginfo_df, druglist, timescale = cris.TIME
             drug_A = druglist[r]
             drug_B = druglist[c]
             if (timescale == "ever") {
-                m[r, c] = cris.p_ever_took_drug_B_if_ever_took_drug_A(druginfo_df, drug_A, drug_B)
+                m[r, c] = cris$p_ever_took_drug_B_if_ever_took_drug_A(druginfo_df, drug_A, drug_B)
             }
         }
     }
@@ -2650,7 +2656,7 @@ cris.concurrent_drug_use = function(druginfo_df, druglist, timescale = cris.TIME
 # Drug use prior to admission
 #==============================================================================
 
-cris.drug_use_prior_to_admission = function(admission_df, druginfo_df, druglist, time_before_days = 90)
+cris$drug_use_prior_to_admission = function(admission_df, druginfo_df, druglist, time_before_days = 90)
 {
     # admission_df should be corrected for back-to-back admissions ***
 
@@ -2682,9 +2688,9 @@ cris.drug_use_prior_to_admission = function(admission_df, druginfo_df, druglist,
 # Drug mortality
 #==============================================================================
 
-cris.death_and_ever_used_drug = function(patient_df, druginfo_df, druglist, startdate, enddate)
+cris$death_and_ever_used_drug = function(patient_df, druginfo_df, druglist, startdate, enddate)
 {
-    cat("cris.death_and_ever_used_drug...\n")
+    cat("cris$death_and_ever_used_drug...\n")
     druginfo_df = subset(druginfo_df, drugname %in% druglist) # for speed later
     data = subset(patient_df, is.na(dod) || dod >= startdate) # exclude those who died before we start
     data = data[ with( data, order(id) ), ] # order by id
@@ -2694,7 +2700,7 @@ cris.death_and_ever_used_drug = function(patient_df, druginfo_df, druglist, star
     })
 
     for (drugname in druglist) {
-        cat("cris.death_and_ever_used_drug... processing", drugname, "\n")
+        cat("cris$death_and_ever_used_drug... processing", drugname, "\n")
         drugresult = sqldf(paste("
             SELECT
                 data.id
@@ -2719,15 +2725,15 @@ cris.death_and_ever_used_drug = function(patient_df, druginfo_df, druglist, star
     return(data)
 }
 
-cris.drug_use_death_by_calendar_periods = function(patient_df, druginfo_df, druglist, startdate, enddate, n_chunks)
+cris$drug_use_death_by_calendar_periods = function(patient_df, druginfo_df, druglist, startdate, enddate, n_chunks)
 {
     # Drug use is: drug use in the immediately PRECEDING period OR the CURRENT period
-    cat("cris.drug_use_death_by_calendar_periods...\n")
+    cat("cris$drug_use_death_by_calendar_periods...\n")
     druginfo_df = subset(druginfo_df, drugname %in% druglist) # for speed later
-    timespan_days = cris.days_between(startdate, enddate)
+    timespan_days = cris$days_between(startdate, enddate)
     chunk_size = timespan_days/n_chunks
-    period_start = cris.round_date_to_days( startdate + chunk_size * seq(0, n_chunks - 1) )
-    period_end = cris.round_date_to_days( c(period_start[2:length(period_start)] - 1, enddate) )
+    period_start = cris$round_date_to_days( startdate + chunk_size * seq(0, n_chunks - 1) )
+    period_end = cris$round_date_to_days( c(period_start[2:length(period_start)] - 1, enddate) )
     n_periods = length(period_start)
     calendar_periods_df = data.frame(
         period_num = 2 : n_periods
@@ -2773,15 +2779,15 @@ cris.drug_use_death_by_calendar_periods = function(patient_df, druginfo_df, drug
         preceding_period_start = as.Date(preceding_period_start)
         preceding_period_end = as.Date(preceding_period_end)
         first_diagnosis_date = as.Date(first_diagnosis_date)
-        estimated_illness_duration = cris.years_between(first_diagnosis_date, cris.date_halfway_between(period_start, period_end) )
+        estimated_illness_duration = cris$years_between(first_diagnosis_date, cris$date_halfway_between(period_start, period_end) )
 
-        age = cris.years_between(dob, cris.date_halfway_between(period_start, period_end) )
+        age = cris$years_between(dob, cris$date_halfway_between(period_start, period_end) )
 
         died_in_period = !is.na(dod) & dod >= period_start & dod <= period_end
     })
 
     for (drugname in druglist) {
-        cat("cris.drug_use_death_by_calendar_periods... processing", drugname, "\n")
+        cat("cris$drug_use_death_by_calendar_periods... processing", drugname, "\n")
         # *VERY* much faster to farm this out to SQL.
         drugresult = sqldf(paste("
             SELECT
@@ -2813,7 +2819,7 @@ cris.drug_use_death_by_calendar_periods = function(patient_df, druginfo_df, drug
 # Co-prescription
 #==============================================================================
 
-cris.patient_ids_who_took = function(patient_df, druginfo_df, drugname)
+cris$patient_ids_who_took = function(patient_df, druginfo_df, drugname)
 {
     df = sqldf(paste("
         SELECT DISTINCT(patient_df.id) AS took_id
@@ -2827,7 +2833,7 @@ cris.patient_ids_who_took = function(patient_df, druginfo_df, drugname)
     #    AND druginfo_df.date <= patient_df.final_date
 }
 
-cris.drug_coprescription = function(patient_df, druginfo_df, druglist)
+cris$drug_coprescription = function(patient_df, druginfo_df, druglist)
 {
     n_drugs = length(druglist)
     data = matrix(NA, nrow = n_drugs, ncol = n_drugs)
@@ -2839,13 +2845,13 @@ cris.drug_coprescription = function(patient_df, druginfo_df, druglist)
             r_drugname = druglist[r]
             c_drugname = druglist[c]
             cat("Processing:", r_drugname, "->", c_drugname, "\n")
-            took_r = cris.patient_ids_who_took(patient_df, druginfo_df, r_drugname)
+            took_r = cris$patient_ids_who_took(patient_df, druginfo_df, r_drugname)
             n_took_r = length(took_r)
             if (n_took_r == 0 || r == c) {
                 n_took_c_as_well = n_took_r
             }
             else {
-                took_c_as_well = cris.patient_ids_who_took(subset(patient_df, id %in% took_r), druginfo_df, c_drugname)
+                took_c_as_well = cris$patient_ids_who_took(subset(patient_df, id %in% took_r), druginfo_df, c_drugname)
                 n_took_c_as_well = length(took_c_as_well)
             }
             data[r, c] = n_took_c_as_well
@@ -2858,7 +2864,7 @@ cris.drug_coprescription = function(patient_df, druginfo_df, druglist)
 # Polydrug handling
 #==============================================================================
 
-cris.add_multidrug_column_count = function(df, multidrug_column_name, individual_drug_columns)
+cris$add_multidrug_column_count = function(df, multidrug_column_name, individual_drug_columns)
 {
     adply(
         df
@@ -2872,9 +2878,9 @@ cris.add_multidrug_column_count = function(df, multidrug_column_name, individual
     )
 }
 
-cris.add_multidrug_column_any = function(df, multidrug_column_name, individual_drug_columns)
+cris$add_multidrug_column_any = function(df, multidrug_column_name, individual_drug_columns)
 {
-    df = cris.add_multidrug_column_count(df, multidrug_column_name, individual_drug_columns)
+    df = cris$add_multidrug_column_count(df, multidrug_column_name, individual_drug_columns)
     df[multidrug_column_name] = ifelse(df[multidrug_column_name] > 0, TRUE, FALSE)
     return(df)
 }
@@ -2883,7 +2889,7 @@ cris.add_multidrug_column_any = function(df, multidrug_column_name, individual_d
 # HoNOS
 #==============================================================================
 
-cris.cpft.get_honos = function(dbhandle, idlist)
+cris$cpft.get_honos = function(dbhandle, idlist)
 {
     # Note also: HoNOS_65, HoNOS_LD, HoNOS_SECURE, HoNOSCA
     # Beware with very long lists - will crash the SQL engine
@@ -2923,7 +2929,7 @@ cris.cpft.get_honos = function(dbhandle, idlist)
             , modif_dttm
             , brcid
         FROM cpft_endsql.dbo.honos
-        WHERE ", cris.sql_id_in_list(idlist, "BrcId"), "
+        WHERE ", cris$sql_id_in_list(idlist, "BrcId"), "
     ", sep=""))
     r = within(r, {
         assessmentdate = as.Date(assessmentdate)
@@ -2953,7 +2959,7 @@ cris.cpft.get_honos = function(dbhandle, idlist)
 # Drug history precision/recall
 #==============================================================================
 
-cris.cpft.clozapine_clinic_attendance_letters_subset = function(dbhandle, idlist)
+cris$cpft.clozapine_clinic_attendance_letters_subset = function(dbhandle, idlist)
 {
     query = paste("
         SELECT
@@ -2961,7 +2967,7 @@ cris.cpft.clozapine_clinic_attendance_letters_subset = function(dbhandle, idlist
             , document_id
             , eventtime
         FROM cpft_endsql.dbo.DocumentLibrary
-        WHERE ", cris.sql_id_in_list(idlist, "BrcId"), "
+        WHERE ", cris$sql_id_in_list(idlist, "BrcId"), "
             AND CONTAINS(DocumentImage, ' \"clozapine review & monitoring sheet\" ')
     ", sep="")
     
@@ -2979,7 +2985,7 @@ cris.cpft.clozapine_clinic_attendance_letters_subset = function(dbhandle, idlist
     return(r)
 }
 
-cris.fetch_gate_source_row = function(cn_doc_id, src_table, src_col, annotation_start, annotation_end, extrachars = 200)
+cris$fetch_gate_source_row = function(cn_doc_id, src_table, src_col, annotation_start, annotation_end, extrachars = 200)
 {
     # Works for single rows only
     
@@ -3012,7 +3018,7 @@ cris.fetch_gate_source_row = function(cn_doc_id, src_table, src_col, annotation_
     return(r)
 }
 
-cris.add_drug_context = function(dbhandle, drughistorydf, extrachars = 200)
+cris$add_drug_context = function(dbhandle, drughistorydf, extrachars = 200)
 {
     # drughistorydf: from get_gate_medication_current
     drughistorydf = within(drughistorydf, { # columns get added in reverse order
@@ -3023,8 +3029,8 @@ cris.add_drug_context = function(dbhandle, drughistorydf, extrachars = 200)
     })
     n = nrow(drughistorydf)
     for (i in 1:n) {
-        cat("cris.add_drug_context: row", i, "/", n, "\n")
-        src = cris.fetch_gate_source_row(
+        cat("cris$add_drug_context: row", i, "/", n, "\n")
+        src = cris$fetch_gate_source_row(
             drughistorydf$cn_doc_id[i]
             , drughistorydf$src_table[i]
             , drughistorydf$src_col[i]
@@ -3039,10 +3045,10 @@ cris.add_drug_context = function(dbhandle, drughistorydf, extrachars = 200)
     return(drughistorydf)
 }
 
-cris.drug_context_for_drug = function(dbhandle, drughistorydf, drug_name, extrachars = 200)
+cris$drug_context_for_drug = function(dbhandle, drughistorydf, drug_name, extrachars = 200)
 {
     return(
-        cris.add_drug_context(
+        cris$add_drug_context(
             dbhandle
             , subset(drughistorydf, drugname == drug_name)
             , extrachars
@@ -3050,12 +3056,12 @@ cris.drug_context_for_drug = function(dbhandle, drughistorydf, drug_name, extrac
     )
 }
 
-cris.patients_who_took = function(drughistorydf, drug_name)
+cris$patients_who_took = function(drughistorydf, drug_name)
 {
     unique( subset(drughistorydf, drugname == drug_name)$id )
 }
 
-cris.manually_verify_drug_context = function(contextdf, current = TRUE)
+cris$manually_verify_drug_context = function(contextdf, current = TRUE)
 {
     if (current) {
         prompt = "Enter 1 if drug was current, or 0 if wrong drug or wrong time, or NA to leave unchanged, or 99 to abort, or 55 to go back:"
@@ -3112,3 +3118,10 @@ cris.manually_verify_drug_context = function(contextdf, current = TRUE)
     }
     return(contextdf)
 }
+
+#==============================================================================
+# Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
+#==============================================================================
+
+if ("cris" %in% search()) detach("cris")
+attach(cris)  # subsequent additions not found, so attach at the end
