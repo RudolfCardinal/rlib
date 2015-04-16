@@ -1,10 +1,20 @@
 # misclang.R
 
-vector_element_by_index_of_last_element <- function(x) {
+#==============================================================================
+# Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
+#==============================================================================
+
+misclang <- new.env()
+
+#==============================================================================
+# Functions
+#==============================================================================
+
+misclang$vector_element_by_index_of_last_element <- function(x) {
     x[ x[ length(x) ] ]
 }
 
-load_or_run_function <- function(varname, file, fn, ..., forcerun=FALSE) {
+misclang$load_or_run_function <- function(varname, file, fn, ..., forcerun=FALSE) {
 
     # e.g. load_or_run_function("blibble", "mydata.Rda", mean, c(1,2,3))
 
@@ -19,3 +29,10 @@ load_or_run_function <- function(varname, file, fn, ..., forcerun=FALSE) {
     }
     return(get(varname))
 }
+
+#==============================================================================
+# Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
+#==============================================================================
+
+if ("misclang" %in% search()) detach("misclang")
+attach(misclang)  # subsequent additions not found, so attach at the end

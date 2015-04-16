@@ -6,11 +6,17 @@ library("plyr")
 library("ggplot2")
 library("directlabels") 
  
+#==============================================================================
+# Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
+#==============================================================================
+
+PubMedTrends = new.env()
+
 ########################
 # Download PubMed Data #
 ########################
  
-PubMedTrend <- function(query, yrStart=1950, yrMax=2009, calculate_relative_frequencies=FALSE)
+PubMedTrends$PubMedTrend <- function(query, yrStart=1950, yrMax=2009, calculate_relative_frequencies=FALSE)
 {
   ### Some error checking ###
   if (is.numeric(yrStart) == FALSE || is.numeric(yrMax) == FALSE) stop("One of the year values is not numeric")
@@ -79,7 +85,7 @@ PubMedTrend <- function(query, yrStart=1950, yrMax=2009, calculate_relative_freq
 #######################
 ### Show total hits ###
 #######################
-PubTotalHits <- function(args=FALSE)
+PubMedTrends$PubTotalHits <- function(args=FALSE)
 {
   # Get column total for query 'x'
   GetCount <- function(x) {
@@ -103,3 +109,11 @@ PubTotalHits <- function(args=FALSE)
   }
   return(df)
 }
+
+
+#==============================================================================
+# Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
+#==============================================================================
+
+if ("PubMedTrends" %in% search()) detach("PubMedTrends")
+attach(PubMedTrends)  # subsequent additions not found, so attach at the end

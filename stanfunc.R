@@ -6,11 +6,17 @@ library(coda)
 library(reshape)
 library(ggplot2)
 
+#==============================================================================
+# Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
+#==============================================================================
+
+stanfunc = new.env()
+
 #===============================================================================
 # Running in parallel
 #===============================================================================
 
-parallel_stan <- function(code, data, cores=detectCores(), chains=8, iter=2000,
+stanfunc$parallel_stan <- function(code, data, cores=detectCores(), chains=8, iter=2000,
                           seed=1234) {
     cat("parallel_stan: cores=", cores,
         ", chains=", chains,
@@ -43,13 +49,13 @@ parallel_stan <- function(code, data, cores=detectCores(), chains=8, iter=2000,
     return(sflist2stanfit(sflist))
 }
 
-load_or_run_stan <- function(data, code, file, forcerun=FALSE) {
+stanfunc$load_or_run_stan <- function(data, code, file, forcerun=FALSE) {
     if (!forcerun && file.exists(file)) {
         cat("Loading Stan model from file:", file, "\n")
         load(file)
     } else {
         cat("Running Stan model\n")
-        fit = parallel_stan(code, data)
+        fit = stanfunc$parallel_stan(code, data)
         cat("--- Saving Stan model to file:", file, "\n")
         save(fit, file=file)
     }
@@ -60,7 +66,7 @@ load_or_run_stan <- function(data, code, file, forcerun=FALSE) {
 # LOOKING AT OUTPUT
 #===============================================================================
 
-save_plots_from_stanfit <- function(
+stanfunc$save_plots_from_stanfit <- function(
     fit,
     parfile="teststan_parameters.pdf",
     tracefile="teststan_trace.pdf",
@@ -80,7 +86,7 @@ save_plots_from_stanfit <- function(
     dev.off()
 }
 
-sampled_values_from_stanfit <- function(fit, parname, method=1) {
+stanfunc$sampled_values_from_stanfit <- function(fit, parname, method=1) {
     if (method == 1) {
         # 1. Laborious hand-crafted way.
         n_chains = slot(fit, "sim")$chains
@@ -107,17 +113,17 @@ sampled_values_from_stanfit <- function(fit, parname, method=1) {
     return(sampled_values)
 }
 
-quick_summary_stanfit <- function(fit, probs = c(0.025, 0.25, 0.5, 0.75, 0.975)) {
+stanfunc$quick_summary_stanfit <- function(fit, probs = c(0.025, 0.25, 0.5, 0.75, 0.975)) {
     print(fit, digits_summary=5, probs=probs)
 }
 
-calculate_mode <- function(sampled_values) {
+stanfunc$calculate_mode <- function(sampled_values) {
     my_density = density(sampled_values)
     max_density = max(my_density$y)
     my_density$x[ which(my_density$y == max_density) ]
 }
 
-density_at_sub <- function(my_density, value) {
+stanfunc$density_at_sub <- function(my_density, value) {
     # Known exactly?
     if (value %in% my_density$x) {
         # cat("density_at: exact\n")
@@ -138,7 +144,7 @@ density_at_sub <- function(my_density, value) {
     return( lower_d + proportion * (upper_d - lower_d) )
 }
 
-density_at <- function(sampled_values, values) {
+stanfunc$density_at <- function(sampled_values, values) {
     my_density = density(sampled_values)
     result = NULL
     for (v in values) {
@@ -147,12 +153,12 @@ density_at <- function(sampled_values, values) {
     result
 }
 
-cum_density_between_two_values <- function(sampled_values, lower, upper) {
+stanfunc$cum_density_between_two_values <- function(sampled_values, lower, upper) {
     my_ecdf = ecdf(sampled_values)
     my_ecdf(upper) - my_ecdf(lower)
 }
 
-find_value_giving_density <- function(sampled_values, target_density) {
+stanfunc$find_value_giving_density <- function(sampled_values, target_density) {
     dens = density(sampled_values)
     finder <- function(x) {
         density_at_sub(dens, x) - target_density
@@ -160,7 +166,7 @@ find_value_giving_density <- function(sampled_values, target_density) {
     uniroot()
 }
 
-find_value_giving_cum_density <- function(sampled_values, cum_density) {
+stanfunc$find_value_giving_cum_density <- function(sampled_values, cum_density) {
     cdf = ecdf(sampled_values)
     find_root <- function(x) {
         cdf(x) - cum_density
@@ -169,7 +175,7 @@ find_value_giving_cum_density <- function(sampled_values, cum_density) {
     value = uniroot(find_root, interval=search_range)$root
 }
 
-JUNK1 = "
+stanfunc$JUNK1 = "
 calculate_hdi_from_sample_interpolating <- function(x, hdi_proportion = 0.95) {
     # INCOMPLETE
     # x contains sampled values
@@ -194,7 +200,7 @@ calculate_hdi_from_sample_interpolating <- function(x, hdi_proportion = 0.95) {
 }
 "
 
-calculate_hdi_from_sample_piecewise <- function(x, hdi_proportion = 0.95) {
+stanfunc$calculate_hdi_from_sample_piecewise <- function(x, hdi_proportion = 0.95) {
     # WORKS, BUT USE coda::HPDinterval instead
     # x contains sampled values
     # ... the shortest interval for which the difference in the empirical cumulative density function values of the endpoints is the nominal probability
@@ -216,7 +222,7 @@ calculate_hdi_from_sample_piecewise <- function(x, hdi_proportion = 0.95) {
     # and   PDF(upper) = PDF(lower)
 }
 
-HDIofMCMC = function( sampleVec , credMass=0.95 ) {
+stanfunc$HDIofMCMC = function( sampleVec , credMass=0.95 ) {
     # Krushke, p628, HDIofMCMC.R
     # Computes highest density interval from a sample of representative values,
     #   estimated as shortest credible interval.
@@ -241,17 +247,17 @@ HDIofMCMC = function( sampleVec , credMass=0.95 ) {
     return(HDIlim)
 }
 
-hdi_via_coda = function(sampled_values, hdi_proportion = 0.95) {
+stanfunc$hdi_via_coda = function(sampled_values, hdi_proportion = 0.95) {
     hdi_limits_matrix = coda::HPDinterval(as.mcmc(sampled_values), prob = hdi_proportion)
     return( c( hdi_limits_matrix[1, "lower"], hdi_limits_matrix[1, "upper"] ) )
 }
 
-hdi_via_lme4 = function(sampled_values, hdi_proportion = 0.95) {
+stanfunc$hdi_via_lme4 = function(sampled_values, hdi_proportion = 0.95) {
     hdi_limits_matrix = lme4::HPDinterval(as.matrix(sampled_values), prob = hdi_proportion)
     return( c( hdi_limits_matrix[1, "lower"], hdi_limits_matrix[1, "upper"] ) )
 }
 
-compare_hdi_methods = function(sampled_values, hdi_proportion) {
+stanfunc$compare_hdi_methods = function(sampled_values, hdi_proportion) {
     cat("RNC:\n")
     print( calculate_hdi_from_sample_piecewise(sampled_values, hdi_proportion) )
     cat("Krushke:\n")
@@ -263,13 +269,13 @@ compare_hdi_methods = function(sampled_values, hdi_proportion) {
 }
 
 # Method chooser!
-hdi = function(sampled_values, hdi_proportion = 0.95) {
+stanfunc$hdi = function(sampled_values, hdi_proportion = 0.95) {
     HDIofMCMC(sampled_values, hdi_proportion)
     # hdi_via_coda(sampled_values, hdi_proportion)
     # calculate_hdi_from_sample_piecewise(sampled_values, hdi_proportion)
 }
 
-interval_includes = function(interval, testval, lower_inclusive = TRUE, upper_inclusive = TRUE) {
+stanfunc$interval_includes = function(interval, testval, lower_inclusive = TRUE, upper_inclusive = TRUE) {
     # Ensure ordered from low to high:
     if (interval[2] < interval[1]) {
         interval = c(interval[2], interval[1])
@@ -279,11 +285,11 @@ interval_includes = function(interval, testval, lower_inclusive = TRUE, upper_in
     return(lowertest && uppertest)
 }
 
-interval_excludes = function(interval, testval, lower_inclusive = TRUE, upper_inclusive = TRUE) {
-    !interval_includes(interval, testval, lower_inclusive = TRUE, upper_inclusive = TRUE)
+stanfunc$interval_excludes = function(interval, testval, lower_inclusive = TRUE, upper_inclusive = TRUE) {
+    !stanfunc$interval_includes(interval, testval, lower_inclusive = TRUE, upper_inclusive = TRUE)
 }
 
-hdi_proportion_excluding_test_value <- function(x, test_value = 0, largest_such_interval = TRUE, debug = FALSE) {
+stanfunc$hdi_proportion_excluding_test_value <- function(x, test_value = 0, largest_such_interval = TRUE, debug = FALSE) {
     # cruddy method!
 
     # NOTE ALSO: neither the lower bound nor the upper bound of an HDI
@@ -319,7 +325,7 @@ hdi_proportion_excluding_test_value <- function(x, test_value = 0, largest_such_
     return(endval)
 }
 
-plot_density_function <- function(
+stanfunc$plot_density_function <- function(
     sampled_values,
     parname,
     test_value = 0,
@@ -463,7 +469,7 @@ plot_density_function <- function(
     }
 }
 
-ggplot_density_function <- function(
+stanfunc$ggplot_density_function <- function(
     sampled_values,
     parname,
     test_value = 0,
@@ -575,27 +581,27 @@ ggplot_density_function <- function(
     return(p)
 }
 
-plot_multiple_stanfit_parameters <- function(fit, parnames, ...)
+stanfunc$plot_multiple_stanfit_parameters <- function(fit, parnames, ...)
 {
     npar = length(parnames)
     nside = ceiling(sqrt(npar))
     par(mfrow = c(nside, nside))
     for (i in 1:npar) {
-        test_specific_parameter_from_stanfit(fit, parnames[i], ...)
+        stanfunc$test_specific_parameter_from_stanfit(fit, parnames[i], ...)
     }
 }
 
-plot_all_stanfit_parameters <- function(fit, ...)
+stanfunc$plot_all_stanfit_parameters <- function(fit, ...)
 {
-    parnames = get_all_parameters_from_stanfit(fit)
-    plot_multiple_stanfit_parameters(fit, parnames, ...)
+    parnames = stanfunc$get_all_parameters_from_stanfit(fit)
+    stanfunc$plot_multiple_stanfit_parameters(fit, parnames, ...)
 }
 
-points_to_mm = function(pts) {
+stanfunc$points_to_mm = function(pts) {
     pts * 0.352777778
 }
 
-plot_multiple_stanfit_parameters_vstack <- function(
+stanfunc$plot_multiple_stanfit_parameters_vstack <- function(
     fit
     , params # list( list(name=name1, desc=desc1), list(name=name2, desc=desc2)...)
     # ... inner bit being a list because c() can't hold expressions properly
@@ -745,12 +751,12 @@ plot_multiple_stanfit_parameters_vstack <- function(
     return(p)
 }
 
-plot_all_stanfit_parameters_vstack <- function(fit, ...) {
-    parnames = get_all_parameters_from_stanfit(fit)
-    plot_multiple_stanfit_parameters_vstack(fit, parnames, ...)
+stanfunc$plot_all_stanfit_parameters_vstack <- function(fit, ...) {
+    parnames = stanfunc$get_all_parameters_from_stanfit(fit)
+    stanfunc$plot_multiple_stanfit_parameters_vstack(fit, parnames, ...)
 }
 
-generate_par_with_indices <- function(pn, pd) {
+stanfunc$generate_par_with_indices <- function(pn, pd) {
     #debug_quantity(pn)
     #debug_quantity(pd)
     ndims = length(pd)
@@ -778,7 +784,7 @@ generate_par_with_indices <- function(pn, pd) {
     return(parnames)
 }
 
-get_all_parameters_from_stanfit <- function(fit) {
+stanfunc$get_all_parameters_from_stanfit <- function(fit) {
     parnames_without_indices = slot(fit, "model_pars")
     pardims = slot(fit, "par_dims")
     parnames = NULL
@@ -790,18 +796,18 @@ get_all_parameters_from_stanfit <- function(fit) {
     return(parnames)
 }
 
-get_parameter_mean_from_stanfit = function(fit, parname) {
-    sampled_values = sampled_values_from_stanfit(fit, parname)
+stanfunc$get_parameter_mean_from_stanfit = function(fit, parname) {
+    sampled_values = stanfunc$sampled_values_from_stanfit(fit, parname)
     return(mean(sampled_values))
 }
 
-get_parameter_means_from_stanfit = function(fit, parnames) {
+stanfunc$get_parameter_means_from_stanfit = function(fit, parnames) {
     return( aaply(parnames, 1, .fun = function(x) {
-        get_parameter_mean_from_stanfit(fit, x)
+        stanfunc$get_parameter_mean_from_stanfit(fit, x)
     } ) )
 }
 
-test_specific_parameter_from_stanfit <- function(fit, parname, ...) {
+stanfunc$test_specific_parameter_from_stanfit <- function(fit, parname, ...) {
     # ??rstan
     # ?stan
     # ?rstan::print.stanfit -- NOTE OPTIONS: probs (quartiles of interest), digits_summary (sig. digits)
@@ -830,18 +836,25 @@ test_specific_parameter_from_stanfit <- function(fit, parname, ...) {
     # EF(0)
 
     # NOTE, however, that this contains all runs
-    sampled_values = sampled_values_from_stanfit(fit, parname)
-    plot_density_function(sampled_values, parname, ...)
+    sampled_values = stanfunc$sampled_values_from_stanfit(fit, parname)
+    stanfunc$plot_density_function(sampled_values, parname, ...)
 }
 
-ggplot_specific_parameter_from_stanfit <- function(fit, parname, ...) {
-    sampled_values = sampled_values_from_stanfit(fit, parname)
-    return( ggplot_density_function(sampled_values, parname, ...) )
+stanfunc$ggplot_specific_parameter_from_stanfit <- function(fit, parname, ...) {
+    sampled_values = stanfunc$sampled_values_from_stanfit(fit, parname)
+    return( stanfunc$ggplot_density_function(sampled_values, parname, ...) )
 }
 
-extract_all_means_from_stanfit <- function(fit) {
-    parnames = get_all_parameters_from_stanfit(fit)
-    means = get_parameter_means_from_stanfit(fit, parnames)
+stanfunc$extract_all_means_from_stanfit <- function(fit) {
+    parnames = stanfunc$get_all_parameters_from_stanfit(fit)
+    means = stanfunc$get_parameter_means_from_stanfit(fit, parnames)
     names(means) = parnames
     return(means)
 }
+
+#==============================================================================
+# Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
+#==============================================================================
+
+if ("stanfunc" %in% search()) detach("stanfunc")
+attach(stanfunc)  # subsequent additions not found, so attach at the end

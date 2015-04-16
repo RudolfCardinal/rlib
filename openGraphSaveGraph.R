@@ -1,7 +1,17 @@
 # openGraphSaveGraph.R
 # John K. Kruschke, January 29, 2013.
 
-openGraph = function( width=7 , height=7 , mag=1.0 , ... )
+#==============================================================================
+# Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
+#==============================================================================
+
+openGraphSaveGraph = new.env()
+
+#==============================================================================
+# Functions
+#==============================================================================
+
+openGraphSaveGraph$openGraph = function( width=7 , height=7 , mag=1.0 , ... )
 {
   if ( .Platform$OS.type != "windows" ) { # Mac OS, Linux
     X11( width=width*mag , height=height*mag , type="cairo" , ... )
@@ -10,7 +20,7 @@ openGraph = function( width=7 , height=7 , mag=1.0 , ... )
   }
 }
 
-saveGraph = function( file="saveGraphOutput" , type="pdf" , ... )
+openGraphSaveGraph$saveGraph = function( file="saveGraphOutput" , type="pdf" , ... )
 {
   if ( .Platform$OS.type != "windows" ) { # Mac OS, Linux
     if ( any( type == c("png","jpeg","jpg","tiff","bmp")) ) {
@@ -29,3 +39,10 @@ saveGraph = function( file="saveGraphOutput" , type="pdf" , ... )
     savePlot( file=file , type=type , ... )
   }
 }
+
+#==============================================================================
+# Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
+#==============================================================================
+
+if ("openGraphSaveGraph" %in% search()) detach("openGraphSaveGraph")
+attach(openGraphSaveGraph)  # subsequent additions not found, so attach at the end
