@@ -50,6 +50,7 @@ DESIRED_LIBRARIES = c(
     "LMERConvenienceFunctions",
     "lmerTest",
     "ltm",
+    "lubridate",
     "MCMCglmm",
     "nlme",
     "nortest",
