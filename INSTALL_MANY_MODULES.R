@@ -62,6 +62,7 @@ DESIRED_LIBRARIES = c(
     # "R2jags",
     # "Rcmdr", # use RStudio instead,
     "Rcpp", # for RStan
+    "readODS",
     "reshape",
     "reshape2",
     # "rjags", # also needs some command-line prerequisites
