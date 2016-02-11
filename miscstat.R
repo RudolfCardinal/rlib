@@ -396,7 +396,8 @@ miscstat$sed_info <- function(
             "There is no *one* SED appropriate for all comparisons! See e.g. Cardinal & Aitken 2006 p98.",
             "Pairwise comparisons use glht(model, linfct = lsm(pairwise ~ FACTOR))."
         ),
-        highest_interaction_single_sed = highest_interaction_single_sed
+        highest_interaction_single_sed = highest_interaction_single_sed,
+        lsmeans = lsmeans(model)
     ))
 }
 
