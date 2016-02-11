@@ -1,5 +1,9 @@
 # miscstat.R
 
+requireNamespace("lmerTest")
+requireNamespace("lsmeans")
+requireNamespace("multcomp")
+
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 #==============================================================================
@@ -241,13 +245,13 @@ miscstat$pairwise_contrasts <- function(
     alternative <- match.arg(alternative)
     # We'd normally do:
     #
-    #   glht(model, linfct = mcp(area = "Tukey"))
+    #   multcomp::glht(model, linfct = multcomp::mcp(area = "Tukey"))
     #
     # where "area" is a factor in the model.
     # But this can't do interactions, I don't think. An alternative is:
     #
-    #   glht(model, linfct = lsm(pairwise ~ area)
-    #   glht(model, linfct = lsm(pairwise ~ area:treatment)
+    #   multcomp::glht(model, linfct = lsmeans::lsm(pairwise ~ area)
+    #   multcomp::glht(model, linfct = lsmeans::lsm(pairwise ~ area:treatment)
     #
     # Some refs:
     #
@@ -265,7 +269,7 @@ miscstat$pairwise_contrasts <- function(
     # Anyway, the answer in R is to eval it.
 
     expr <- paste(
-        "glht(model, linfct = lsm(pairwise ~ ", term, "), ",
+        "multcomp::glht(model, linfct = lsmeans::lsm(pairwise ~ ", term, "), ",
         "alternative=\"", alternative, "\")",
         sep="")
     g <- eval(parse(text=expr))
@@ -332,6 +336,7 @@ miscstat$do_terms_contain_only_factors <- function(model, terms) {
 miscstat$sed_info <- function(
         model, term=NULL,
         alternative=c("two.sided", "less", "greater"), DEBUG=FALSE) {
+    # model: an lmer/lmerTest model.
     # term: e.g. "area:manipulation:csvalence"
     alternative <- match.arg(alternative)
 
@@ -384,8 +389,11 @@ miscstat$sed_info <- function(
         iffy_sed <- sqrt(2 * ms_error / harmonic_mean_n)
         # t_eq_sqrt_F_for_2_grps <- sqrt(F)
     })
-    highest_interaction_single_sed = an[highest_order_interaction,
+    highest_interaction_iffy_sed = an[highest_order_interaction,
                                         "iffy_sed"]
+
+    # *** Not sure that iffy_sed is always right. OK in simple situations, but
+    # not so sure in complex ones...
 
     return(list(
         pairwise_contrasts = comparisons,
@@ -394,12 +402,42 @@ miscstat$sed_info <- function(
         anova = an,
         notes = c(
             "There is no *one* SED appropriate for all comparisons! See e.g. Cardinal & Aitken 2006 p98.",
-            "Pairwise comparisons use glht(model, linfct = lsm(pairwise ~ FACTOR))."
+            "Pairwise contrasts use multcomp::glht(model, linfct = lsmeans::lsm(pairwise ~ FACTOR)).",
+            "Least-squares means estimates (with SE of estimate) are from lmerTest::lsmeans().",
+            "highest_interaction_iffy_sed is the iffy_sed for the highest_order_interaction term. But see note 1 above."
         ),
-        highest_interaction_single_sed = highest_interaction_single_sed,
-        lsmeans = lsmeans(model)
+        highest_interaction_iffy_sed = highest_interaction_iffy_sed,
+        lsmeans = lmerTest::lsmeans(model)
     ))
 }
+
+IGNOREME_MISCSTAT_EXAMPLE <- "
+
+# =============================================================================
+# WORKING/THINKING
+# =============================================================================
+
+testdata <- expand.grid(
+    A=c(1, 2, 3),
+    B=c(10, 11, 12),
+    subj=seq(1,50)
+)
+testdata <- within(testdata, {
+    y <- 13 + 0.5*A + 6*B + rnorm(sd=0.5, n=nrow(testdata))
+    # will give intercept = 13 + 0.5*1 + 6*10 = 73.5 (at A1, B1)
+    #   A2 effect = 0.5 (relative to A1)
+    #   A3 effect = 1   (relative to A1)
+    #   B2 effect = 6   (relative to B1)
+    #   B3 effect = 12  (relative to B1)
+    #   interaction terms = 0
+    A <- as.factor(A)
+    B <- as.factor(B)
+    subj <- as.factor(subj)
+})
+testmodel <- lmer(y ~ A*B + (1 | subj), data=testdata)
+print(sed_info(testmodel))
+
+"
 
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786

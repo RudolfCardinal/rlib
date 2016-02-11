@@ -65,7 +65,8 @@ debugfunc$debug_quantity <- function(
     }
 
     x_name <- deparse(substitute(x))  # fetch the variable name passed in
-    LINEBREAK <- paste(c(rep("-", 79), "\n"), collapse="")
+    LINEBREAK_1 <- paste(c(rep("=", 79), "\n"), collapse="")
+    LINEBREAK_2 <- paste(c(rep("-", 79), "\n"), collapse="")
 
     if (progress_to_console) {
         destination = mode
@@ -81,20 +82,19 @@ debugfunc$debug_quantity <- function(
         sink(filename, append=append)
     }
 
-    cat(LINEBREAK, "DEBUGGING QUANTITY: ", x_name, "\n", sep="")
-    cat("... print(", x_name, "):\n", sep="")
+    cat(LINEBREAK_1, "DEBUGGING QUANTITY: ", x_name, "\n", sep="")
+    cat(LINEBREAK_2, "... print(", x_name, "):\n", LINEBREAK_2, sep="")
     print(x)
     if (!print_only) {
-        cat("... dput(", x_name, "):\n", sep="")
+        cat(LINEBREAK_2, "... dput(", x_name, "):\n", LINEBREAK_2, sep="")
         dput(x, file=file)
     }
-    cat(LINEBREAK, "\n", file=file, sep="")
+    cat(LINEBREAK_1, file=file, sep="")
 
     if (mode == "file" || mode == "filename") {
         sink()
     }
 }
-
 #f <- file("output.txt", open="w")
 #x <- list(a=1, b=2)
 #debug_quantity(x, file=f)
@@ -102,13 +102,16 @@ debugfunc$debug_quantity <- function(
 
 debugfunc$wtf_is <- function(x) {
     # For when you have no idea what something is.
+    # http://stackoverflow.com/questions/8855589
     cat("1. typeof():\n")
     print(typeof(x))
     cat("\n2. class():\n")
     print(class(x))
-    cat("\n3. names():\n")
+    cat("\n3. mode():\n")
+    print(mode(x))
+    cat("\n4. names():\n")
     print(names(x))
-    cat("\n4. str():\n")
+    cat("\n5. str():\n")
     print(str(x))
 }
 
