@@ -9,9 +9,9 @@ miscstat = new.env()
 miscstat$MAX_EXPONENT = log(.Machine$double.xmax)
 miscstat$VERY_SMALL_NUMBER = 1e-323 # .Machine$double.xmin is 2.2e-308, but this seems to manage.
 
-#===============================================================================
+#==============================================================================
 # Working with machine limits
-#===============================================================================
+#==============================================================================
 
 miscstat$convert_zero_to_very_small_number <- function(x) {
     # for logs: or log(0) will give -Inf and crash the L-BFGS-B optimzer
@@ -22,9 +22,9 @@ miscstat$reset_rng_seed <- function() {
     set.seed(0xbeef)
 }
 
-#===============================================================================
+#==============================================================================
 # Efficient calculation with extremely small numbers
-#===============================================================================
+#==============================================================================
 
 miscstat$log_of_mean_of_numbers_in_log_domain <- function(log_v) {
     # http://stackoverflow.com/questions/7355145/mean-of-very-small-values
@@ -34,9 +34,9 @@ miscstat$log_of_mean_of_numbers_in_log_domain <- function(log_v) {
     return(logmean)
 }
 
-#===============================================================================
+#==============================================================================
 # Summary statistics
-#===============================================================================
+#==============================================================================
 
 miscstat$sem <- function(x) {
     # won't do anything silly with NA values since var() will return NA in that case
@@ -59,9 +59,9 @@ miscstat$confidence_interval_t <- function(x, ci = 0.95) {
     return( c(m - hci, m + hci) )
 }
 
-#===============================================================================
+#==============================================================================
 # p-values
-#===============================================================================
+#==============================================================================
 
 miscstat$sidak_alpha <- function(familywise_alpha, n_comparisons) {
     # returns corrected alpha
@@ -78,9 +78,9 @@ miscstat$sidak_corrected_p <- function(uncorrected_p, n_comparisons) {
     1 - (1 - uncorrected_p) ^ (n_comparisons)
 }
 
-#===============================================================================
+#==============================================================================
 # Goodness of fit
-#===============================================================================
+#==============================================================================
 
 miscstat$aic <- function(nLL, k) {
     # Akaike Information Criterion
@@ -136,9 +136,9 @@ miscstat$lr_test <- function(model1_nLL, model1_df, model2_nLL, model2_df) {
     return(p)
 }
 
-#===============================================================================
+#==============================================================================
 # Distributions
-#===============================================================================
+#==============================================================================
 
 # AVOID, use PDF instead for MAP
 miscstat$p_data_or_more_extreme_from_normal <- function(x, means, sds) {
@@ -150,9 +150,9 @@ miscstat$p_data_or_more_extreme_from_normal <- function(x, means, sds) {
 }
 
 
-#===============================================================================
+#==============================================================================
 # softmax function
-#===============================================================================
+#==============================================================================
 
 miscstat$softmax <- function(x, b = 1, debug = TRUE) {
     # x: vector of values
@@ -177,17 +177,17 @@ miscstat$softmax <- function(x, b = 1, debug = TRUE) {
     return(answer)
 }
 
-#===============================================================================
+#==============================================================================
 # proportion
-#===============================================================================
+#==============================================================================
 
 miscstat$proportion_x_from_a_to_b <- function(x, a, b) {
     (1 - x) * a + x * b
 }
 
-#===============================================================================
+#==============================================================================
 # randomness
-#===============================================================================
+#==============================================================================
 
 miscstat$coin <- function(p) {
     return(p > runif(1))
@@ -204,6 +204,201 @@ miscstat$roulette <- function(p) {
     return(choice)
 }
 
+#==============================================================================
+# ANOVA/linear modelling
+#==============================================================================
+
+#------------------------------------------------------------------------------
+# Diagnostic plots
+#------------------------------------------------------------------------------
+
+miscstat$rvfPlot <- function(model, FONTSIZE=10) {
+    # https://rpubs.com/therimalaya/43190
+    # Note that the other diagnostic plots shown there fail with lme models.
+    return (
+        ggplot(model, aes(.fitted, .resid))
+        + geom_point()
+        + stat_smooth(method="loess")
+        + geom_hline(yintercept=0, col="red", linetype="dashed")
+        + xlab("Fitted values")
+        + ylab("Residuals")
+        + ggtitle("Residual vs Fitted Plot")
+        + theme_classic()
+        + theme(
+            text=element_text(size=FONTSIZE),
+            plot.title=element_text(hjust=0, face="bold")  # left title
+        )
+    )
+}
+
+#------------------------------------------------------------------------------
+# Post-hoc analysis; SEDs
+#------------------------------------------------------------------------------
+
+miscstat$pairwise_contrasts <- function(
+        term, model, alternative=c("two.sided", "less", "greater"),
+        DEBUG=FALSE) {
+    alternative <- match.arg(alternative)
+    # We'd normally do:
+    #
+    #   glht(model, linfct = mcp(area = "Tukey"))
+    #
+    # where "area" is a factor in the model.
+    # But this can't do interactions, I don't think. An alternative is:
+    #
+    #   glht(model, linfct = lsm(pairwise ~ area)
+    #   glht(model, linfct = lsm(pairwise ~ area:treatment)
+    #
+    # Some refs:
+    #
+    #   https://mailman.ucsd.edu/pipermail/ling-r-lang-l/2012-November/000393.html
+    #   http://mindingthebrain.blogspot.co.uk/2013/04/multiple-pairwise-comparisons-for.html
+    #   http://stats.stackexchange.com/questions/43664/mixed-model-multiple-comparisons-for-interaction-between-continuous-and-categori
+    #   http://stats.stackexchange.com/questions/120604/which-post-hoc-is-more-valid-for-multiple-comparison-of-an-unbalanced-lmer-model
+    #
+    # However, we want the "area" or "area:treatment" thing to come in as a
+    # variable. This is all a bit ugly...
+    #
+    #   http://adv-r.had.co.nz/Computing-on-the-language.html
+    #   http://stackoverflow.com/questions/5542945/opposite-of-rs-deparsesubstitutevar
+    #
+    # Anyway, the answer in R is to eval it.
+
+    expr <- paste(
+        "glht(model, linfct = lsm(pairwise ~ ", term, "), ",
+        "alternative=\"", alternative, "\")",
+        sep="")
+    g <- eval(parse(text=expr))
+    summ <- summary(g)
+    test <- summ$test
+    # test includes:
+    #   coefficients = "Estimate"
+    #   sigma = "Std. Error" (of the difference) = SED
+    #   tstat = "t value"
+    #   pvalues = "Pr(>|t|)"
+    # ... for each of which, names() gives the tests
+    d <- data.frame(
+        term = term,
+        comparison = names(test$coefficients),
+        estimate = test$coefficients,
+        sed = test$sigma,
+        t = test$tstat,
+        p = test$pvalues,
+        alternative = alternative
+    )
+    return(d)
+}
+
+miscstat$get_n_for_factor <- function(term, model) {
+    factors <- strsplit(term, ":", fixed=TRUE)[[1]]
+    d <- model@frame
+    n_list <- count(d, factors)$freq
+    harmonic_mean_n <- miscmath$harmonic_mean(n_list)
+    return(data.frame(
+        term=term,
+        n_list=paste(n_list, collapse=","),
+        harmonic_mean_n=harmonic_mean_n
+    ))
+}
+
+miscstat$are_predictors_factors <- function(model, predictors) {
+    if (length(predictors) < 1) {
+    } else if (length(predictors) == 1) {
+        # if you use the sapply method with just one, it operate on every
+        # row...
+        is.factor(model@frame[, predictors])
+    } else {
+        sapply(model@frame[, predictors], function(col) is.factor(col))
+    }
+}
+
+miscstat$predictor_names_from_term <- function(term) {
+    strsplit(term, ":")[[1]]
+}
+
+miscstat$are_all_predictors_in_term_factors <- function(model, term) {
+    predictors <- miscstat$predictor_names_from_term(term)
+    all(miscstat$are_predictors_factors(model, predictors))
+}
+
+miscstat$do_terms_contain_only_factors <- function(model, terms) {
+    sapply(
+        terms,
+        miscstat$are_all_predictors_in_term_factors,
+        model=model
+    )
+}
+
+miscstat$sed_info <- function(
+        model, term=NULL,
+        alternative=c("two.sided", "less", "greater"), DEBUG=FALSE) {
+    # term: e.g. "area:manipulation:csvalence"
+    alternative <- match.arg(alternative)
+
+    summ <- summary(model)
+    an <- anova(model)
+    # ... the underlying representation (see "class(an)") is a data frame
+    all_terms <- rownames(an)
+
+    # Eliminate things with covariates (continuous predictors) in:
+    if (DEBUG) {
+        cat("ALL TERMS:", all_terms, "\n")
+    }
+    useful_terms <- all_terms[
+        which(miscstat$do_terms_contain_only_factors(model, all_terms))]
+    if (DEBUG) {
+        cat("FACTOR-ONLY TERMS:", useful_terms, "\n")
+    }
+
+    # Find the highest-order interaction
+    n_colons <- lapply(useful_terms, misclang$n_char_occurrences, char=":")
+    highest_order_interaction <- useful_terms[which.max(n_colons)]
+
+    # Pairwise contrasts for factors
+    comparisons <- ldply(
+        useful_terms,
+        miscstat$pairwise_contrasts,
+        model,
+        alternative=alternative
+    )
+
+    # std_error_fixed_effects_estimates <- sqrt(diag(vcov(model)))
+    # names(std_error_fixed_effects_estimates) <- vcov(model)@Dimnames[[1]]
+    #
+    # ... Douglas Bates, https://stat.ethz.ch/pipermail/r-help/2006-July/109308.html
+    # http://lme4.r-forge.r-project.org/slides/2009-07-16-Munich/Precision-4.pdf
+    # NOTE, for example, that the "standard error of effect X" where X is
+    # something like "treatment - control" is, obviously, an SED.
+
+    n_by_factor <- ldply(
+        useful_terms,
+        miscstat$get_n_for_factor,
+        model
+    )
+    an <- cbind(an[useful_terms, ], n_by_factor)
+    an <- rename(an, c("Mean Sq"="ms_effect",
+                       "F.value"="F",
+                       "Pr(>F)"="p"))
+    an <- within(an, {
+        ms_error <- ms_effect / F  # since F = ms_effect / ms_error
+        iffy_sed <- sqrt(2 * ms_error / harmonic_mean_n)
+        # t_eq_sqrt_F_for_2_grps <- sqrt(F)
+    })
+    highest_interaction_single_sed = an[highest_order_interaction,
+                                        "iffy_sed"]
+
+    return(list(
+        pairwise_contrasts = comparisons,
+        highest_order_interaction = highest_order_interaction,
+        coefficients = summ$coefficients,
+        anova = an,
+        notes = c(
+            "There is no *one* SED appropriate for all comparisons! See e.g. Cardinal & Aitken 2006 p98.",
+            "Pairwise comparisons use glht(model, linfct = lsm(pairwise ~ FACTOR))."
+        ),
+        highest_interaction_single_sed = highest_interaction_single_sed
+    ))
+}
 
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786

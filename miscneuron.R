@@ -6,24 +6,24 @@
 
 miscneuron = new.env()
 
-#===============================================================================
+#==============================================================================
 # Exponentially weighted moving average (EWMA)
-#===============================================================================
+#==============================================================================
 
 miscneuron$ewma = function(previoushistory, newvalue, alpha)
 {
     # Exponentially weighted moving average; e.g. http://en.wikipedia.org/wiki/Moving_average_%28technical_analysis%29#Exponential_moving_average
     # Nice for several reasons, inc. it's got a very simple (single-value) memory.
-    
+
     alpha * newvalue + (1 - alpha) * previoushistory
-    
+
     # After an impulse, the half life n (timesteps) is given by 0.5 = (1-alpha)^n, i.e. n = log(0.5)/log(1-alpha); alternatively, alpha = 1 - 0.5^(1/n)
     # e.g. for half-life of 20 timesteps, alpha=0.034
 }
 
-#===============================================================================
+#==============================================================================
 # Sigmoid functions
-#===============================================================================
+#==============================================================================
 
 miscneuron$logistic_sigmoid = function(x)
 {

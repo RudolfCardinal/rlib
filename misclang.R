@@ -7,12 +7,25 @@
 misclang <- new.env()
 
 #==============================================================================
-# Functions
+# String manipulation
+#==============================================================================
+
+misclang$n_char_occurrences <- function(string, char) {
+    s2 <- gsub(char, "", string)
+    return(nchar(string) - nchar(s2))
+}
+
+#==============================================================================
+# Vector manipulation
 #==============================================================================
 
 misclang$vector_element_by_index_of_last_element <- function(x) {
     x[ x[ length(x) ] ]
 }
+
+#==============================================================================
+# Caching
+#==============================================================================
 
 misclang$load_or_run_function <- function(varname, file, fn, ..., forcerun=FALSE) {
 
@@ -36,3 +49,4 @@ misclang$load_or_run_function <- function(varname, file, fn, ..., forcerun=FALSE
 
 if ("misclang" %in% search()) detach("misclang")
 attach(misclang)  # subsequent additions not found, so attach at the end
+

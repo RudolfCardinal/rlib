@@ -85,6 +85,13 @@ for (libname in DESIRED_LIBRARIES) {
     install_if_absent(libname)
 }
 
+cat("
+
+===============================================================================
+DONE MAJOR PACKAGES. Now trying RStan...
+===============================================================================
+")
+
 # RStan is a package that's a bit different:
 install_if_absent(
     "rstan",
