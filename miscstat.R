@@ -60,7 +60,25 @@ miscstat$half_confidence_interval_t <- function(x, ci = 0.95) {
 miscstat$confidence_interval_t <- function(x, ci = 0.95) {
     hci = half_confidence_interval_t(x, ci)
     m = mean(x)
-    return( c(m - hci, m + hci) )
+    return(c(m - hci, m + hci))
+}
+
+miscstat$summarize_by_factors <- function(data, depvarname, factornames) {
+    ddply(
+        data,
+        factornames,
+        function(drow) {
+            values = drow[, depvarname]
+            c(
+                mean = mean(values),
+                min = min(values),
+                max = max(values),
+                sd = sd(values),
+                var = var(values),
+                sem = miscstat$sem(values)
+            )
+        }
+    )
 }
 
 #==============================================================================

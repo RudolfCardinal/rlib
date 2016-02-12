@@ -1,6 +1,7 @@
 # miscplot.R
 
-library(grid) # for gpar
+requireNamespace("grid")  # for gpar
+requireNamespace("ggplot2")
 
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
@@ -98,8 +99,12 @@ element_grob.theme_border <- function(
         idlist <- c(5,5)
         linetype <- "blank"
     }
-    gp <- gpar(lwd = len0_null(size * .pt), col = colour, lty = linetype)
-    element_gp <- gpar(lwd = len0_null(element$size * .pt), col = element$colour, lty = element$linetype)
+    gp <- grid::gpar(lwd = len0_null(size * .pt),
+                     col = colour,
+                     lty = linetype)
+    element_gp <- grid::gpar(lwd = len0_null(element$size * .pt),
+                             col = element$colour,
+                             lty = element$linetype)
     polylineGrob(
         x = xlist, y = ylist, id = idlist, ..., default.units = "npc",
         gp = modifyList(element_gp, gp),
@@ -121,8 +126,12 @@ element_grob.theme_L_border <- function(
         element, x = 0, y = 0, width = 1, height = 1,
         colour = NULL, size = NULL, linetype = NULL,
         ...) {
-    gp <- gpar(lwd = len0_null(size * .pt), col = colour, lty = linetype)
-    element_gp <- gpar(lwd = len0_null(element$size * .pt), col = element$colour, lty = element$linetype)
+    gp <- grid::gpar(lwd = len0_null(size * .pt),
+                     col = colour,
+                     lty = linetype)
+    element_gp <- grid::gpar(lwd = len0_null(element$size * .pt),
+                             col = element$colour,
+                             lty = element$linetype)
     polylineGrob(
         x = c(x+width, x, x), y = c(y,y,y+height), ..., default.units = "npc",
         gp = modifyList(element_gp, gp),
@@ -144,8 +153,12 @@ element_grob.theme_bottom_border <- function(
         element, x = 0, y = 0, width = 1, height = 1,
         colour = NULL, size = NULL, linetype = NULL,
         ...) {
-    gp <- gpar(lwd = len0_null(size * .pt), col = colour, lty = linetype)
-    element_gp <- gpar(lwd = len0_null(element$size * .pt), col = element$colour, lty = element$linetype)
+    gp <- grid::gpar(lwd = len0_null(size * .pt),
+                     col = colour,
+                     lty = linetype)
+    element_gp <- grid::gpar(lwd = len0_null(element$size * .pt),
+                             col = element$colour,
+                             lty = element$linetype)
     polylineGrob(
         x = c(x, x+width), y = c(y,y), ..., default.units = "npc",
         gp = modifyList(element_gp, gp),
@@ -167,8 +180,12 @@ element_grob.theme_left_border <- function(
         element, x = 0, y = 0, width = 1, height = 1,
         colour = NULL, size = NULL, linetype = NULL,
         ...) {
-    gp <- gpar(lwd = len0_null(size * .pt), col = colour, lty = linetype)
-    element_gp <- gpar(lwd = len0_null(element$size * .pt), col = element$colour, lty = element$linetype)
+    gp <- grid::gpar(lwd = len0_null(size * .pt),
+                     col = colour,
+                     lty = linetype)
+    element_gp <- grid::gpar(lwd = len0_null(element$size * .pt),
+                             col = element$colour,
+                             lty = element$linetype)
     polylineGrob(
         x = c(x, x), y = c(y, y+height), ..., default.units = "npc",
         gp = modifyList(element_gp, gp),
@@ -225,8 +242,12 @@ element_grob.theme_border_numerictype <- function(
         idlist <- c(5,5)
         linetype <- "blank"
     }
-    gp <- gpar(lwd = len0_null(size * .pt), col = colour, lty = linetype)
-    element_gp <- gpar(lwd = len0_null(element$size * .pt), col = element$colour, lty = element$linetype)
+    gp <- grid::gpar(lwd = len0_null(size * .pt),
+                     col = colour,
+                     lty = linetype)
+    element_gp <- grid::gpar(lwd = len0_null(element$size * .pt),
+                             col = element$colour,
+                             lty = element$linetype)
     polylineGrob(
         x = xlist, y = ylist, id = idlist, ..., default.units = "npc",
         gp = modifyList(element_gp, gp),
@@ -374,7 +395,8 @@ miscplot$A4_LARGE_MM <- 297
 miscplot$POINTS_PER_INCH <- 72
 miscplot$POINTS_PER_MM <- miscplot$POINTS_PER_INCH * miscplot$INCHES_PER_MM
 
-miscplot$BLANK_GROB <- rectGrob(gp=gpar(fill="white", alpha=0)) # alpha=0 makes it invisible
+miscplot$BLANK_GROB <- rectGrob(gp=grid::gpar(fill="white", alpha=0))
+# ... alpha=0 makes it invisible
 miscplot$NOLEGEND <- theme(legend.position="none")
 miscplot$MOVELEGEND_BOTTOMLEFT <- theme(legend.justification=c(0,0),
                                legend.position=c(0,0))
@@ -395,6 +417,55 @@ miscplot$NO_GRID <- theme(panel.grid.major=element_blank(),
 miscplot$ggplot_rnc_theme <- function(fontsize) {
     theme_bw() +
         theme(text=element_text(size=fontsize))
+}
+
+#==============================================================================
+# Error bars
+#==============================================================================
+
+miscplot$free_floating_error_bar <- function(x, length, width=0.2,
+                                             y_centre=NULL, y_bottom=NULL,
+                                             constraints=NULL,
+                                             inherit.aes=FALSE) {
+    if ((is.null(y_centre) && is.null(y_bottom))
+            || (!is.null(y_centre) && !is.null(y_bottom))) {
+        stop("Specify either y_centre or y_bottom")
+    }
+    if (is.null(y_centre)) {
+        y_centre <- y_bottom + length/2
+    }
+    errbar_df <- data.frame(
+        x = x,
+        bottom = y_centre - length/2,
+        top = y_centre + length/2
+    )
+    if (!is.null(constraints)) {
+        errbar_df[, names(constraints)] <- constraints
+    }
+    ggplot2::geom_errorbar(
+        data=errbar_df,
+        aes(x=x, ymin=bottom, ymax=top),
+        width=width,
+        inherit.aes=inherit.aes
+    )
+}
+
+miscplot$free_floating_label <- function(x, y, text, constraints=NULL,
+                                         inherit.aes=FALSE, size=rel(2.5)) {
+    label_df <- data.frame(
+        x=x,
+        y=y,
+        text=text
+    )
+    if (!is.null(constraints)) {
+        label_df[, names(constraints)] <- constraints
+    }
+    ggplot2::geom_text(
+        data=label_df,
+        aes(x=x, y=y, label=text),
+        size=size,
+        inherit.aes=inherit.aes
+    )
 }
 
 #==============================================================================
