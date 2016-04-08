@@ -111,7 +111,11 @@ debugfunc$wtf_is <- function(x) {
     print(mode(x))
     cat("\n4. names():\n")
     print(names(x))
-    cat("\n5. str():\n")
+    cat("\n5. slotNames():\n")
+    print(slotNames(x))
+    cat("\n6. attributes():\n")
+    print(attributes(x))
+    cat("\n7. str():\n")
     print(str(x))
 }
 

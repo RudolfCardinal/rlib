@@ -44,6 +44,8 @@ miscstat$log_of_mean_of_numbers_in_log_domain <- function(log_v) {
 
 miscstat$sem <- function(x) {
     # won't do anything silly with NA values since var() will return NA in that case
+    # ... but does fail with NULL == c()
+    if (is.null(x)) return(NA)  # as for mean(NULL)
     sqrt(var(x)/length(x))
 }
 
@@ -81,13 +83,428 @@ miscstat$summarize_by_factors <- function(data, depvarname, factornames) {
     )
 }
 
+miscstat$summarize_by_factors_datatable <- function(dt, depvarname, factornames) {
+    # http://stackoverflow.com/questions/12391950/variably-selecting-assigning-to-fields-in-a-data-table
+    dt[
+        ,
+        .(
+            mean = mean(get(depvarname)),
+            min = min(get(depvarname)),
+            max = max(get(depvarname)),
+            sd = sd(get(depvarname)),
+            var = var(get(depvarname)),
+            sem = miscstat$sem(get(depvarname))
+        ),
+        by = factornames
+    ]
+    # NOTE: doesn't care whether the "by" things are really factors or not.
+}
+
+#==============================================================================
+# Simple comparisons of data
+#==============================================================================
+
+miscstat$pretty_two_group_t_test <- function(values_a, values_b,
+                                             familywise_n = 1,
+                                             alpha_variance = 0.05) {
+    values_a <- values_a[!is.na(values_a)]
+    values_b <- values_b[!is.na(values_b)]
+    mean_a <- mean(values_a)
+    mean_b <- mean(values_b)
+    sem_a <- miscstat$sem(values_a)
+    sem_b <- miscstat$sem(values_b)
+    n_a <- length(values_a)
+    n_b <- length(values_b)
+
+    r <- list(
+        t = NA,
+        df = NA,
+        uncorrected_p = NA,
+        corrected_p = NA,
+
+        mean_a = mean_a,
+        mean_b = mean_b,
+        sem_a = sem_a,
+        sem_b = sem_b,
+
+        equal_variances = NA,
+
+        pretty_mean_sem_a = ifelse(
+            n_a > 0,
+            paste(miscmath$format_sf(mean_a), "±",
+                  miscmath$format_sf(sem_a)),
+            ""),
+        pretty_mean_sem_b = ifelse(
+            n_b > 0,
+            paste(miscmath$format_sf(mean_b), "±",
+                  miscmath$format_sf(sem_b)),
+            ""),
+        pretty_p = "",
+        familywise_n = familywise_n,
+        n_a = n_a,
+        n_b = n_b
+    )
+    if (n_a == 0 || n_b == 0 || is.null(values_a) || is.null(values_b)) {
+        return(r)
+    }
+    v <- var.test(values_a, values_b)
+    r$equal_variances <- v$p.value <= alpha_variance
+    t <- t.test(values_a, values_b, var.equal = r$equal_variances)
+    r$t <- t$statistic
+    r$df <- t$parameter
+    r$uncorrected_p <- t$p.value
+    r$corrected_p <- miscstat$sidak_p(r$uncorrected_p, familywise_n)
+    r$pretty_p = miscmath$describe_p_value_with_stars(r$corrected_p)
+    return(r)
+}
+
+miscstat$pretty_two_group_chisq_contingency_test <- function(
+        values_a, values_b, familywise_n = 1, factor_levels = NULL,
+        count_sep = ":",  # can also use ":n="
+        DEBUG = FALSE) {
+    values_a <- values_a[!is.na(values_a)]
+    values_b <- values_b[!is.na(values_b)]
+    n_a <- length(values_a)
+    n_b <- length(values_b)
+    r <- list(
+        chisq = NA,
+        df = NA,
+        uncorrected_p = NA,
+        corrected_p = NA,
+
+        pretty_counts_a = "",
+        pretty_counts_b = "",
+        pretty_p = "",
+
+        familywise_n = familywise_n,
+        n_a = n_a,
+        n_b = n_b
+    )
+    value_vec <- c(as.character(values_a), as.character(values_b))
+    # if you don't use as.character, then existing factors get munged into
+    # integers: http://stackoverflow.com/questions/3443576/how-to-concatenate-factors
+    if (is.null(factor_levels)) {
+        final_levels <- unique(value_vec)
+    } else {
+        final_levels <- factor_levels
+    }
+    relevelled <- factor(value_vec, levels = final_levels)
+    dat <- data.table(
+        group = c(rep("a", length(values_a)), rep("b", length(values_b))),
+        value = relevelled
+    )
+    datsum <- dat[, .(count = .N), by = .(group, value)]
+    setkey(datsum, group, value)
+    if (DEBUG) {
+        print(values_a)
+        print(values_b)
+        print(factor_levels)
+        print(final_levels)
+        print(relevelled)
+        print(dat)
+        print(datsum)
+    }
+    r$pretty_counts_a <- paste(
+        datsum[group == "a",
+               .(pretty = paste(value, count, sep=count_sep))]$pretty,
+        collapse=", "
+    )
+    r$pretty_counts_b <- paste(
+        datsum[group == "b",
+               .(pretty = paste(value, count, sep=count_sep))]$pretty,
+        collapse=", "
+    )
+    if (n_a == 0 || n_b == 0) {
+        return(r)
+    }
+    datgrid <- cbind(
+        datsum[group == "a", .(count_a = count)],
+        datsum[group == "b", .(count_b = count)]
+    )
+    chi <- chisq.test(datgrid)
+    r$chisq = chi$statistic
+    r$df = chi$parameter
+    r$uncorrected_p <- chi$p.value
+    r$corrected_p <- miscstat$sidak_p(r$uncorrected_p, familywise_n)
+    r$pretty_p = miscmath$describe_p_value_with_stars(r$corrected_p)
+
+    return(r)
+}
+
+miscstat$pretty_two_group_paired_regression <- function(
+        DT, ycolname, xcolname, groupcolname, grouplevel_a, grouplevel_b,
+        overall_positive_symbol = "/",  overall_negative_symbol = "\\",
+        overall_ns_symbol = "·",
+        slope_positive_symbol = "/ ",  slope_negative_symbol = "\\ ",
+        slope_ns_symbol = "· ",
+        a_positive_symbol = "/", a_negative_symbol = "\\", a_ns_symbol = "·",
+        b_positive_symbol = "/", b_negative_symbol = "\\", b_ns_symbol = "·",
+        slopediff_b_bigger_symbol = "↑", slopediff_b_smaller_symbol = "↓",
+        slopediff_ns_symbol = "·",
+        b_bigger_symbol = ">", b_smaller_symbol = "<",
+        groupdiff_ns_symbol = "·",
+        simple_test_prefix = "      ",
+        familywise_n = 1, alpha = 0.05, alpha_variance = 0.05, sep = "",
+        DEBUG = FALSE, show_p = FALSE
+) {
+    # Returns a string with:
+    # - overall (simple) correlation, y ~ x
+    # - main linear effect (X) in y ~ x + group + x:group
+    # - simple correlation y ~ x within subset where group == grouplevel_a
+    # - simple correlation y ~ x within subset where group == grouplevel_b
+    # - x:group interaction in y ~ x + group + x:group
+    # - group effect in y ~ x + group + x:group
+
+    # Spare characters:
+    # –¶§
+
+    groupvar <- DT[[groupcolname]]
+    passed_levels <- sort(c(grouplevel_a, grouplevel_b))
+    dt_levels <- sort(levels(groupvar))
+    if (!all(passed_levels == dt_levels)) {
+        stop(paste("Levels from parameters (",
+                   paste(passed_levels, collapse = ", "),
+                   ") don't match levels from data table (",
+                   paste(dt_levels, collapse = ", "),
+                   ")", sep = ""))
+    }
+
+    newdt <- data.table(x = DT[[xcolname]],
+                        y = DT[[ycolname]],
+                        group = groupvar)
+
+    if (xcolname == ycolname) {
+        # Comparing something to itself. Just a t-test.
+        values_a <- newdt[group == grouplevel_a, x]
+        values_b <- newdt[group == grouplevel_b, x]
+        t_result <- miscstat$pretty_two_group_t_test(
+            values_a, values_b,
+            familywise_n = familywise_n,
+            alpha_variance = alpha_variance)
+        result <- paste(
+            simple_test_prefix,
+            ifelse(
+                t_result$corrected_p <= alpha,
+                ifelse(t_result$mean_b > t_result$mean_a,
+                       b_bigger_symbol,
+                       b_smaller_symbol),
+                groupdiff_ns_symbol
+            ),
+            sep = sep
+        )
+        if (DEBUG) print(t_result)
+        return(result)
+    }
+
+    # Could do the "overall" test ignoring group:
+    overall_test <- cor.test(~ x + y, data = newdt)
+    overall_p <- miscstat$sidak_p(overall_test$p.value, familywise_n)
+    overall_positive <- overall_p <= alpha && overall_test$estimate > 0
+    overall_negative <- overall_p <= alpha && overall_test$estimate < 0
+
+    a_test <- cor.test(~ x + y, data = subset(newdt, group == grouplevel_a))
+    a_p <- miscstat$sidak_p(a_test$p.value, familywise_n)
+    a_positive <- a_p <= alpha && a_test$estimate > 0
+    a_negative <- a_p <= alpha && a_test$estimate < 0
+
+    b_test <- cor.test(~ x + y, data = subset(newdt, group == grouplevel_b))
+    b_p <- miscstat$sidak_p(b_test$p.value, familywise_n)
+    b_positive <- b_p <= alpha && b_test$estimate > 0
+    b_negative <- b_p <= alpha && b_test$estimate < 0
+
+    fullmodel <- glm(y ~ x + group + x:group, data = newdt)
+    fullmodel_summ <- summary(fullmodel)
+
+    COEFF_NUM_SLOPE <- 2
+    # ... the effect of the linear predictor, x
+    slope_coeff <- fullmodel$coefficients[COEFF_NUM_SLOPE]
+    raw_slope_p <- fullmodel_summ$coefficients[COEFF_NUM_SLOPE, "Pr(>|t|)"]
+    slope_p <- miscstat$sidak_p(raw_slope_p, familywise_n)
+    slope_positive <- slope_p <= alpha && slope_coeff > 0
+    slope_negative <- slope_p <= alpha && slope_coeff < 0
+
+    # Group differences: are these particularly important here?
+    # The "self-to-self" comparison does a plain t-test; not sure if this
+    # adds important and useful information (an effect of Group in predicting
+    # Y, over and above X, whether or not X differs by Group...). Maybe it
+    # does. But maybe not for a giant summary plot.
+    COEFF_NUM_GROUPDIFF <- 3
+    # ... the effect of the factor, as group_level_b
+    groupdiff_coeff <- fullmodel$coefficients[COEFF_NUM_GROUPDIFF]
+    raw_groupdiff_p <- fullmodel_summ$coefficients[COEFF_NUM_GROUPDIFF,
+                                                   "Pr(>|t|)"]
+    groupdiff_p <- miscstat$sidak_p(raw_groupdiff_p, familywise_n)
+    groupdiff_b_bigger <- groupdiff_p <= alpha && groupdiff_coeff > 0
+    groupdiff_b_smaller <- groupdiff_p <= alpha && groupdiff_coeff < 0
+
+    COEFF_NUM_SLOPEDIFF <- 4
+    # ... the additive effect of x:group_level_b
+    slopediff_coeff <- fullmodel$coefficients[COEFF_NUM_SLOPEDIFF]
+    raw_slopediff_p <- fullmodel_summ$coefficients[COEFF_NUM_SLOPEDIFF,
+                                                   "Pr(>|t|)"]
+    slopediff_p <- miscstat$sidak_p(raw_slopediff_p, familywise_n)
+    slopediff_b_bigger <- slopediff_p <= alpha && slopediff_coeff > 0
+    slopediff_b_smaller <- slopediff_p <= alpha && slopediff_coeff < 0
+
+    result <- paste(
+        ifelse(overall_positive, overall_positive_symbol,
+               ifelse(overall_negative, overall_negative_symbol,
+                      overall_ns_symbol)),
+        ifelse(slope_positive, slope_positive_symbol,
+               ifelse(slope_negative, slope_negative_symbol, slope_ns_symbol)),
+        ifelse(a_positive, a_positive_symbol,
+               ifelse(a_negative, a_negative_symbol, a_ns_symbol)),
+        ifelse(b_positive, b_positive_symbol,
+               ifelse(b_negative, b_negative_symbol, b_ns_symbol)),
+        ifelse(slopediff_b_bigger, slopediff_b_bigger_symbol,
+               ifelse(slopediff_b_smaller,
+                      slopediff_b_smaller_symbol, slopediff_ns_symbol)),
+        ifelse(groupdiff_b_bigger, b_bigger_symbol,
+               ifelse(groupdiff_b_smaller, b_smaller_symbol,
+                      groupdiff_ns_symbol)),
+        ifelse(
+            show_p,
+            paste(
+                " (",
+                paste(
+                    miscmath$describe_p_value(overall_p),
+                    miscmath$describe_p_value(slope_p),
+                    miscmath$describe_p_value(a_p),
+                    miscmath$describe_p_value(b_p),
+                    miscmath$describe_p_value(slopediff_p),
+                    miscmath$describe_p_value(groupdiff_p),
+                    sep = ", "
+                ),
+                ")",
+                sep = ""
+            ),
+            ""
+        ),
+        sep = sep
+    )
+    if (DEBUG) {
+        print(newdt)
+        cat("--- overall_test:\n")
+        print(overall_test)
+        cat("--- a_test:\n")
+        print(a_test)
+        cat("--- b_test:\n")
+        print(b_test)
+        cat("--- slopetest:\n")
+        print(slopetest)
+        print(slopetest_summ)
+    }
+    return(result)
+}
+
+IGNORE_ME = '
+DT <- data.table(
+    x = c(1, 2, 3, 10, 11, 12),
+    y = c(4, 5, 6, 20, 19, 18),
+    g = factor(c(1, 1, 1, 2, 2, 2))
+)
+
+miscstat$pretty_two_group_paired_regression(DT, "y", "x", "g", 1, 2)
+'
+
+miscstat$two_group_multiple_regression_table <- function(
+    DT, groupcolname, varcolnames,
+    grouplevel_a, grouplevel_b,
+    blank = "", upper = FALSE, DEBUG = FALSE,
+    correct_multiple_comparisons = TRUE,  # only use FALSE for debugging!
+    transpose = FALSE
+) {
+    # If correct_multiple_comparisons is TRUE (the default),
+    # group-difference comparisons are treated as a family (ttest_k),
+    # and all other comparisons are treated as a family (pairwise_k).
+    # For example, for 59 groups, group differences are corrected for 59
+    # comparisons, and other comparisons for 59 * 58 / 2 = 1711 comparisons.
+    # For things other than "self-to-self = group test" comparisons,
+    # Within each cell there are 6 tests (pretty_two_group_paired_regression)
+    # but these are not additionally corrected for.
+    n <- length(varcolnames)
+    if (!correct_multiple_comparisons) {
+        warning("Not correcting for multiple comparisons!")
+    }
+    ttest_k <- ifelse(correct_multiple_comparisons, n, 1)
+    pairwise_k <- ifelse(correct_multiple_comparisons, n * (n - 1) / 2, 1)
+    cat("miscstat$two_group_multiple_regression_table: ttest_k = ", ttest_k,
+        ", pairwise_k = ", pairwise_k, "\n", sep = "")
+    m <- matrix(blank, ncol = n, nrow = n)
+    for (rownum in 1:n) {
+        if (upper) {
+            cstart <- rownum
+            cend <- n
+        } else {
+            cstart <- 1
+            cend <- rownum
+        }
+        if (DEBUG) cat(paste("cstart", cstart, "cend", cend, "\n"))
+        for (colnum in cstart:cend) {
+            xcolname <- varcolnames[rownum]
+            ycolname <- varcolnames[colnum]
+            familywise_n <- ifelse(rownum == colnum, ttest_k, pairwise_k)
+            txt <- miscstat$pretty_two_group_paired_regression(
+                DT, ycolname, xcolname,
+                groupcolname, grouplevel_a, grouplevel_b,
+                familywise_n = familywise_n
+            )
+            if (DEBUG) {
+                cat(paste("row", rownum, "column", colnum, "text", txt, "\n"))
+            }
+            m[rownum, colnum] <- txt
+        }
+    }
+    if (transpose) {
+        m <- t(m)
+    }
+    if (DEBUG) print(m)
+    DF <- data.frame(m)
+    rownames(DF) <- varcolnames
+    colnames(DF) <- varcolnames
+    return(DF)
+}
+
+#==============================================================================
+# Sanity checks (e.g. for refereeing), such as t-tests based on mean/SD without
+# access to raw data.
+#==============================================================================
+
+t_test_unpaired_eq_var <- function(mean1, mean2, sd1, sd2, n1, n2) {
+    df <- n1 + n2 - 2
+    var1 <- sd1 ^ 2
+    var2 <- sd2 ^ 2
+    pooled_var <- ((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2)
+    t <- (mean1 - mean2) / sqrt((pooled_var / n1) + (pooled_var / n2))
+    p <- 2 * pt(-abs(t), df)  # http://www.cyclismo.org/tutorial/R/pValues.html
+
+    cat("Group 1: mean = ", mean1, ", sd = ", sd1, ", var = ", var1,
+        ", n = ", n1, "\n", sep = "")
+    cat("Group 2: mean = ", mean2, ", sd = ", sd2, ", var = ", var2,
+        ", n = ", n2, "\n", sep = "")
+    cat("Mean difference (mean2 - mean1) = ", mean2 - mean1, "\n", sep = "")
+    cat("t =", t, "\n")
+    cat("df =", df, "\n")
+    cat("p =", p, "\n")
+}
+
+
 #==============================================================================
 # p-values
 #==============================================================================
 
 miscstat$sidak_alpha <- function(familywise_alpha, n_comparisons) {
-    # returns corrected alpha
+    # returns corrected alpha, which gets lower with n_comparisons
     1 - (1 - familywise_alpha) ^ (1 / n_comparisons)
+}
+
+miscstat$sidak_p <- function(uncorrected_p, n_comparisons) {
+    # returns corrected p, which gets higher with n_comparisons
+    # ... the problem here is equivalent to taking a corrected alpha
+    #     and returning an uncorrected alpha, i.e. reversing the alpha
+    #     calculation
+    # ... that is, sidak_p(sidak_alpha(x, n), n) == x
+    1 - ((1 - uncorrected_p) ^ n_comparisons)
 }
 
 miscstat$sidak_familywise_alpha <- function(alpha_per_test, n_comparisons) {

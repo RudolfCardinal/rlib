@@ -44,6 +44,15 @@ misclang$load_or_run_function <- function(varname, file, fn, ..., forcerun=FALSE
 }
 
 #==============================================================================
+# Factors
+#==============================================================================
+
+misclang$numeric_factor_to_numeric <- function(f) {
+    # http://stackoverflow.com/questions/3418128
+    as.numeric(levels(f))[f]
+}
+
+#==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 #==============================================================================
 
