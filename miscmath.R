@@ -42,6 +42,61 @@ miscmath$log_sequence <- function(pow10low, pow10high,
 }
 
 # =============================================================================
+# Formatting numbers
+# =============================================================================
+
+miscmath$format_dp <- function(x, k) {
+    # http://stackoverflow.com/questions/3443687/formatting-decimal-places-in-r
+    format(round(x, k), nsmall=k)
+}
+
+miscmath$format_sf <- function(x, k = 3,
+                               scientific = FALSE,
+                               big.mark = ",", big.interval = 3,
+                               small.mark = "", small.interval = 3,
+                               drop0trailing = TRUE) {
+    # http://stackoverflow.com/questions/3443687/formatting-decimal-places-in-r
+    format(signif(x, k),
+           scientific = scientific,
+           big.mark = big.mark,
+           big.interval = big.interval,
+           small.mark = small.mark,
+           small.interval = small.interval,
+           drop0trailing = drop0trailing)
+}
+
+miscmath$describe_p_value <- function(p, boundary_NS = 0.1, ns_val = "NS",
+                                      boundary_scientific = 0.0001) {
+    ifelse(
+        p > boundary_NS,
+        paste("p >", boundary_NS),
+        ifelse(
+            p == 0,  # unusual!
+            "p = 0",  # better than "p = 0e0+00"
+            ifelse(
+                p >= boundary_scientific,
+                paste("p =", miscmath$format_sf(p, scientific = FALSE,
+                                                small.mark = "")),
+                paste("p =", miscmath$format_sf(p, scientific = TRUE))
+            )
+        )
+    )
+}
+
+miscmath$p_stars <- function(p) {
+    # Simply a convention!
+    # http://stats.stackexchange.com/questions/29158/do-you-reject-the-null-hypothesis-when-p-alpha-or-p-leq-alpha
+    ifelse(p <= 0.001, "***",
+           ifelse(p <= 0.01, "**",
+                  ifelse(p < 0.05, "*",
+                         "NS")))
+}
+
+miscmath$describe_p_value_with_stars <- function(p) {
+    paste(miscmath$p_stars(p), ", ", miscmath$describe_p_value(p), sep = "")
+}
+
+# =============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 # =============================================================================
 

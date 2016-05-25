@@ -16,8 +16,9 @@ stanfunc = new.env()
 # Running in parallel
 #==============================================================================
 
-stanfunc$parallel_stan <- function(code, data, cores=detectCores(), chains=8, iter=2000,
-                          seed=1234) {
+stanfunc$parallel_stan <- function(code, data,
+                                   cores = detectCores(), chains = 8,
+                                   iter = 2000, seed = 1234) {
     cat("parallel_stan: cores=", cores,
         ", chains=", chains,
         ", iter=", iter,
@@ -26,17 +27,18 @@ stanfunc$parallel_stan <- function(code, data, cores=detectCores(), chains=8, it
         sep="")
 
     cat("--- Step 1: compile the model (and run it once, very briefly, ignoring its output)\n")
-    f1 <- stan(model_code=code, data=data, iter=1, seed=seed, chains=1,
-               chain_id=1)
+    f1 <- stan(model_code = code, data = data, iter = 1, seed = seed,
+               chains = 1, chain_id = 1)
     # sflist1 = list(f1)
 
     cat("--- Step 2: run more chains in parallel\n")
     sflist2 <- mclapply(
         # 2:chains,
         1:chains,
-        mc.cores=cores,
+        mc.cores = cores,
         function(i) {
-            stan(fit=f1, data=data, iter=iter, seed=seed, chains=1, chain_id=i)
+            stan(fit = f1, data = data,
+                 iter = iter, seed = seed, chains = 1, chain_id = i)
         }
         # , refresh = -1
     )
@@ -49,7 +51,7 @@ stanfunc$parallel_stan <- function(code, data, cores=detectCores(), chains=8, it
     return(sflist2stanfit(sflist))
 }
 
-stanfunc$load_or_run_stan <- function(data, code, file, forcerun=FALSE) {
+stanfunc$load_or_run_stan <- function(data, code, file, forcerun = FALSE) {
     if (!forcerun && file.exists(file)) {
         cat("Loading Stan model from file:", file, "\n")
         load(file)
@@ -62,65 +64,91 @@ stanfunc$load_or_run_stan <- function(data, code, file, forcerun=FALSE) {
     return(fit)
 }
 
+stanfunc$parallel_stan_reuse_fit <- function(f1, data,
+                                             cores = detectCores(), chains = 8,
+                                             iter = 2000, seed = 1234) {
+    cat("parallel_stan_reuse_fit: cores=", cores,
+        ", chains=", chains,
+        ", iter=", iter,
+        ", seed=", seed,
+        "\n",
+        sep="")
+
+    cat("--- Reusing existing model\n")
+    sflist2 <- mclapply(
+        1:chains,
+        mc.cores = cores,
+        function(i) {
+            stan(fit = f1, data = data,
+                 iter = iter, seed = seed, chains = 1, chain_id = i)
+        }
+    )
+    sflist <- sflist2
+    cat("--- Finished.\n")
+    return(sflist2stanfit(sflist))
+}
+
+
 #==============================================================================
 # LOOKING AT OUTPUT
 #==============================================================================
 
 stanfunc$save_plots_from_stanfit <- function(
     fit,
-    parfile="teststan_parameters.pdf",
-    tracefile="teststan_trace.pdf",
-    pairfile="teststan_pairs.pdf"
+    parfile = "teststan_parameters.pdf",
+    tracefile = "teststan_trace.pdf",
+    pairfile = "teststan_pairs.pdf"
 ) {
     cat("Plotting parameters to", parfile, "\n")
-    pdf(file=parfile)
+    pdf(file = parfile)
     plot(fit)
     dev.off()
     cat("Plotting trace to", tracefile, "\n")
-    pdf(file=tracefile)
+    pdf(file = tracefile)
     traceplot(fit) # options include: pars, inc_warmup
     dev.off()
     cat("Plotting pairs to", pairfile, "\n")
-    pdf(file=pairfile)
+    pdf(file = pairfile)
     pairs(fit)
     dev.off()
 }
 
-stanfunc$sampled_values_from_stanfit <- function(fit, parname, method=1) {
+stanfunc$sampled_values_from_stanfit <- function(fit, parname, method = 1) {
     if (method == 1) {
         # 1. Laborious hand-crafted way.
-        n_chains = slot(fit, "sim")$chains
-        n_warmup = slot(fit, "sim")$warmup
-        sampled_values = NULL
+        n_chains <- slot(fit, "sim")$chains
+        n_warmup <- slot(fit, "sim")$warmup
+        sampled_values <- NULL
         for (c in 1:n_chains) {
-            n_save = slot(fit, "sim")$n_save[c]
-            new_values = slot(fit, "sim")$samples[[c]][parname][[1]][(n_warmup+1):n_save]
-            sampled_values = c(sampled_values, new_values)
+            n_save <- slot(fit, "sim")$n_save[c]
+            new_values <- slot(fit, "sim")$samples[[c]][parname][[1]][(n_warmup+1):n_save]
+            sampled_values <- c(sampled_values, new_values)
         }
     }
     else if (method == 2) {
         # 2. The way it's meant to be done.
-        ex = extract(fit, permuted=TRUE)
+        ex <- extract(fit, permuted=TRUE)
         if (!(parname %in% names(ex))) stop("No such parameter: ", parname)
-        sampled_values = ex[[parname]]
+        sampled_values <- ex[[parname]]
     }
     else {
         # 3. Another...
-        m = as.matrix(fit)
+        m <- as.matrix(fit)
         if (!(parname %in% colnames(m))) stop("No such parameter: ", parname)
-        sampled_values = m[,parname]
+        sampled_values <- m[,parname]
     }
     return(sampled_values)
 }
 
-stanfunc$quick_summary_stanfit <- function(fit, probs = c(0.025, 0.25, 0.5, 0.75, 0.975)) {
-    print(fit, digits_summary=5, probs=probs)
+stanfunc$quick_summary_stanfit <- function(
+        fit, probs = c(0.025, 0.25, 0.5, 0.75, 0.975)) {
+    print(fit, digits_summary = 5, probs = probs)
 }
 
 stanfunc$calculate_mode <- function(sampled_values) {
-    my_density = density(sampled_values)
-    max_density = max(my_density$y)
-    my_density$x[ which(my_density$y == max_density) ]
+    my_density <- density(sampled_values)
+    max_density <- max(my_density$y)
+    my_density$x[which(my_density$y == max_density)]
 }
 
 stanfunc$density_at_sub <- function(my_density, value) {
@@ -136,30 +164,30 @@ stanfunc$density_at_sub <- function(my_density, value) {
     }
     # Otherwise, interpolate:
     # cat("density_at: interpolating\n")
-    lower_x = max( my_density$x[my_density$x < value] )
-    upper_x = min( my_density$x[my_density$x > value] )
-    lower_d = my_density$y[my_density$x == lower_x]
-    upper_d = my_density$y[my_density$x == upper_x]
-    proportion = (value - lower_x) / (upper_x - lower_x)
-    return( lower_d + proportion * (upper_d - lower_d) )
+    lower_x <- max(my_density$x[my_density$x < value])
+    upper_x <- min(my_density$x[my_density$x > value])
+    lower_d <- my_density$y[my_density$x == lower_x]
+    upper_d <- my_density$y[my_density$x == upper_x]
+    proportion <- (value - lower_x) / (upper_x - lower_x)
+    return(lower_d + proportion * (upper_d - lower_d))
 }
 
 stanfunc$density_at <- function(sampled_values, values) {
-    my_density = density(sampled_values)
-    result = NULL
+    my_density <- density(sampled_values)
+    result <- NULL
     for (v in values) {
-        result = c(result, density_at_sub(my_density, v))
+        result <- c(result, density_at_sub(my_density, v))
     }
-    result
+    return(result)
 }
 
 stanfunc$cum_density_between_two_values <- function(sampled_values, lower, upper) {
-    my_ecdf = ecdf(sampled_values)
+    my_ecdf <- ecdf(sampled_values)
     my_ecdf(upper) - my_ecdf(lower)
 }
 
 stanfunc$find_value_giving_density <- function(sampled_values, target_density) {
-    dens = density(sampled_values)
+    dens <- density(sampled_values)
     finder <- function(x) {
         density_at_sub(dens, x) - target_density
     }
@@ -167,12 +195,12 @@ stanfunc$find_value_giving_density <- function(sampled_values, target_density) {
 }
 
 stanfunc$find_value_giving_cum_density <- function(sampled_values, cum_density) {
-    cdf = ecdf(sampled_values)
+    cdf <- ecdf(sampled_values)
     find_root <- function(x) {
         cdf(x) - cum_density
     }
-    search_range = c(min(sampled_values), max(sampled_values))
-    value = uniroot(find_root, interval=search_range)$root
+    search_range <- c(min(sampled_values), max(sampled_values))
+    value <- uniroot(find_root, interval = search_range)$root
 }
 
 stanfunc$JUNK1 = "
@@ -205,15 +233,15 @@ stanfunc$calculate_hdi_from_sample_piecewise <- function(x, hdi_proportion = 0.9
     # x contains sampled values
     # ... the shortest interval for which the difference in the empirical cumulative density function values of the endpoints is the nominal probability
     # http://stats.stackexchange.com/questions/18533/find-probability-density-intervals
-    x = sort(x)
+    x <- sort(x)
     # http://www.sumsar.net/best_online/js/js_mcmc.js
-    n = length(x)
-    ci_nbr_of_points = floor(n * hdi_proportion) # want this many samples in the HDI
-    min_width_ci = c(min(x), max(y)) # initialize
+    n <- length(x)
+    ci_nbr_of_points <- floor(n * hdi_proportion) # want this many samples in the HDI
+    min_width_ci <- c(min(x), max(y)) # initialize
     for (i in 1:(n - ci_nbr_of_points)) {
-        ci_width = x[i + ci_nbr_of_points] - x[i]
+        ci_width <- x[i + ci_nbr_of_points] - x[i]
         if (ci_width < min_width_ci[2] - min_width_ci[1]) {
-            min_width_ci = c( x[i], x[i + ci_nbr_of_points] )
+            min_width_ci <- c( x[i], x[i + ci_nbr_of_points] )
         }
     }
     return(min_width_ci)
@@ -222,7 +250,7 @@ stanfunc$calculate_hdi_from_sample_piecewise <- function(x, hdi_proportion = 0.9
     # and   PDF(upper) = PDF(lower)
 }
 
-stanfunc$HDIofMCMC = function( sampleVec , credMass=0.95 ) {
+stanfunc$HDIofMCMC = function(sampleVec, credMass = 0.95) {
     # Krushke, p628, HDIofMCMC.R
     # Computes highest density interval from a sample of representative values,
     #   estimated as shortest credible interval.
@@ -234,93 +262,109 @@ stanfunc$HDIofMCMC = function( sampleVec , credMass=0.95 ) {
     #    interval that is to be estimated.
     # Value:
     #  HDIlim is a vector containing the limits of the HDI
-    sortedPts = sort( sampleVec )
-    ciIdxInc = floor( credMass * length( sortedPts ) )
-    nCIs = length( sortedPts ) - ciIdxInc
-    ciWidth = rep( 0 , nCIs )
-    for ( i in 1:nCIs ) {
-        ciWidth[ i ] = sortedPts[ i + ciIdxInc ] - sortedPts[ i ]
+    sortedPts <- sort( sampleVec )
+    ciIdxInc <- floor( credMass * length( sortedPts ) )
+    nCIs <- length( sortedPts ) - ciIdxInc
+    ciWidth <- rep( 0 , nCIs )
+    for (i in 1:nCIs) {
+        ciWidth[i] <- sortedPts[i + ciIdxInc] - sortedPts[i]
     }
-    HDImin = sortedPts[ which.min( ciWidth ) ]
-    HDImax = sortedPts[ which.min( ciWidth ) + ciIdxInc ]
-    HDIlim = c( HDImin , HDImax )
+    HDImin <- sortedPts[which.min(ciWidth)]
+    HDImax <- sortedPts[which.min(ciWidth) + ciIdxInc]
+    HDIlim <- c(HDImin, HDImax)
     return(HDIlim)
 }
 
-stanfunc$hdi_via_coda = function(sampled_values, hdi_proportion = 0.95) {
-    hdi_limits_matrix = coda::HPDinterval(as.mcmc(sampled_values), prob = hdi_proportion)
-    return( c( hdi_limits_matrix[1, "lower"], hdi_limits_matrix[1, "upper"] ) )
+stanfunc$hdi_via_coda <- function(sampled_values, hdi_proportion = 0.95) {
+    hdi_limits_matrix <- coda::HPDinterval(as.mcmc(sampled_values),
+                                           prob = hdi_proportion)
+    return(c(hdi_limits_matrix[1, "lower"], hdi_limits_matrix[1, "upper"]))
 }
 
-stanfunc$hdi_via_lme4 = function(sampled_values, hdi_proportion = 0.95) {
-    hdi_limits_matrix = lme4::HPDinterval(as.matrix(sampled_values), prob = hdi_proportion)
-    return( c( hdi_limits_matrix[1, "lower"], hdi_limits_matrix[1, "upper"] ) )
+stanfunc$hdi_via_lme4 <- function(sampled_values, hdi_proportion = 0.95) {
+    hdi_limits_matrix <- lme4::HPDinterval(as.matrix(sampled_values),
+                                           prob = hdi_proportion)
+    return(c( hdi_limits_matrix[1, "lower"], hdi_limits_matrix[1, "upper"]))
 }
 
-stanfunc$compare_hdi_methods = function(sampled_values, hdi_proportion) {
+stanfunc$compare_hdi_methods <- function(sampled_values, hdi_proportion) {
     cat("RNC:\n")
-    print( calculate_hdi_from_sample_piecewise(sampled_values, hdi_proportion) )
+    print(calculate_hdi_from_sample_piecewise(sampled_values, hdi_proportion))
     cat("Krushke:\n")
-    print( HDIofMCMC(sampled_values, hdi_proportion) )
+    print(HDIofMCMC(sampled_values, hdi_proportion))
     cat("coda:\n")
-    print( hdi_via_coda(sampled_values, hdi_proportion) )
+    print(hdi_via_coda(sampled_values, hdi_proportion))
     cat("lme4:\n")
-    print( hdi_via_lme4(sampled_values, hdi_proportion) )
+    print(hdi_via_lme4(sampled_values, hdi_proportion))
 }
 
 # Method chooser!
-stanfunc$hdi = function(sampled_values, hdi_proportion = 0.95) {
+stanfunc$hdi <- function(sampled_values, hdi_proportion = 0.95) {
     HDIofMCMC(sampled_values, hdi_proportion)
     # hdi_via_coda(sampled_values, hdi_proportion)
     # calculate_hdi_from_sample_piecewise(sampled_values, hdi_proportion)
 }
 
-stanfunc$interval_includes = function(interval, testval, lower_inclusive = TRUE, upper_inclusive = TRUE) {
+stanfunc$interval_includes <- function(interval, testval,
+                                       lower_inclusive = TRUE,
+                                       upper_inclusive = TRUE) {
     # Ensure ordered from low to high:
     if (interval[2] < interval[1]) {
-        interval = c(interval[2], interval[1])
+        interval <- c(interval[2], interval[1])
     }
-    lowertest = ifelse(lower_inclusive, interval[1] <= testval, interval[1] < testval)
-    uppertest = ifelse(upper_inclusive, testval <= interval[2], testval < interval[2])
+    lowertest <- ifelse(lower_inclusive,
+                        interval[1] <= testval,
+                        interval[1] < testval)
+    uppertest <- ifelse(upper_inclusive,
+                        testval <= interval[2],
+                        testval < interval[2])
     return(lowertest && uppertest)
 }
 
-stanfunc$interval_excludes = function(interval, testval, lower_inclusive = TRUE, upper_inclusive = TRUE) {
-    !stanfunc$interval_includes(interval, testval, lower_inclusive = TRUE, upper_inclusive = TRUE)
+stanfunc$interval_excludes <- function(interval, testval,
+                                       lower_inclusive = TRUE,
+                                       upper_inclusive = TRUE) {
+    !stanfunc$interval_includes(interval, testval,
+                                lower_inclusive = lower_inclusive,
+                                upper_inclusive = upper_inclusive)
 }
 
-stanfunc$hdi_proportion_excluding_test_value <- function(x, test_value = 0, largest_such_interval = TRUE, debug = FALSE) {
+stanfunc$hdi_proportion_excluding_test_value <- function(
+        x, test_value = 0, largest_such_interval = TRUE, debug = FALSE) {
     # cruddy method!
 
     # NOTE ALSO: neither the lower bound nor the upper bound of an HDI
     # move monotonically as the HDI proportion is changed (because the
     # distribution can be asymmetrical).
 
-    width_accuracy = 0.001 # 0.1%
+    width_accuracy <- 0.001  # 0.1%
 
     if (largest_such_interval) {
-        startval = 1
-        endval = 0
-        width_accuracy = -width_accuracy
-        stoptest = interval_excludes
+        startval <- 1
+        endval <- 0
+        width_accuracy <- -width_accuracy
+        stoptest <- interval_excludes
     }
     else {
-        startval = 0
-        endval = 1
-        stoptest = interval_includes
+        startval <- 0
+        endval <- 1
+        stoptest <- interval_includes
     }
-    prev_width = startval
+    prev_width <- startval
 
     for (width in seq(startval, endval, width_accuracy)) {
-        if (width == 1) next # or HDI will be invalid (infinite)
-        interval = hdi(x, width)
-        current_interval_fails = stoptest(interval, test_value)
-        if (debug) cat("testing proportion ", width, ", interval: ", interval, ", fails? ", current_interval_fails, "\n", sep="")
+        if (width == 1) next  # or HDI will be invalid (infinite)
+        interval <- hdi(x, width)
+        current_interval_fails <- stoptest(interval, test_value)
+        if (debug) cat("testing proportion ", width,
+                       ", interval: ", interval,
+                       ", fails? ", current_interval_fails,
+                       "\n", sep="")
         if (current_interval_fails) {
             # current interval fails, so return the previous
             return(prev_width)
         }
-        prev_width = width
+        prev_width <- width
     }
     return(endval)
 }
@@ -351,25 +395,26 @@ stanfunc$plot_density_function <- function(
     ypos_mean = 0.6,
     ypos_mode = 0.4
 ) {
-    my_density = density(sampled_values)
-    max_density = max(my_density$y)
-    q = quantile(sampled_values, probs=quantile_probs)
-    my_mean = mean(sampled_values)
-    my_mode = calculate_mode(sampled_values)
-    my_ecdf = ecdf(sampled_values)
-    hdi_percent = hdi_proportion * 100
+    my_density <- density(sampled_values)
+    max_density <- max(my_density$y)
+    q <- quantile(sampled_values, probs=quantile_probs)
+    my_mean <- mean(sampled_values)
+    my_mode <- calculate_mode(sampled_values)
+    my_ecdf <- ecdf(sampled_values)
+    hdi_percent <- hdi_proportion * 100
     #debug_quantity(sampled_values)
 
-    hdi_limits = hdi(sampled_values, hdi_proportion)
+    hdi_limits <- hdi(sampled_values, hdi_proportion)
 
-    central_proportion_excluding_test_value = 1 - 2 * my_ecdf(test_value)
+    central_proportion_excluding_test_value <- 1 - 2 * my_ecdf(test_value)
 
     cat("\nParameter:", parname, "\n")
     cat("Mean:", my_mean, "\n")
     cat("Mode:", my_mode, "\n")
     cat("Quantiles:\n")
     print(q)
-    cat("Central proportion excluding test value of", test_value, ":", central_proportion_excluding_test_value, "\n")
+    cat("Central proportion excluding test value of", test_value, ":",
+        central_proportion_excluding_test_value, "\n")
     cat(hdi_percent, "% HDI:\n")
     print(hdi_limits)
     if (show_hdi_proportion_excluding_test_value) {
@@ -388,22 +433,22 @@ stanfunc$plot_density_function <- function(
     plot(
         my_density$x,
         my_density$y,
-        xlab=parname,
-        ylab="Density",
-        main=paste("Posterior distribution of ", parname, sep=""),
-        type="l",
-        bty="n",
+        xlab = parname,
+        ylab = "Density",
+        main = paste("Posterior distribution of ", parname, sep=""),
+        type = "l",
+        bty = "n",
         col = colour_density,
         ylim = c(0, max_density * 1.2)
     )
-    ypos_quantiles_upper = max_density * ypos_quantiles
-    ypos_quantiles_lower = max_density * (ypos_quantiles - 0.05)
-    ypos_quantiles_linetop = max_density * (ypos_quantiles - 0.10)
-    ypos_mean_upper = max_density * ypos_mean
-    ypos_mean_lower = max_density * (ypos_mean - 0.05)
-    ypos_mode_upper = max_density * ypos_mode
-    ypos_mode_lower = max_density * (ypos_mode - 0.05)
-    ypos_baseline = max_density * -0.05
+    ypos_quantiles_upper <- max_density * ypos_quantiles
+    ypos_quantiles_lower <- max_density * (ypos_quantiles - 0.05)
+    ypos_quantiles_linetop <- max_density * (ypos_quantiles - 0.10)
+    ypos_mean_upper <- max_density * ypos_mean
+    ypos_mean_lower <- max_density * (ypos_mean - 0.05)
+    ypos_mode_upper <- max_density * ypos_mode
+    ypos_mode_lower <- max_density * (ypos_mode - 0.05)
+    ypos_baseline <- max_density * -0.05
 
     # quantiles
     if (show_quantiles) {
@@ -413,8 +458,11 @@ stanfunc$plot_density_function <- function(
                 y = c(ypos_baseline, ypos_quantiles_linetop),
                 col = colour_quantiles,
                 lty = lty_quantiles)
-            text(q[i], ypos_quantiles_upper, prettyNum(q[i], digits=digits), col = colour_quantiles)
-            text(q[i], ypos_quantiles_lower, paste(quantile_probs[i] * 100, "%", sep=""), col = colour_quantiles)
+            text(q[i], ypos_quantiles_upper,
+                 prettyNum(q[i], digits=digits), col = colour_quantiles)
+            text(q[i], ypos_quantiles_lower,
+                 paste(quantile_probs[i] * 100, "%", sep=""),
+                 col = colour_quantiles)
         }
     }
     # mean
@@ -424,8 +472,10 @@ stanfunc$plot_density_function <- function(
             y = c(ypos_baseline, max_density),
             col = colour_mean,
             lty = lty_mean)
-        text(my_mean, ypos_mean_upper, prettyNum(my_mean, digits=digits), col = colour_mean)
-        text(my_mean, ypos_mean_lower, "(mean)", col = colour_mean)
+        text(my_mean, ypos_mean_upper,
+             prettyNum(my_mean, digits=digits), col = colour_mean)
+        text(my_mean, ypos_mean_lower,
+             "(mean)", col = colour_mean)
     }
     # mode
     if (show_mode) {
@@ -434,15 +484,16 @@ stanfunc$plot_density_function <- function(
             y = c(ypos_baseline, max_density),
             col = colour_mode,
             lty = lty_mode)
-        text(my_mode, ypos_mode_upper, prettyNum(my_mode, digits=digits), col = colour_mode)
+        text(my_mode, ypos_mode_upper,
+             prettyNum(my_mode, digits=digits), col = colour_mode)
         text(my_mode, ypos_mode_lower, "(mode)", col = colour_mode)
     }
     # HDI
     if (show_hdi) {
-        density_at_hdi = density_at(sampled_values, hdi_limits)
+        density_at_hdi <- density_at(sampled_values, hdi_limits)
         # these will be imprecise (based on sampled density); the HDI itself is precise
         # So for visual reasons we take an approximate "water level":
-        mean_density_at_hdi = mean(density_at_hdi)
+        mean_density_at_hdi <- mean(density_at_hdi)
         lines(
             x = hdi_limits,
             y = density_at_hdi,
@@ -461,11 +512,14 @@ stanfunc$plot_density_function <- function(
             lty = lty_hdi,
             col = colour_hdi
         )
-        ypos_hdi_text = mean_density_at_hdi + max_density * -0.05
-        ypos_hdi_nums = mean_density_at_hdi + max_density * 0.05
-        text(mean(hdi_limits), ypos_hdi_text, paste(hdi_percent, "% HDI", sep=""), col = colour_hdi)
-        text(hdi_limits[1], ypos_hdi_nums, prettyNum(hdi_limits[1], digits=digits), col = colour_hdi)
-        text(hdi_limits[2], ypos_hdi_nums, prettyNum(hdi_limits[2], digits=digits), col = colour_hdi)
+        ypos_hdi_text <- mean_density_at_hdi + max_density * -0.05
+        ypos_hdi_nums <- mean_density_at_hdi + max_density * 0.05
+        text(mean(hdi_limits), ypos_hdi_text,
+             paste(hdi_percent, "% HDI", sep=""), col = colour_hdi)
+        text(hdi_limits[1], ypos_hdi_nums,
+             prettyNum(hdi_limits[1], digits=digits), col = colour_hdi)
+        text(hdi_limits[2], ypos_hdi_nums,
+             prettyNum(hdi_limits[2], digits=digits), col = colour_hdi)
     }
 }
 
@@ -496,20 +550,20 @@ stanfunc$ggplot_density_function <- function(
     ypos_mode = 0.4,
     theme = theme_bw()
 ) {
-    my_density = density(sampled_values)
-    max_density = max(my_density$y)
-    q = quantile(sampled_values, probs=quantile_probs)
-    my_mean = mean(sampled_values)
-    my_mode = calculate_mode(sampled_values)
-    my_ecdf = ecdf(sampled_values)
-    hdi_percent = hdi_proportion * 100
+    my_density <- density(sampled_values)
+    max_density <- max(my_density$y)
+    q <- quantile(sampled_values, probs=quantile_probs)
+    my_mean <- mean(sampled_values)
+    my_mode <- calculate_mode(sampled_values)
+    my_ecdf <- ecdf(sampled_values)
+    hdi_percent <- hdi_proportion * 100
 
-    hdi_limits = hdi(sampled_values, hdi_proportion)
+    hdi_limits <- hdi(sampled_values, hdi_proportion)
 
-    central_proportion_excluding_test_value = 1 - 2 * my_ecdf(test_value)
+    central_proportion_excluding_test_value <- 1 - 2 * my_ecdf(test_value)
 
-    df = data.frame(x = my_density$x, y=my_density$y)
-    p = (
+    df <- data.frame(x = my_density$x, y=my_density$y)
+    p <- (
         ggplot(df, aes(x, y))
         + theme
         + geom_line(colour=colour_density)
@@ -519,63 +573,82 @@ stanfunc$ggplot_density_function <- function(
         + ylim(0, max_density * 1.2)
     )
 
-    ypos_quantiles_upper = max_density * ypos_quantiles
-    ypos_quantiles_lower = max_density * (ypos_quantiles - 0.05)
-    ypos_quantiles_linetop = max_density * (ypos_quantiles - 0.10)
-    ypos_mean_upper = max_density * ypos_mean
-    ypos_mean_lower = max_density * (ypos_mean - 0.05)
-    ypos_mode_upper = max_density * ypos_mode
-    ypos_mode_lower = max_density * (ypos_mode - 0.05)
-    ypos_baseline = 0
+    ypos_quantiles_upper <- max_density * ypos_quantiles
+    ypos_quantiles_lower <- max_density * (ypos_quantiles - 0.05)
+    ypos_quantiles_linetop <- max_density * (ypos_quantiles - 0.10)
+    ypos_mean_upper <- max_density * ypos_mean
+    ypos_mean_lower <- max_density * (ypos_mean - 0.05)
+    ypos_mode_upper <- max_density * ypos_mode
+    ypos_mode_lower <- max_density * (ypos_mode - 0.05)
+    ypos_baseline <- 0
 
     # quantiles
     if (show_quantiles) {
         for (i in 1:length(q)) {
-            p = (p
-                + geom_vline(xintercept = q[i], colour = colour_quantiles, linetype = lty_quantiles)
-                + annotate("text", x=q[i], y=ypos_quantiles_upper, label=prettyNum(q[i], digits=digits), colour=colour_quantiles)
-                + annotate("text", x=q[i], y=ypos_quantiles_lower, label=paste(quantile_probs[i] * 100, "%", sep=""), colour=colour_quantiles)
+            p <- (p
+                + geom_vline(xintercept = q[i], colour = colour_quantiles,
+                             linetype = lty_quantiles)
+                + annotate("text", x = q[i], y = ypos_quantiles_upper,
+                           label = prettyNum(q[i], digits = digits),
+                           colour = colour_quantiles)
+                + annotate("text", x = q[i], y = ypos_quantiles_lower,
+                           label = paste(quantile_probs[i] * 100, "%", sep=""),
+                           colour = colour_quantiles)
             )
         }
     }
     # mean
     if (show_mean) {
-        p = (p
-            + geom_vline(xintercept = my_mean, colour = colour_mean, linetype = lty_mean)
-            + annotate("text", x=my_mean, y=ypos_mean_upper, label=prettyNum(my_mean, digits=digits), colour=colour_mean)
-            + annotate("text", x=my_mean, y=ypos_mean_lower, label="(mean)", colour=colour_mean)
+        p <- (p
+            + geom_vline(xintercept = my_mean, colour = colour_mean,
+                         linetype = lty_mean)
+            + annotate("text", x = my_mean, y = ypos_mean_upper,
+                       label = prettyNum(my_mean, digits = digits),
+                       colour = colour_mean)
+            + annotate("text", x = my_mean, y = ypos_mean_lower,
+                       label = "(mean)", colour = colour_mean)
         )
     }
     # mode
     if (show_mode) {
-        p = (p
-             + geom_vline(xintercept = my_mode, colour = colour_mode, linetype = lty_mode)
-             + annotate("text", x=my_mode, y=ypos_mode_upper, label=prettyNum(my_mode, digits=digits), colour=colour_mode)
-             + annotate("text", x=my_mode, y=ypos_mode_lower, label="(mode)", colour=colour_mode)
+        p <- (p
+            + geom_vline(xintercept = my_mode, colour = colour_mode,
+                         linetype = lty_mode)
+            + annotate("text", x = my_mode, y = ypos_mode_upper,
+                       label = prettyNum(my_mode, digits=digits),
+                       colour = colour_mode)
+            + annotate("text", x = my_mode, y = ypos_mode_lower,
+                       label = "(mode)", colour = colour_mode)
         )
     }
     # HDI
     if (show_hdi) {
-        density_at_hdi = density_at(sampled_values, hdi_limits)
+        density_at_hdi <- density_at(sampled_values, hdi_limits)
         # these will be imprecise (based on sampled density); the HDI itself is precise
         # So for visual reasons we take an approximate "water level":
-        mean_density_at_hdi = mean(density_at_hdi)
-        ypos_hdi_text = mean_density_at_hdi + max_density * -0.05
-        ypos_hdi_nums = mean_density_at_hdi + max_density * 0.05
-        hdidf = data.frame(
+        mean_density_at_hdi <- mean(density_at_hdi)
+        ypos_hdi_text <- mean_density_at_hdi + max_density * -0.05
+        ypos_hdi_nums <- mean_density_at_hdi + max_density * 0.05
+        hdidf <- data.frame(
             x = c(hdi_limits[1], hdi_limits[1], hdi_limits[2], hdi_limits[2]),
             y = c(ypos_baseline, density_at_hdi[1], density_at_hdi[2], ypos_baseline)
         )
         print(hdidf)
-        p = (p
+        p <- (p
             + geom_line(
                 data = hdidf,
-                aes = aes(x=x, y=y),
-                colour=colour_hdi
+                aes = aes(x = x, y = y),
+                colour = colour_hdi
             )
-            + annotate("text", x=mean(hdi_limits), y=ypos_hdi_text, label=paste(hdi_percent, "% HDI", sep=""), colour=colour_hdi)
-            + annotate("text", x=hdi_limits[1], y=ypos_hdi_nums, label=prettyNum(hdi_limits[1], digits=digits), colour=colour_hdi)
-            + annotate("text", x=hdi_limits[2], y=ypos_hdi_nums, label=prettyNum(hdi_limits[2], digits=digits), colour=colour_hdi)
+            + annotate("text", x = mean(hdi_limits), y = ypos_hdi_text,
+                       label = paste(hdi_percent, "% HDI", sep=""),
+                       colour = colour_hdi)
+            + annotate("text", x = hdi_limits[1], y = ypos_hdi_nums,
+                       label = prettyNum(hdi_limits[1], digits = digits),
+                       colour = colour_hdi)
+            + annotate("text", x = hdi_limits[2], y = ypos_hdi_nums,
+                       label = prettyNum(hdi_limits[2], digits = digits),
+                       colour = colour_hdi)
         )
     }
     return(p)
@@ -583,8 +656,8 @@ stanfunc$ggplot_density_function <- function(
 
 stanfunc$plot_multiple_stanfit_parameters <- function(fit, parnames, ...)
 {
-    npar = length(parnames)
-    nside = ceiling(sqrt(npar))
+    npar <- length(parnames)
+    nside <- ceiling(sqrt(npar))
     par(mfrow = c(nside, nside))
     for (i in 1:npar) {
         stanfunc$test_specific_parameter_from_stanfit(fit, parnames[i], ...)
@@ -593,11 +666,11 @@ stanfunc$plot_multiple_stanfit_parameters <- function(fit, parnames, ...)
 
 stanfunc$plot_all_stanfit_parameters <- function(fit, ...)
 {
-    parnames = stanfunc$get_all_parameters_from_stanfit(fit)
+    parnames <- stanfunc$get_all_parameters_from_stanfit(fit)
     stanfunc$plot_multiple_stanfit_parameters(fit, parnames, ...)
 }
 
-stanfunc$points_to_mm = function(pts) {
+stanfunc$points_to_mm <- function(pts) {
     pts * 0.352777778
 }
 
@@ -621,20 +694,22 @@ stanfunc$plot_multiple_stanfit_parameters_vstack <- function(
     , title = "Parameter value"
     , compare_to = 0
     , theme = theme_bw()
-    , reverse_sign = FALSE # flip the sign of all dependent variables
+    , reverse_sign = FALSE  # flip the sign of all dependent variables
     , show_hdi_proportion_excluding_comparison = FALSE
     , hdi_proportion_fontsize_points = 8
     , colour_hdi = TRUE
 )
 {
-    parnames = sapply(params, function(x) x$name)
-    pardesc = sapply(params, function(x) {
-        item = ifelse(is.null(x$desc), x$name, x$desc)
-        names(item) = x$name # because ggplot scale_y_discrete wants a named character vector: http://docs.ggplot2.org/0.9.3/discrete_scale.html
+    parnames <- sapply(params, function(x) x$name)
+    pardesc <- sapply(params, function(x) {
+        item <- ifelse(is.null(x$desc), x$name, x$desc)
+        names(item) <- x$name
+        # ... because ggplot scale_y_discrete wants a named character vector:
+        # http://docs.ggplot2.org/0.9.3/discrete_scale.html
         return(item)
     } )
 
-    colourmap = c(
+    colourmap <- c(
         # specify names, or scale_colour_manual shuffles them
         # (factor order is not the important thing)
         #
@@ -647,8 +722,8 @@ stanfunc$plot_multiple_stanfit_parameters_vstack <- function(
         , "red" = "red"
     )
 
-    n = length(parnames)
-    d = data.frame(
+    n <- length(parnames)
+    d <- data.frame(
         parname = parnames
         , yval = n:1 # top to bottom
         , innerhdi_colour = factor("black", names(colourmap))
@@ -663,85 +738,93 @@ stanfunc$plot_multiple_stanfit_parameters_vstack <- function(
     )
 
     # Ensure the order is respected, and top-to-bottom
-    d$parname = factor(d$parname, levels = rev(d$parname), ordered = TRUE)
+    d$parname <- factor(d$parname, levels = rev(d$parname), ordered = TRUE)
 
-    show_hdi_exclusion_proportions = (!is.na(compare_to) && show_hdi_proportion_excluding_comparison)
+    show_hdi_exclusion_proportions <- (
+        !is.na(compare_to) && show_hdi_proportion_excluding_comparison)
 
     for (i in 1:n) {
-        sampled_values = sampled_values_from_stanfit(fit, as.character(d$parname[i]))
+        parname <- as.character(d$parname[i])
+        sampled_values <- sampled_values_from_stanfit(fit, parname)
+        if (is.null(sampled_values)) {
+            stop(paste("No values for parameter:", parname))
+        }
         # ... the as.character() is vital!
         if (reverse_sign) {
-            sampled_values = -sampled_values
+            sampled_values <- -sampled_values
         }
 
-        inner_hdi_limits = hdi(sampled_values, inner_hdi_proportion)
-        d$inner_hdi_lower[i] = inner_hdi_limits[1]
-        d$inner_hdi_upper[i] = inner_hdi_limits[2]
+        inner_hdi_limits <- hdi(sampled_values, inner_hdi_proportion)
+        d$inner_hdi_lower[i] <- inner_hdi_limits[1]
+        d$inner_hdi_upper[i] <- inner_hdi_limits[2]
 
-        outer_hdi_limits = hdi(sampled_values, outer_hdi_proportion)
-        d$outer_hdi_lower[i] = outer_hdi_limits[1]
-        d$outer_hdi_upper[i] = outer_hdi_limits[2]
+        outer_hdi_limits <- hdi(sampled_values, outer_hdi_proportion)
+        d$outer_hdi_lower[i] <- outer_hdi_limits[1]
+        d$outer_hdi_upper[i] <- outer_hdi_limits[2]
 
-        d$mean[i] = mean(sampled_values)
+        d$mean[i] <- mean(sampled_values)
 
-        d$median[i] = quantile(sampled_values, probs=c(0.5))
+        d$median[i] <- quantile(sampled_values, probs = c(0.5))
 
         if (!is.na(compare_to)) {
-            d$inner_hdi_excludes_zero[i] = interval_excludes(inner_hdi_limits, 0)
-            d$outer_hdi_excludes_zero[i] = interval_excludes(outer_hdi_limits, 0)
+            d$inner_hdi_excludes_zero[i] <- interval_excludes(inner_hdi_limits, 0)
+            d$outer_hdi_excludes_zero[i] <- interval_excludes(outer_hdi_limits, 0)
 
             if (colour_hdi) {
                 if (d$inner_hdi_excludes_zero[i]) {
-                    d$innerhdi_colour[i] = "orange"
-                    d$main_colour[i] = "orange"
+                    d$innerhdi_colour[i] <- "orange"
+                    d$main_colour[i] <- "orange"
                 }
                 if (d$outer_hdi_excludes_zero[i]) {
-                    d$innerhdi_colour[i] = "red"
-                    d$outerhdi_colour[i] = "red"
-                    d$main_colour[i] = "red"
+                    d$innerhdi_colour[i] <- "red"
+                    d$outerhdi_colour[i] <- "red"
+                    d$main_colour[i] <- "red"
                 }
             }
             if (show_hdi_exclusion_proportions) {
-                d$hdiprop_excluding_comparison[i] = paste(
-                    100 * hdi_proportion_excluding_test_value(sampled_values, compare_to)
+                d$hdiprop_excluding_comparison[i] <- paste(
+                    100 * hdi_proportion_excluding_test_value(sampled_values,
+                                                              compare_to)
                     , "%"
                     , sep = ""
                 )
             }
         }
     }
-    max_x = max(d$mean, d$outer_hdi_upper, na.rm = TRUE)
-    min_x = min(d$mean, d$outer_hdi_lower, na.rm = TRUE)
-    x_range = max_x - min_x
-    HDIPROP_SPACE = ifelse(show_hdi_exclusion_proportions, 0.1, 0)
-    EXTRASPACE = 0.1
-    d$hdiprop_x = min_x - HDIPROP_SPACE * x_range
+    max_x <- max(d$mean, d$outer_hdi_upper, na.rm = TRUE)
+    min_x <- min(d$mean, d$outer_hdi_lower, na.rm = TRUE)
+    x_range <- max_x - min_x
+    HDIPROP_SPACE <- ifelse(show_hdi_exclusion_proportions, 0.1, 0)
+    EXTRASPACE <- 0.1
+    d$hdiprop_x <- min_x - HDIPROP_SPACE * x_range
 
-
-    p = (
+    p <- (
         ggplot(data = d, aes(y = parname, x = mean) )
         # layer up from bottom to top; can't use ifelse() for elements, for some reason
     )
     if (!is.na(compare_to)) {
-        p = p + geom_vline(xintercept = 0)
+        p <- p + geom_vline(xintercept = 0)
     }
-    p = (
+    p <- (
         p
         + scale_y_discrete(labels = pardesc)
-        + geom_errorbarh( aes(xmin = outer_hdi_lower, xmax = outer_hdi_upper, colour = outerhdi_colour) )
-        + geom_errorbarh( aes(xmin = inner_hdi_lower, xmax = inner_hdi_upper, colour = innerhdi_colour) )
-        + geom_point(size = 3, aes(colour = main_colour) )
+        + geom_errorbarh(aes(xmin = outer_hdi_lower, xmax = outer_hdi_upper,
+                             colour = outerhdi_colour))
+        + geom_errorbarh(aes(xmin = inner_hdi_lower, xmax = inner_hdi_upper,
+                             colour = innerhdi_colour))
+        + geom_point(size = 3, aes(colour = main_colour))
     )
     if (show_hdi_exclusion_proportions) {
-        p = p + geom_text(
-            aes(x = hdiprop_x, y = parname, label = hdiprop_excluding_comparison)
-            , size = points_to_mm(hdi_proportion_fontsize_points)
+        p <- p + geom_text(
+            aes(x = hdiprop_x, y = parname, label = hdiprop_excluding_comparison),
+            size = points_to_mm(hdi_proportion_fontsize_points)
         )
         # https://groups.google.com/forum/#!topic/ggplot2-dev/N7oaqvjiKzg
     }
-    p = (
+    p <- (
         p
-        + coord_cartesian(xlim = c(min_x - (HDIPROP_SPACE + EXTRASPACE) * x_range, max_x + (EXTRASPACE) * x_range))
+        + coord_cartesian(xlim = c(min_x - (HDIPROP_SPACE + EXTRASPACE) * x_range,
+                                   max_x + (EXTRASPACE) * x_range))
         + xlab(xlab)
         + ylab(ylab)
         + scale_colour_manual(values = colourmap, guide = FALSE)
@@ -752,59 +835,59 @@ stanfunc$plot_multiple_stanfit_parameters_vstack <- function(
 }
 
 stanfunc$plot_all_stanfit_parameters_vstack <- function(fit, ...) {
-    parnames = stanfunc$get_all_parameters_from_stanfit(fit)
+    parnames <- stanfunc$get_all_parameters_from_stanfit(fit)
     stanfunc$plot_multiple_stanfit_parameters_vstack(fit, parnames, ...)
 }
 
 stanfunc$generate_par_with_indices <- function(pn, pd) {
     #debug_quantity(pn)
     #debug_quantity(pd)
-    ndims = length(pd)
+    ndims <- length(pd)
     if (ndims == 0) {
         return(pn)
     }
-    indexlist = list()
+    indexlist <- list()
     for (d in 1:ndims) {
-        indexlist = append(indexlist, list(x = seq(1:pd[d])))
+        indexlist <- append(indexlist, list(x = seq(1:pd[d])))
     }
     #cat("indexlist: \n"); print(indexlist)
-    indices = expand.grid(indexlist)
+    indices <- expand.grid(indexlist)
     #cat("indices: \n"); print(indices)
-    parnames = NULL
+    parnames <- NULL
     for (r in 1:nrow(indices)) {
-        name = paste(pn, "[", sep="")
+        name <- paste(pn, "[", sep="")
         for (c in 1:ncol(indices)) {
-            if (c > 1) name = paste(name, ",", sep="")
-            name = paste(name, indices[r,c], sep="")
+            if (c > 1) name <- paste(name, ",", sep="")
+            name <- paste(name, indices[r,c], sep="")
         }
-        name = paste(name, "]", sep="")
-        parnames = c(parnames, name)
+        name <- paste(name, "]", sep="")
+        parnames <- c(parnames, name)
     }
     #cat("parnames: \n"); print(parnames)
     return(parnames)
 }
 
 stanfunc$get_all_parameters_from_stanfit <- function(fit) {
-    parnames_without_indices = slot(fit, "model_pars")
-    pardims = slot(fit, "par_dims")
-    parnames = NULL
+    parnames_without_indices <- slot(fit, "model_pars")
+    pardims <- slot(fit, "par_dims")
+    parnames <- NULL
     for (i in 1:length(pardims)) {
-        pn = parnames_without_indices[i]
-        pd = pardims[[i]]
-        parnames = c(parnames, generate_par_with_indices(pn, pd))
+        pn <- parnames_without_indices[i]
+        pd <- pardims[[i]]
+        parnames <- c(parnames, generate_par_with_indices(pn, pd))
     }
     return(parnames)
 }
 
-stanfunc$get_parameter_mean_from_stanfit = function(fit, parname) {
-    sampled_values = stanfunc$sampled_values_from_stanfit(fit, parname)
+stanfunc$get_parameter_mean_from_stanfit <- function(fit, parname) {
+    sampled_values <- stanfunc$sampled_values_from_stanfit(fit, parname)
     return(mean(sampled_values))
 }
 
-stanfunc$get_parameter_means_from_stanfit = function(fit, parnames) {
-    return( aaply(parnames, 1, .fun = function(x) {
+stanfunc$get_parameter_means_from_stanfit <- function(fit, parnames) {
+    return(aaply(parnames, 1, .fun = function(x) {
         stanfunc$get_parameter_mean_from_stanfit(fit, x)
-    } ) )
+    }))
 }
 
 stanfunc$test_specific_parameter_from_stanfit <- function(fit, parname, ...) {
@@ -836,19 +919,19 @@ stanfunc$test_specific_parameter_from_stanfit <- function(fit, parname, ...) {
     # EF(0)
 
     # NOTE, however, that this contains all runs
-    sampled_values = stanfunc$sampled_values_from_stanfit(fit, parname)
+    sampled_values <- stanfunc$sampled_values_from_stanfit(fit, parname)
     stanfunc$plot_density_function(sampled_values, parname, ...)
 }
 
 stanfunc$ggplot_specific_parameter_from_stanfit <- function(fit, parname, ...) {
-    sampled_values = stanfunc$sampled_values_from_stanfit(fit, parname)
+    sampled_values <- stanfunc$sampled_values_from_stanfit(fit, parname)
     return( stanfunc$ggplot_density_function(sampled_values, parname, ...) )
 }
 
 stanfunc$extract_all_means_from_stanfit <- function(fit) {
-    parnames = stanfunc$get_all_parameters_from_stanfit(fit)
-    means = stanfunc$get_parameter_means_from_stanfit(fit, parnames)
-    names(means) = parnames
+    parnames <- stanfunc$get_all_parameters_from_stanfit(fit)
+    means <- stanfunc$get_parameter_means_from_stanfit(fit, parnames)
+    names(means) <- parnames
     return(means)
 }
 

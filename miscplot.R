@@ -1,7 +1,12 @@
 # miscplot.R
 
-requireNamespace("grid")  # for gpar
+requireNamespace("grid")  # for gpar, etc.
 requireNamespace("ggplot2")
+
+library(gridExtra)
+#library(extrafont) # install with sudo. Then (with sudo R) run font_import() then loadfonts(). Then view with fonts() or fonttable(). See https://github.com/wch/extrafont
+library(Cairo)
+library(ggplot2)
 
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
@@ -105,7 +110,7 @@ element_grob.theme_border <- function(
     element_gp <- grid::gpar(lwd = len0_null(element$size * .pt),
                              col = element$colour,
                              lty = element$linetype)
-    polylineGrob(
+    grid::polylineGrob(
         x = xlist, y = ylist, id = idlist, ..., default.units = "npc",
         gp = modifyList(element_gp, gp),
     )
@@ -132,7 +137,7 @@ element_grob.theme_L_border <- function(
     element_gp <- grid::gpar(lwd = len0_null(element$size * .pt),
                              col = element$colour,
                              lty = element$linetype)
-    polylineGrob(
+    grid::polylineGrob(
         x = c(x+width, x, x), y = c(y,y,y+height), ..., default.units = "npc",
         gp = modifyList(element_gp, gp),
     )
@@ -159,7 +164,7 @@ element_grob.theme_bottom_border <- function(
     element_gp <- grid::gpar(lwd = len0_null(element$size * .pt),
                              col = element$colour,
                              lty = element$linetype)
-    polylineGrob(
+    grid::polylineGrob(
         x = c(x, x+width), y = c(y,y), ..., default.units = "npc",
         gp = modifyList(element_gp, gp),
     )
@@ -186,7 +191,7 @@ element_grob.theme_left_border <- function(
     element_gp <- grid::gpar(lwd = len0_null(element$size * .pt),
                              col = element$colour,
                              lty = element$linetype)
-    polylineGrob(
+    grid::polylineGrob(
         x = c(x, x), y = c(y, y+height), ..., default.units = "npc",
         gp = modifyList(element_gp, gp),
     )
@@ -248,7 +253,7 @@ element_grob.theme_border_numerictype <- function(
     element_gp <- grid::gpar(lwd = len0_null(element$size * .pt),
                              col = element$colour,
                              lty = element$linetype)
-    polylineGrob(
+    grid::polylineGrob(
         x = xlist, y = ylist, id = idlist, ..., default.units = "npc",
         gp = modifyList(element_gp, gp),
     )
@@ -327,11 +332,6 @@ miscplot$multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
 
 # http://cairographics.org/manual/cairo-FreeType-Fonts.html
 
-library(gridExtra)
-#library(extrafont) # install with sudo. Then (with sudo R) run font_import() then loadfonts(). Then view with fonts() or fonttable(). See https://github.com/wch/extrafont
-library(Cairo)
-library(ggplot2)
-
 miscplot$which_cairo_fonts_available <- function() {
     CairoFontMatch(":", sort=TRUE)
 }
@@ -384,7 +384,7 @@ miscplot$save_grob_to_pdf <- function(g, filename, width_mm, height_mm,
               title=title)
         # Cairo automatically embeds fonts:
         # http://cran.r-project.org/web/packages/Cairo/Cairo.pdf
-        grid.draw(g)  # not: print(g)
+        grid::grid.draw(g)  # not: print(g)
         dev.off()
     }
 }
@@ -395,7 +395,7 @@ miscplot$A4_LARGE_MM <- 297
 miscplot$POINTS_PER_INCH <- 72
 miscplot$POINTS_PER_MM <- miscplot$POINTS_PER_INCH * miscplot$INCHES_PER_MM
 
-miscplot$BLANK_GROB <- rectGrob(gp=grid::gpar(fill="white", alpha=0))
+miscplot$BLANK_GROB <- grid::rectGrob(gp=grid::gpar(fill="white", alpha=0))
 # ... alpha=0 makes it invisible
 miscplot$NOLEGEND <- theme(legend.position="none")
 miscplot$MOVELEGEND_BOTTOMLEFT <- theme(legend.justification=c(0,0),
