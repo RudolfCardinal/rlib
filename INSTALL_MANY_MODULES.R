@@ -24,14 +24,17 @@ install_if_absent <- function(
 
 DESIRED_LIBRARIES = c(
     "arm",
+    "afex",
     "arrayhelpers",
     # "base64",
     # "BMS",
     "Cairo",
     "car",
     "coda",
+    "data.table",
     "diagram",
     "doParallel",
+    "doSNOW",
     # WHEN RCPP VERSION CATCHES UP # "dplyr",  # Oct 2014
     # "extrafont", # use Cairo instead
     "ez",
@@ -63,11 +66,14 @@ DESIRED_LIBRARIES = c(
     # "Rcmdr", # use RStudio instead,
     "Rcpp", # for RStan
     "readODS",
+    "readxl",
     "reshape",
     "reshape2",
     # "rjags", # also needs some command-line prerequisites
+    "rstan",
     "RMySQL",
     "RODBC",
+    "snow",
     "sqldf",
     "TTR",
     "visreg",
@@ -85,15 +91,20 @@ for (libname in DESIRED_LIBRARIES) {
     install_if_absent(libname)
 }
 
-cat("
+# rstan used to require special procedures, but doesn't any more:
+# https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started
 
-===============================================================================
-DONE MAJOR PACKAGES. Now trying RStan...
-===============================================================================
-")
-
-# RStan is a package that's a bit different:
-install_if_absent(
-    "rstan",
-    repos="http://wiki.rstan-repo.googlecode.com/git/",
-    type="source") # formerly http://wiki.stan.googlecode.com/git/R
+#cat("
+#
+#===============================================================================
+#DONE MAJOR PACKAGES. Now trying RStan...
+#===============================================================================
+#")
+#
+## RStan is a package that's a bit different:
+#install_if_absent(
+#    "rstan",
+#    repos="https://github.com/stan-dev/rstan",
+#    type="source")
+## ... formerly (1) http://wiki.stan.googlecode.com/git/R
+## ... formerly (2) http://wiki.rstan-repo.googlecode.com/git/

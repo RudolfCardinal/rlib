@@ -25,6 +25,23 @@ miscmath$harmonic_mean <- function(x) {
 }
 
 # =============================================================================
+# Logarithmic sequence
+# =============================================================================
+
+miscmath$log_sequence <- function(pow10low, pow10high,
+                                  minimum=NA, maximum=NA) {
+    # http://stackoverflow.com/questions/23901907
+    x <- c(2:10 %o% 10^(pow10low:pow10high))
+    if (!is.na(minimum)) {
+        x <- x[which(x >= minimum)]
+    }
+    if (!is.na(maximum)) {
+        x <- x[which(x <= maximum)]
+    }
+    return(x)
+}
+
+# =============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 # =============================================================================
 
