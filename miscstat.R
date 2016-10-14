@@ -397,7 +397,7 @@ miscstat$pretty_two_group_paired_regression <- function(
     return(result)
 }
 
-IGNORE_ME = '
+miscstat$IGNORE_ME = '
 DT <- data.table(
     x = c(1, 2, 3, 10, 11, 12),
     y = c(4, 5, 6, 20, 19, 18),
@@ -470,7 +470,7 @@ miscstat$two_group_multiple_regression_table <- function(
 # access to raw data.
 #==============================================================================
 
-t_test_unpaired_eq_var <- function(mean1, mean2, sd1, sd2, n1, n2) {
+miscstat$t_test_unpaired_eq_var <- function(mean1, mean2, sd1, sd2, n1, n2) {
     df <- n1 + n2 - 2
     var1 <- sd1 ^ 2
     var2 <- sd2 ^ 2
@@ -873,14 +873,14 @@ miscstat$sed_info <- function(
 # ... eta-squared: 0.01 small, 0.06 medium, 0.14 large
 
 
-lmer_effect_size_r_squared <- function(lmer_model) {
+miscstat$lmer_effect_size_r_squared <- function(lmer_model) {
     m <- lmer_model
     lmfit <- lm(model.response(model.frame(m)) ~ fitted(m))
     summary(lmfit)$r.squared
 }
 
 
-sigstars <- function(p, default = "") {
+miscstat$sigstars <- function(p, default = "") {
     ifelse(p < 0.001, "***",
            ifelse(p < 0.01, "**",
                   ifelse(p < 0.05, "*", default)))
@@ -906,18 +906,18 @@ sigstars <- function(p, default = "") {
 #    return(dt)
 #}
 
-sum_of_squares <- function(x) {
+miscstat$sum_of_squares <- function(x) {
     # The sum of squared deviations from the mean
     mu <- mean(x)
     sum((x - mu)^2)
 }
 
-ss_total_for_lmer_model <- function(lmer_model) {
+miscstat$ss_total_for_lmer_model <- function(lmer_model) {
     depvar <- lmer_model@frame[, 1]  # assumes depvar is always first column; think it is!
-    sum_of_squares(depvar)
+    miscstat$sum_of_squares(depvar)
 }
 
-cohen_size_eta_sq <- function(eta_sq, default = "-") {
+miscstat$cohen_size_eta_sq <- function(eta_sq, default = "-") {
     # Nonsense, but helpful nonsense
     # http://imaging.mrc-cbu.cam.ac.uk/statswiki/FAQ/effectSize
     # For ANOVA:
@@ -926,7 +926,7 @@ cohen_size_eta_sq <- function(eta_sq, default = "-") {
                   ifelse(eta_sq >= 0.01, "small", default)))
 }
 
-lmer_effect_size_eta_sq <- function(lmer_model) {
+miscstat$lmer_effect_size_eta_sq <- function(lmer_model) {
     a <- anova(lmer_model)
     dt <- data.table(a)
     colnames(dt) <- c(
@@ -938,7 +938,7 @@ lmer_effect_size_eta_sq <- function(lmer_model) {
         "p"  # was "Pr(>F)"
     )
     dt$term = rownames(a)
-    dt[, sig := sigstars(p)]
+    dt[, sig := miscstat$sigstars(p)]
     # dt[, wrong_approx_cohen_d := 2 * sqrt(df_num * F / df_den)]
     # ... http://davidileitman.com/wp-content/uploads/2014/04/EffectSizeFormulas.pdf
     # ... wrong but close?
@@ -953,17 +953,17 @@ lmer_effect_size_eta_sq <- function(lmer_model) {
 
     # eta_squared = SS_effect / SS_total
 
-    total_sum_of_squares <- ss_total_for_lmer_model(lmer_model)
+    total_sum_of_squares <- miscstat$ss_total_for_lmer_model(lmer_model)
     dt[, SS_total := total_sum_of_squares]
 
     dt[, eta_sq := SS_effect / SS_total]
-    dt[, interp_eta_sq := cohen_size_eta_sq(eta_sq)]
+    dt[, interp_eta_sq := miscstat$cohen_size_eta_sq(eta_sq)]
 
     return(dt)
 }
 
 
-IGNOREME_MISCSTAT_EXAMPLE <- "
+miscstat$IGNOREME_MISCSTAT_EXAMPLE <- "
 
 # =============================================================================
 # WORKING/THINKING
