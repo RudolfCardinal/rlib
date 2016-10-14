@@ -846,6 +846,123 @@ miscstat$sed_info <- function(
     ))
 }
 
+#------------------------------------------------------------------------------
+# Effect size
+#------------------------------------------------------------------------------
+
+# http://stats.stackexchange.com/questions/95054/how-to-get-the-overall-effect-for-linear-mixed-model-in-lme4-in-r
+# http://www.leeds.ac.uk/educol/documents/00002182.htm
+# http://stackoverflow.com/questions/25084924/extracting-standard-deviation-of-random-effects-components-using-glmer
+# https://www.researchgate.net/post/How_can_I_calculate_an_effect_size_cohens_d_preferably_from_a_linear_random_effects_model_beta
+#
+# THIS ONE?
+# http://davidileitman.com/wp-content/uploads/2014/04/EffectSizeFormulas.pdf
+# = http://www.soph.uab.edu/Statgenetics/People/MBeasley/Courses/EffectSize-Power.pdf
+#
+# http://www.bwgriffin.com/gsu/courses/edur9131/content/Effect_Sizes_pdf5.pdf
+#
+# Quick web calculator for T test:
+# https://www.easycalculation.com/statistics/effect-size-t-test.php
+#
+# https://cran.r-project.org/web/packages/compute.es/compute.es.pdf
+# http://stats.stackexchange.com/questions/41861/calculating-eta-squared-from-f-and-df
+#
+# RULES OF THUMB
+# http://imaging.mrc-cbu.cam.ac.uk/statswiki/FAQ/effectSize
+# ... d: 0.2 small, 0.5 medium, 0.8 large
+# ... eta-squared: 0.01 small, 0.06 medium, 0.14 large
+
+
+lmer_effect_size_r_squared <- function(lmer_model) {
+    m <- lmer_model
+    lmfit <- lm(model.response(model.frame(m)) ~ fitted(m))
+    summary(lmfit)$r.squared
+}
+
+
+sigstars <- function(p, default = "") {
+    ifelse(p < 0.001, "***",
+           ifelse(p < 0.01, "**",
+                  ifelse(p < 0.05, "*", default)))
+}
+
+#lmer_effect_size_1_poor <- function(lmer_model) {
+#    coeffs <- coef(summary(lmer_model))
+#    colnames(coeffs) <- c(
+#        "estimate",  # was Estimate
+#        "se",  # was "Std. Error"
+#        "df",  # as before
+#        "t",  # was "t value"
+#        "p"  # was "Pr(>|t|)"
+#    )
+#    dt <- data.table(coeffs)
+#    dt$term <- rownames(coeffs)
+#    dt[, sig := sigstars(p)]
+#    # dt[, sd_error := sigma(lmer_model)]
+#    # dt[, abs_estimate_over_sd_error := abs(estimate / sd_error)]
+#    dt[, wrong_approx_cohen_d_abs := abs(2 * t) / sqrt(df)]
+#    # ... http://davidileitman.com/wp-content/uploads/2014/04/EffectSizeFormulas.pdf
+#    # ... wrong but close?
+#    return(dt)
+#}
+
+sum_of_squares <- function(x) {
+    # The sum of squared deviations from the mean
+    mu <- mean(x)
+    sum((x - mu)^2)
+}
+
+ss_total_for_lmer_model <- function(lmer_model) {
+    depvar <- lmer_model@frame[, 1]  # assumes depvar is always first column; think it is!
+    sum_of_squares(depvar)
+}
+
+cohen_size_eta_sq <- function(eta_sq, default = "-") {
+    # Nonsense, but helpful nonsense
+    # http://imaging.mrc-cbu.cam.ac.uk/statswiki/FAQ/effectSize
+    # For ANOVA:
+    ifelse(eta_sq >= 0.14, "large",
+           ifelse(eta_sq >= 0.06, "medium",
+                  ifelse(eta_sq >= 0.01, "small", default)))
+}
+
+lmer_effect_size_eta_sq <- function(lmer_model) {
+    a <- anova(lmer_model)
+    dt <- data.table(a)
+    colnames(dt) <- c(
+        "SS_effect",  # was "Sum Sq"
+        "MS_effect",  # was "Mean Sq"
+        "df_num",  # was "NumDF"
+        "df_den",  # was "DenDF"
+        "F",  # was "F.value"
+        "p"  # was "Pr(>F)"
+    )
+    dt$term = rownames(a)
+    dt[, sig := sigstars(p)]
+    # dt[, wrong_approx_cohen_d := 2 * sqrt(df_num * F / df_den)]
+    # ... http://davidileitman.com/wp-content/uploads/2014/04/EffectSizeFormulas.pdf
+    # ... wrong but close?
+
+    # F = MS_effect / MS_error
+    # so:
+    # UNNECESSARY # dt[, MS_error := MS_effect / F]
+
+    # MS_error = SS_error / df_error
+    # so:
+    # UNNECESSARY # dt[, SS_error := MS_error * df_den]
+
+    # eta_squared = SS_effect / SS_total
+
+    total_sum_of_squares <- ss_total_for_lmer_model(lmer_model)
+    dt[, SS_total := total_sum_of_squares]
+
+    dt[, eta_sq := SS_effect / SS_total]
+    dt[, interp_eta_sq := cohen_size_eta_sq(eta_sq)]
+
+    return(dt)
+}
+
+
 IGNOREME_MISCSTAT_EXAMPLE <- "
 
 # =============================================================================
