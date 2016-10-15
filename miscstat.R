@@ -910,7 +910,10 @@ miscstat$sum_of_squares <- function(x) {
     # The sum of squared deviations from the mean
     mu <- mean(x)
     sum((x - mu)^2)
+
+    # REMEMBER ALSO: var(x) = sum_of_squares(x) / (n - 1) [check: sample variance?]
 }
+
 
 miscstat$ss_total_for_lmer_model <- function(lmer_model) {
     depvar <- lmer_model@frame[, 1]  # assumes depvar is always first column; think it is!
@@ -960,6 +963,62 @@ miscstat$lmer_effect_size_eta_sq <- function(lmer_model) {
     dt[, interp_eta_sq := miscstat$cohen_size_eta_sq(eta_sq)]
 
     return(dt)
+}
+
+
+miscstat$pooled_variance_two_groups <- function(data1, data2) {
+    # http://trendingsideways.com/index.php/cohens-d-formula/
+    # https://en.wikipedia.org/wiki/Pooled_variance
+    n1 <- length(data1)
+    n2 <- length(data2)
+    var1 <- var(data1)
+    var2 <- var(data2)
+    pooled_var <- ((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2)
+}
+
+
+miscstat$pooled_sd_two_groups <- function(data1, data2) {
+    sqrt(miscstat$pooled_variance_two_groups(data1, data2))
+}
+
+
+miscstat$cohen_d_by_factor <- function(data_table, depvar, factor_name) {
+    factor_col_num <- grep(factor_name, colnames(data_table))
+    factor_values <- data_table[[factor_col_num]]  # as a vector
+    if (nlevels(factor_values) != 2) {
+        stop("Factor must have two levels")
+    }
+    level_1_value <- levels(factor_values)[1]
+    level_2_value <- levels(factor_values)[2]
+
+    depvar_col_num <- grep(depvar, colnames(data_table))
+    depvar_values <- data_table[[depvar_col_num]]
+    group_1_values <- depvar_values[factor_values == level_1_value]
+    group_2_values <- depvar_values[factor_values == level_2_value]
+    mean_1 <- mean(group_1_values)
+    mean_2 <- mean(group_2_values)
+    mean_diff_gp2_minus_gp1 <- mean_2 - mean_1
+    sd_1 <- sd(group_1_values)
+    sd_2 <- sd(group_2_values)
+    pooled_sd <- miscstat$pooled_sd_two_groups(group_1_values, group_2_values)
+    cohen_d <- mean_diff_gp2_minus_gp1 / pooled_sd
+    return(list(
+        data_table = data_table,
+        depvar = depvar,
+        factor_name = factor_name,
+        factor_values = factor_values,
+        level_1_value = level_1_value,
+        level_2_value = level_2_value,
+        group_1_values = group_1_values,
+        group_2_values = group_2_values,
+        mean_1 = mean_1,
+        mean_2 = mean_2,
+        mean_diff_gp2_minus_gp1 = mean_diff_gp2_minus_gp1,
+        sd_1 = sd_1,
+        sd_2 = sd_2,
+        pooled_sd = pooled_sd,
+        cohen_d = cohen_d
+    ))
 }
 
 
