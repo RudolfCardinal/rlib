@@ -1,5 +1,6 @@
 # miscstat.R
 
+requireNamespace("data.table")
 requireNamespace("lmerTest")
 requireNamespace("lsmeans")
 requireNamespace("multcomp")
@@ -916,9 +917,22 @@ miscstat$sum_of_squares <- function(x) {
 
 
 miscstat$ss_total_for_lmer_model <- function(lmer_model) {
+    if (class(lmer_model) != "merModLmerTest") {
+        stop("Model is not of class merModLmerTest")
+    }
     depvar <- lmer_model@frame[, 1]  # assumes depvar is always first column; think it is!
     miscstat$sum_of_squares(depvar)
 }
+
+
+miscstat$ss_total_for_lm_model <- function(lm_model) {
+    if (class(lm_model) != "lm") {
+        stop("Model is not of class lm")
+    }
+    depvar <- lm_model$model[, 1]  # assumes depvar is always first column; think it is!
+    miscstat$sum_of_squares(depvar)
+}
+
 
 miscstat$cohen_size_eta_sq <- function(eta_sq, default = "-") {
     # Nonsense, but helpful nonsense
@@ -930,6 +944,9 @@ miscstat$cohen_size_eta_sq <- function(eta_sq, default = "-") {
 }
 
 miscstat$lmer_effect_size_eta_sq <- function(lmer_model) {
+    if (class(lmer_model) != "merModLmerTest") {
+        stop("Model is not of class merModLmerTest")
+    }
     a <- anova(lmer_model)
     dt <- data.table(a)
     colnames(dt) <- c(
@@ -962,6 +979,29 @@ miscstat$lmer_effect_size_eta_sq <- function(lmer_model) {
     dt[, eta_sq := SS_effect / SS_total]
     dt[, interp_eta_sq := miscstat$cohen_size_eta_sq(eta_sq)]
 
+    return(dt)
+}
+
+
+miscstat$lm_effect_size_eta_sq <- function(lm_model) {
+    if (class(lm_model) != "lm") {
+        stop("Model is not of class lm")
+    }
+    a <- anova(lm_model)
+    dt <- data.table(a)
+    colnames(dt) <- c(
+        "df_num",  # was "Df"
+        "SS_effect",  # was "Sum Sq"
+        "MS_effect",  # was "Mean Sq"
+        "F",  # was "F.value"
+        "p"  # was "Pr(>F)"
+    )
+    dt$term = rownames(a)
+    dt[, sig := miscstat$sigstars(p)]
+    total_sum_of_squares <- miscstat$ss_total_for_lm_model(lm_model)
+    dt[, SS_total := total_sum_of_squares]
+    dt[, eta_sq := SS_effect / SS_total]
+    dt[, interp_eta_sq := miscstat$cohen_size_eta_sq(eta_sq)]
     return(dt)
 }
 
@@ -1019,6 +1059,20 @@ miscstat$cohen_d_by_factor <- function(data_table, depvar, factor_name) {
         pooled_sd = pooled_sd,
         cohen_d = cohen_d
     ))
+}
+
+
+miscstat$is_lme4_model_singular <- function(model) {
+    # A singular model may give WRONG RESULTS by giving zero variance for
+    # random effects.
+
+    # http://stats.stackexchange.com/questions/115090/using-glmer-why-is-my-random-effect-zero
+    # https://rawgit.com/bbolker/mixedmodels-misc/master/glmmFAQ.html#singular-models-random-effect-variances-estimated-as-zero-or-correlations-estimated-as---1
+    # https://arxiv.org/abs/1406.5823
+    theta <- getME(model, "theta")
+    # diagonal elements are identifiable because they are fitted with a lower bound of zero...
+    diag.element <- getME(model, "lower") == 0
+    any(theta[diag.element] < 1e-5)
 }
 
 

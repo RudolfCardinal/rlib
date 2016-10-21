@@ -57,11 +57,11 @@ debugfunc$debug_quantity <- function(
     #       flush(f)  # if desired
     #       close(f)
 
-    mode = "console"
+    mode <- "console"
     if (file != "") {
-        mode = "file"
+        mode <- "file"
     } else if (filename != "") {
-        mode = "filename"
+        mode <- "filename"
     }
 
     x_name <- deparse(substitute(x))  # fetch the variable name passed in
@@ -69,7 +69,7 @@ debugfunc$debug_quantity <- function(
     LINEBREAK_2 <- paste(c(rep("-", 79), "\n"), collapse="")
 
     if (progress_to_console) {
-        destination = mode
+        destination <- mode
         if (mode == "filename") {
             destination = filename
         }
@@ -109,11 +109,11 @@ debugfunc$wtf_is <- function(x) {
     print(class(x))
     cat("\n3. mode():\n")
     print(mode(x))
-    cat("\n4. names():\n")
+    cat("\n4. names() [try x$somename, x[\"somename\"], x[[\"somename\"]] ]:\n")
     print(names(x))
-    cat("\n5. slotNames():\n")
+    cat("\n5. slotNames() [use x@someslot or slot(x, \"someslot\")]:\n")
     print(slotNames(x))
-    cat("\n6. attributes():\n")
+    cat("\n6. attributes() [use attr(x, \"someattr\")]:\n")
     print(attributes(x))
     cat("\n7. str():\n")
     print(str(x))
@@ -152,7 +152,7 @@ debugfunc$status <- function(msg, ellipsis=FALSE, increment=FALSE, colour="blue"
     }
 }
 
-status_start <- function(msg, ellipsis=TRUE, colour="red") {
+debugfunc$status_start <- function(msg, ellipsis=TRUE, colour="red") {
     status(msg, increment=TRUE, ellipsis=ellipsis, colour=colour)
 }
 
