@@ -540,11 +540,24 @@ miscstat$nll_from_aic <- function(aic, k) {
 
 miscstat$aicc <- function(nLL, k, n) {
     # Akaike Information Criterion, corrected
+    # Parameter meanings as for BIC; see below.
+
     aic(nLL, k) + 2 * k * (k + 1) / (n - k - 1)
 }
 
 miscstat$bic <- function(nLL, k, n) {
     # Bayesian Information Criterion
+    # nLL = negative log-likelihood (where log likelihood = sum of ln(p) values)
+    # ... since p(...) <= 1, ln(p) <= 0
+    #     ... so the LL is negative and the nLL is positive
+    # ... a good fit is where the p values are close to 1
+    #     ... so the LL are negative but close to 0
+    #     ... so the nLL values are positive but close to 0
+    # ... a bigger nLL is bad
+    # ... a bigger BIC is bad; smaller BIC means better fit (penalized for number of parameters)
+    # k = number of parameters in the model
+    # n = number of observations
+
     2 * nLL + k * log(n)
     # ... = -2 ln(L) + k ln(n)
 }

@@ -28,6 +28,7 @@ DESIRED_LIBRARIES = c(
     "arrayhelpers",
     # "base64",
     # "BMS",
+    "broom",
     "Cairo",
     "car",
     "coda",
@@ -47,13 +48,16 @@ DESIRED_LIBRARIES = c(
     "gtools",
     "Hmisc",
     "inline", # for RStan
+    "Kmisc",  # including cat.cb, to write to the clipboard
     "languageR", # removed from CRAN in 2013; then back 2013-12-12 (needs R 3.0.2) see http://cran.r-project.org/web/packages/languageR/index.html
     "lattice",
     "lme4",
     "LMERConvenienceFunctions",
     "lmerTest",
+    "lsmeans",
     "ltm",
     "lubridate",
+    "maptools",
     "MCMCglmm",
     "nlme",
     "nortest",
@@ -65,15 +69,20 @@ DESIRED_LIBRARIES = c(
     # "R2jags",
     # "Rcmdr", # use RStudio instead,
     "Rcpp", # for RStan
+    "raster",
     "readODS",
     "readxl",
     "reshape",
     "reshape2",
+    "rgeos",
+    "rgdal",
     # "rjags", # also needs some command-line prerequisites
-    "rstan",
+    "rstan", # if fails: install.packages("rstan", repos = "https://cloud.r-project.org/", dependencies=TRUE)
+        # ... see https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started
     "RMySQL",
     "RODBC",
     "snow",
+    "sp",  # spatial, for maps
     "sqldf",
     "TTR",
     "visreg",

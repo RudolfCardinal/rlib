@@ -2,20 +2,20 @@
 # Common functions for CRIS
 # Rudolf Cardinal, University of Cambridge / CPFT
 # Started: 17 May 2013
-# Last modified: 7 July 2015
+# Last modified: 1 Dec 2016
 #==============================================================================
 
-library(ez)
-library(ggplot2)
-library(plyr)
-library(RCurl) # for email
-library(reshape2)
-library(sqldf)
-library(stringr)  # for str_pad
+# library(ez)
+# library(ggplot2)
+# library(plyr)
+# library(RCurl) # for email
+# library(reshape2)
+# library(sqldf)
+# library(stringr)  # for str_pad
 source("http://egret.psychol.cam.ac.uk/rlib/miscstat.R") # for half_confidence_interval_t
 
 # For parallel:
-library(foreach)
+# library(foreach)
 
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
@@ -318,6 +318,7 @@ cris$TCA <- c(
 cris$TCA_RELATED <- c(
     "mianserin"
     , "trazodone"
+    , "nefazodone"
 )
 cris$ANTIDEPRESSANT_EXC_FLUPENTIXOL <- c(
     cris$SSRI
@@ -631,21 +632,22 @@ cris$get_drug_sql <- function(drug, fieldname="drug")
         sql <- "drug = 'citalopram' OR drug = 'Cipramil' OR drug = 'Celexa'"
     }
     else if (drug == "escitalopram") {
-        sql <- "drug = 'escitalopram' OR drug = 'Cipralex'"
+        sql <- "drug = 'escitalopram' OR drug = 'Cipralex' OR drug = 'Lexapro'"
     }
     else if (drug == "fluoxetine") {
-        sql <- "drug LIKE 'fluox%' OR drug = 'Prozac'"
+        sql <- "drug LIKE 'fluox%' OR drug = 'Prozac' OR drug = 'Bellzac' OR drug = 'Oxactin' OR drug = 'Prozep'"
         # ... actually (CPFT 2013): fluoxetine, "fluoxetine  Dec" (??)
     }
     else if (drug == "fluvoxamine") { # maleate
-        sql <- "drug = 'fluvoxamine' OR drug = 'Luvox'"
+        sql <- "drug = 'fluvoxamine' OR drug = 'Luvox' OR drug = 'Faverin'"
     }
     else if (drug == "paroxetine") {
         sql <- "drug = 'paroxetine' OR drug = 'Seroxat' OR drug = 'Paxil'"
         # there are other brands elsewhere...
     }
     else if (drug == "sertraline") {
-        sql <- "drug = 'sertraline' OR drug = 'Lustral' OR drug = 'Zoloft'"
+        sql <- "drug = 'sertraline' OR drug = 'Lustral' OR drug = 'Zoloft' OR drug = 'Bellsert'"
+        # NOT Seretra (cf. SLAM code, see email to self 2016-12-02); Seretra = seratrodast = for asthma
     }
 
     #--------------------------------------------------------------------------
@@ -661,7 +663,7 @@ cris$get_drug_sql <- function(drug, fieldname="drug")
         sql <- "drug = 'duloxetine' OR drug = 'Cymbalta' OR drug = 'Yentreve'"
     }
     else if (drug == "mirtazapine") {
-        sql <- "drug LIKE 'mirtaz%' OR drug = 'mirtazepine' OR drug = 'Zispin'"
+        sql <- "drug LIKE 'mirtaz%' OR drug = 'mirtazepine' OR drug = 'Zispin' OR drug = 'Mirza'"
         # ... actually (CPFT 2013): mirtazapine, mirtazepine(*), "mirtazapine Dec" (?)
     }
     else if (drug == "reboxetine") {
@@ -671,7 +673,7 @@ cris$get_drug_sql <- function(drug, fieldname="drug")
         sql <- "drug = 'tryptophan' OR drug = 'Optimax'"
     }
     else if (drug == "venlafaxine") {
-        sql <- "drug LIKE 'venla%' OR drug LIKE 'Efexor%'"
+        sql <- "drug LIKE 'venla%' OR drug LIKE 'Efexor%' OR drug LIKE 'Effexor%'"
         # ... actually (CPFT 2013): venlafaxine, venlafaxine XL,
     }
 
@@ -679,8 +681,9 @@ cris$get_drug_sql <- function(drug, fieldname="drug")
     # TRICYCLIC AND RELATED ANTIDEPRESSANTS
     #--------------------------------------------------------------------------
     else if (drug == "amitriptyline") {
-        sql <- "drug LIKE 'amitr%'"
+        sql <- "drug LIKE 'amitr_pt_l_n%' OR drug = 'Vanatrip' OR drug = 'Elavil' OR drug = 'Endep' OR drug = 'Triptafen'"
         # ... actually (CPFT 2013): amitriptyline, amitriptiline(*), amitryptyline(*)
+        # Triptafen = amitriptyline + perphenazine
     }
     # see also amitriptyline_with_perphenazine, above
     else if (drug == "clomipramine") {
@@ -691,16 +694,17 @@ cris$get_drug_sql <- function(drug, fieldname="drug")
         # ... actually (CPFT 2013): dosulepin, dothiepin(+)
     }
     else if (drug == "doxepin") {
-        sql <- "drug = 'doxepin' OR drug = 'Sinepin'"
+        sql <- "drug = 'doxepin' OR drug = 'Sinepin' OR drug = 'Sinequan' OR drug = 'Sinepin' OR drug = 'Xepin'"
+        # Xepin is cream only
     }
     else if (drug == "imipramine") {
-        sql <- "drug = 'imipramine'"
+        sql <- "drug = 'imipramine' OR drug = 'Tofranil'"
     }
     else if (drug == "lofepramine") {
-        sql <- "drug = 'lofepramine'"
+        sql <- "drug = 'lofepramine' OR drug = 'Lomont'"
     }
     else if (drug == "nortriptyline") {
-        sql <- "drug LIKE 'nortr%' OR drug = 'Allegron'"
+        sql <- "drug LIKE 'nortr%' OR drug = 'Allegron' OR drug = 'Pamelor' OR drug = 'Aventyl'"
         # ... actually (CPFT 2013): nortriptyline, nortryptiline(*)
     }
     else if (drug == "trimipramine") {
@@ -716,13 +720,24 @@ cris$get_drug_sql <- function(drug, fieldname="drug")
     else if (drug == "trazodone") {
         sql <- "drug = 'trazodone' OR drug = 'Molipaxin'"
     }
+    else if (drug == "nefazodone") {
+        # discontinued for hepatotoxicity? But apparently still used in 2014
+        # in the UK: http://www.bbc.co.uk/news/uk-25745824
+        sql <- "drug = 'nefazodone' OR drug = 'Dutonin' OR drug = 'Nefadar' OR drug = 'Serzone'"
+        # brand names from https://en.wikipedia.org/wiki/Nefazodone
+        # ... yup, still a trickle, mostly from Islington:
+        # https://openprescribing.net/chemical/0403040T0/
+    }
 
     #--------------------------------------------------------------------------
     # MAOIs
     #--------------------------------------------------------------------------
     else if (drug == "phenelzine") {
         sql <- "drug = 'phenelzine' OR drug = 'Nardil'"
+        # SLAM code (see e-mail to self 2016-12-02) also has %Alazin%; not sure that's right
+        # se also http://www.druglib.com/activeingredient/phenelzine/
     }
+    # not included: pheniprazine
     else if (drug == "isocarboxazid") {
         sql <- "drug = 'isocarboxazid'"
     }
@@ -730,7 +745,7 @@ cris$get_drug_sql <- function(drug, fieldname="drug")
         sql <- "drug = 'moclobemide'"
     }
     else if (drug == "tranylcypromine") {
-        sql <- "drug = 'tranylcypromine'"
+        sql <- "drug = 'tranylcypromine' OR drug = 'Parnate'"
     }
 
     #--------------------------------------------------------------------------
@@ -813,6 +828,16 @@ cris$get_drug_sql <- function(drug, fieldname="drug")
     else if (drug == "lithium") {
         sql <- "drug LIKE 'lithium%' OR drug = 'Camcolit' OR drug = 'Liskonum' OR drug = 'Priadel' OR drug = 'Li-Liquid'"
         # ... actually (CPFT 2013): lithium, lithium carbonate, lithium citrate (curious: Priadel must be being changed to lithium...)
+    }
+
+    #--------------------------------------------------------------------------
+    # Other for bipolar/unipolar depression
+    #--------------------------------------------------------------------------
+    else if (drug == "lamotrigine") {
+        sql <- "drug LIKE 'lamotrigine%' OR drug = 'Lamictal'"
+    }
+    else if (drug == "triiodothyronine") {
+        sql <- "drug = 'triiodothyronine' OR drug = 'tri-iodothyronine' OR drug = 'liothyronine' OR drug='Cytomel'"
     }
 
     #--------------------------------------------------------------------------

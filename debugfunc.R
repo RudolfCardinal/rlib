@@ -117,6 +117,11 @@ debugfunc$wtf_is <- function(x) {
     print(attributes(x))
     cat("\n7. str():\n")
     print(str(x))
+    cat("\n8. methods, for each class type:\n")
+    for (c in class(x)) {
+        cat(paste('\n- methods(class="', c, '"):\n', sep=""))
+        print(methods(class=c))
+    }
 }
 
 
