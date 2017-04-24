@@ -12,7 +12,7 @@
 # library(reshape2)
 # library(sqldf)
 # library(stringr)  # for str_pad
-source("http://egret.psychol.cam.ac.uk/rlib/miscstat.R") # for half_confidence_interval_t
+source("http://131.111.177.41/rlib/miscstat.R") # for half_confidence_interval_t
 
 # For parallel:
 # library(foreach)
