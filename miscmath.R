@@ -45,18 +45,31 @@ miscmath$log_sequence <- function(pow10low, pow10high,
 # Formatting numbers
 # =============================================================================
 
-miscmath$format_dp <- function(x, k) {
-    # http://stackoverflow.com/questions/3443687/formatting-decimal-places-in-r
-    format(round(x, k), nsmall=k)
+miscmath$is_integer <- function(x) {
+    # http://stackoverflow.com/questions/3476782/check-if-the-number-is-integer
+    x %% 1 == 0
 }
 
-miscmath$format_sf <- function(x, k = 3,
+miscmath$format_dp <- function(x, dp) {
+    # http://stackoverflow.com/questions/3443687/formatting-decimal-places-in-r
+    format(round(x, dp), nsmall=dp)
+}
+
+miscmath$format_dp_unless_integer <- function(x, dp) {
+    # http://stackoverflow.com/questions/3443687/formatting-decimal-places-in-r
+    if (miscmath$is_integer(x)) {
+        return(as.character(x))
+    }
+    format_dp(x, dp)
+}
+
+miscmath$format_sf <- function(x, sf = 3,
                                scientific = FALSE,
                                big.mark = ",", big.interval = 3,
                                small.mark = "", small.interval = 3,
                                drop0trailing = TRUE) {
     # http://stackoverflow.com/questions/3443687/formatting-decimal-places-in-r
-    format(signif(x, k),
+    format(signif(x, sf),
            scientific = scientific,
            big.mark = big.mark,
            big.interval = big.interval,
