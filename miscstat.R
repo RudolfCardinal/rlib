@@ -66,13 +66,18 @@ miscstat$confidence_interval_t <- function(x, ci = 0.95) {
     return(c(m - hci, m + hci))
 }
 
-miscstat$summarize_by_factors <- function(data, depvarname, factornames) {
+miscstat$summarize_by_factors <- function(data, depvarname, factornames,
+                                          na.rm = FALSE) {
     ddply(
         data,
         factornames,
         function(drow) {
-            values = drow[, depvarname]
+            values <- drow[, depvarname]
+            if (na.rm) {
+                values <- values[!is.na(values)]
+            }
             c(
+                n = length(values),
                 mean = mean(values),
                 min = min(values),
                 max = max(values),
@@ -89,6 +94,7 @@ miscstat$summarize_by_factors_datatable <- function(dt, depvarname, factornames)
     dt[
         ,
         .(
+            n = length(get(depvarname)),
             mean = mean(get(depvarname)),
             min = min(get(depvarname)),
             max = max(get(depvarname)),
