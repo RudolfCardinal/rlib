@@ -16,9 +16,16 @@ stanfunc = new.env()
 # Running in parallel
 #==============================================================================
 
-stanfunc$parallel_stan <- function(code, data,
-                                   cores = detectCores(), chains = 8,
-                                   iter = 2000, seed = 1234) {
+stanfunc$parallel_stan <- function(
+        file = NULL,
+        code = "",
+        data,
+        cores = parallel:detectCores(),
+        chains = 8,
+        iter = 2000,
+        warmup = floor(iter/2),
+        seed = 1234)
+{
     cat("parallel_stan: cores=", cores,
         ", chains=", chains,
         ", iter=", iter,
@@ -27,25 +34,33 @@ stanfunc$parallel_stan <- function(code, data,
         sep="")
 
     cat("--- Step 1: compile the model (and run it once, very briefly, ignoring its output)\n")
-    f1 <- stan(model_code = code, data = data, iter = 1, seed = seed,
-               chains = 1, chain_id = 1)
+    f1 <- stan(file = file,
+               model_code = code,
+               data = data,
+               chains = 1,
+               iter = 1,
+               seed = seed,
+               chain_id = 1)
     # sflist1 = list(f1)
 
     cat("--- Step 2: run more chains in parallel\n")
     sflist2 <- mclapply(
-        # 2:chains,
         1:chains,
         mc.cores = cores,
         function(i) {
-            stan(fit = f1, data = data,
-                 iter = iter, seed = seed, chains = 1, chain_id = i)
+            stan(fit = f1,
+                 data = data,
+                 chains = 1,
+                 iter = iter,
+                 warmup = warmup,
+                 seed = seed,
+                 chain_id = i)
         }
         # , refresh = -1
     )
     # ... passing the same seed to all chains follows example(sflist2stanfit)
     # ... important to use the same seed but different chain_id when executing in parallel: http://stackoverflow.com/questions/12848168/will-rstan-run-on-a-supercomputer
 
-    # sflist <- append(sflist1, sflist2)
     sflist <- sflist2
     cat("--- Finished.\n")
     return(sflist2stanfit(sflist))
