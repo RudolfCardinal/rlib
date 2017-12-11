@@ -103,7 +103,7 @@ rpm$compute.probopt.matrix <- function(
         wins,  # matrix[n_situations, n_actions] of count of "wins"
         totals,  # matrix[n_situations, n_actions] of count of "total trials"
         debug_level = 2,
-        debug_every_n_rows = 100,
+        debug_every_n_rows = 1000,
         trapezium_rule = FALSE,  # should be FALSE; it's less good
         integration_steps = 1000,  # for trapezium rule only
         quick_calc_last_row = TRUE)
