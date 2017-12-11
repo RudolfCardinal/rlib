@@ -2,8 +2,18 @@
     // ========================================================================
     // Common functions
     // ========================================================================
+    // Reminders:
+    // - Annoyingly, you can't modify arguments to Stan user-defined functions.
+    //   (No pass-by-reference.)
+    // - size() doesn't work on a plain "vector". Use num_elements().
+    // - Array/vector indexing is 1-based.
+    // - The addition-assignment (+=) operator generally doesn't work (it
+    //   appears to be reserved for the one variable "target += ...").
+    //   Similarly for all others you might expect.
 
-    // Annoyingly, you can't modify arguments to Stan user-defined functions.
+    // ------------------------------------------------------------------------
+    // ANOVA-type designs
+    // ------------------------------------------------------------------------
 
     int interactionIndex2Way(int first_index, int first_max,
                              int second_index, int second_max)
@@ -40,7 +50,36 @@
         );
     }
 
-    real softmaxNth(vector softmax_inputs, int length, int index)
+    vector setLastForZeroSum(vector parameters)
+    {
+        /*
+            Makes a vector of parameters sum to zero, by setting the last
+            element to the negative sum of the others.
+            Used for ANOVA-style effects; e.g. if you have a grand mean, you
+            might specify the effects of a three-level factor A as A1, A2, A3;
+            then A1 + A2 + A3 must be zero, so A1 and A2 are free parameters
+            that are drawn from an appropriate distribution, and then A3 is
+            fully constrainted to be -(A1 + A2).
+
+            Because we can't modify the input parameters, we make a new copy.
+        */
+        int length = num_elements(parameters);
+        vector[length] newparams;
+        real total = 0.0;
+        for (i in 1:length - 1) {
+            real value = parameters[i];
+            newparams[i] = value;
+            total = total + value;
+        }
+        newparams[length] = -total;
+        return newparams;
+    }
+
+    // ------------------------------------------------------------------------
+    // Simple functions
+    // ------------------------------------------------------------------------
+
+    real softmaxNth(vector softmax_inputs, int index)
     {
         /*
             For softmax: see my miscstat.R; the important points for
@@ -56,38 +95,21 @@
             stan/math/fwd/mat/fun/softmax.hpp. Not sure which is faster, or
             whether it really matters.
         */
-        vector[length] s_exp_products = exp(
-            softmax_inputs - mean(softmax_inputs)
-        );
-        return s_exp_products[index] / sum(s_exp_products);
-    }
-
-    vector setLastForZeroSum(vector parameters, int length)
-    {
-        /*
-            Makes a vector of parameters sum to zero, by setting the last
-            element to the negative sum of the others.
-            Used for ANOVA-style effects; e.g. if you have a grand mean, you
-            might specify the effects of a three-level factor A as A1, A2, A3;
-            then A1 + A2 + A3 must be zero, so A1 and A2 are free parameters
-            that are drawn from an appropriate distribution, and then A3 is
-            fully constrainted to be -(A1 + A2).
-
-            Because we can't modify the input parameters, we make a new copy.
-        */
-        vector[length] newparams;
-        real total = 0.0;
-        for (i in 1:length - 1) {
-            real value = parameters[i];
-            newparams[i] = value;
-            total = total + value;
+        int length = num_elements(softmax_inputs);
+        vector[length] s_exp_products;
+        if (index < 1 || index > length) {
+            reject("softmaxNth(): index is ", index,
+                   " but must be in range 1-", length);
         }
-        newparams[length] = -total;
-        return newparams;
+        s_exp_products = exp(softmax_inputs - mean(softmax_inputs));
+        return s_exp_products[index] / sum(s_exp_products);
     }
 
     real logistic(real x, real x0, real k, real L)
     {
         // Notation as per https://en.wikipedia.org/wiki/Logistic_function
+        // x0: centre
+        // k: steepness
+        // L: maximum (usually 1)
         return L / (1 + exp(-k * (x - x0)));
     }

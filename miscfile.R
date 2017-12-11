@@ -40,6 +40,16 @@ miscfile$read_rds <- function(filename)
 }
 
 
+miscfile$write_text <- function(filename, text)
+{
+    cat("Writing to ", filename, "...\n", sep="")
+    f <- file(filename)
+    writeLines(text, f)
+    close(f)
+    cat("... written\n")
+}
+
+
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 #==============================================================================
