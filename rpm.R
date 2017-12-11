@@ -105,7 +105,8 @@ rpm$compute.probopt.matrix <- function(
         debug_level = 2,
         debug_every_n_rows = 100,
         trapezium_rule = FALSE,  # should be FALSE; it's less good
-        integration_steps = 1000)  # for trapezium rule only
+        integration_steps = 1000,  # for trapezium rule only
+        quick_calc_last_row = TRUE)
 {
     # RNC
     #
@@ -210,21 +211,30 @@ rpm$compute.probopt.matrix <- function(
         #     across multiple values returned by a function
         # ... but it is more accurate (and faster) than the trapezium rule.
         for (action in 1:k) {
-            others <- (1:k)[-action]  # all actions except the current one
-
-            for (rownum in 1:nr) {
-                if (debug_level >= 2 && rownum %% debug_every_n_rows == 0) {
-                    cat("Integrating for RPM: action", action,
-                        "at row", rownum, "\n")
+            if (action == k && quick_calc_last_row && k > 1) {
+                    # Since probabilities must sum to 1 in each row:
+                    # (... do NOT rely on that during trapezium rule method!)
+                optimum_probabilities[, action] <- 1 - rowSums(optimum_probabilities)
+                    # ... we do not do rowSums(optimum_probabilities[, -action])
+                    # because if k == 2, that converts a matrix to a vector.
+                    # Instead, we rely on the fact that we've pre-populated
+                    # optimum_probabilities with zeroes.
+            } else {
+                others <- (1:k)[-action]  # all actions except the current one
+                for (rownum in 1:nr) {
+                    if (debug_level >= 2 && rownum %% debug_every_n_rows == 0) {
+                        cat("Integrating for RPM: action", action,
+                            "at row", rownum, "\n")
+                    }
+                    optimum_probabilities[rownum, action] <- integrate(
+                        rpmDifferentialSingle,
+                        lower=0,
+                        upper=1,
+                        rownum=rownum,
+                        action=action,
+                        others=others
+                    )$value
                 }
-                optimum_probabilities[rownum, action] <- integrate(
-                    rpmDifferentialSingle,
-                    lower=0,
-                    upper=1,
-                    rownum=rownum,
-                    action=action,
-                    others=others
-                )$value
             }
         }
     }
@@ -259,6 +269,8 @@ rpm$test.compute.probopt.matrix <- function()
     print(totals)
     cat("Optimum probabilities:\n")
     print(optprob)
+    cat("Each row should sum to 1:\n")
+    print(rowSums(optprob))
 }
 
 
