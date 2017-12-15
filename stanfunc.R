@@ -5,6 +5,7 @@ library(parallel)
 library(coda)
 library(reshape)
 library(ggplot2)
+library(bridgesampling)
 
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
@@ -69,28 +70,91 @@ stanfunc$load_or_run_stan <- function(
             seed = seed,
             ...
         )
-
         cat(paste("... Finished Stan run at", Sys.time(), "\n"))
         cat("--- Saving Stan model fit to RDS file: ",
             fit_filename, "...\n", sep="")
         saveRDS(fit, file=fit_filename)  # load with readRDS()
         cat("... saved\n")
-
-        if (!is.null(save_code_filename)) {
-            cat("--- Generating C++ code to save...\n")
-            stanc_result <- rstan::stanc(model_code = model_code)
-            cpp_code <- stanc_result$cppcode
-
-            cat("--- Saving C++ code to file: ",
-                save_code_filename, "...\n", sep="")
-            cppfile <- file(save_code_filename)
-            writeLines(text, cppfile)
-            close(cppfile)
-            cat("... saved\n")
-        }
     }
+
+    if (!is.null(save_code_filename) &&
+            (forcerun || !file.exists(save_code_filename))) {
+        cat("--- Generating C++ code to save...\n")
+        stanc_result <- rstan::stanc(model_code = model_code)
+        cpp_code <- stanc_result$cppcode
+
+        cat("--- Saving C++ code to file: ",
+            save_code_filename, "...\n", sep="")
+        cppfile <- file(save_code_filename)
+        writeLines(cpp_code, cppfile)
+        close(cppfile)
+        cat("... saved\n")
+    }
+
     return(fit)
 }
+
+
+stanfunc$load_or_run_bridge_sampler <- function(
+    stanfit,
+    filename,
+    assume_stanfit_from_this_R_session = FALSE,
+    model_code = NULL,
+    data = NULL,
+    cores = parallel::detectCores(),
+    forcerun = FALSE,
+    ...)
+{
+    if (!forcerun && file.exists(filename)) {
+        cat("Loading bridge_sampler() fit from RDS file: ",
+            filename, "...\n", sep="")
+        b <- readRDS(filename)
+        cat("... loaded\n")
+    } else {
+        # POTENTIAL PROBLEM:
+        #   Error in .local(object, ...) :
+        #   the model object is not created or not valid
+        # This is a message from rstan::log_prob(stanfit).
+        # https://groups.google.com/forum/#!topic/stan-users/uu1p9oGIMhU
+        # The FIX is to specify a new stanfit_model, like this.
+        if (assume_stanfit_from_this_R_session) {
+            cat("Using existing Stan fit as stanfit_model; will crash if the",
+                "Stan model was created within a different R session\n")
+            stanfit_model <- stanfit
+        } else {
+            cat("Creating dummy compiled Stan model...\n")
+            if (is.null(model_code)) {
+                stop("model_code not specified")
+            }
+            if (is.null(data)) {
+                stop("data not specified")
+            }
+            stanfit_model <- rstan::stan(
+                model_code=model_code,
+                data=data,  # if you use data=list(), it segfaults
+                chains=1,
+                iter=1  # despite the bridgesampling help, iter=0 causes an error
+            )
+            cat("... done\n")
+        }
+        cat(paste("--- Running bridge_sampler, starting at",
+                  Sys.time(), "...\n"))
+        b <- bridgesampling::bridge_sampler(
+            samples=stanfit,
+            stanfit_model=stanfit_model,
+            cores=cores,
+            ...
+        )
+
+        cat(paste("... Finished bridge_sampler run at", Sys.time(), "\n"))
+        cat("--- Saving bridge_sampler() fit to RDS file: ",
+            filename, "...\n", sep="")
+        saveRDS(b, file=filename)  # load with readRDS()
+        cat("... saved\n")
+    }
+    return(b)
+}
+
 
 stanfunc$sampled_values_from_stanfit <- function(
         fit,
