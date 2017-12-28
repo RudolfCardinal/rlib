@@ -62,6 +62,9 @@
             fully constrainted to be -(A1 + A2).
 
             Because we can't modify the input parameters, we make a new copy.
+
+            Returns a vector of the SAME LENGTH as the original.
+            (The last element of the incoming vector is ignored.)
         */
         int length = num_elements(parameters);
         vector[length] newparams;
@@ -72,6 +75,25 @@
             total = total + value;
         }
         newparams[length] = -total;
+        return newparams;
+    }
+
+    vector appendElementForZeroSum(vector parameters)
+    {
+        /*
+            As for setLastForZeroSum(), but uses all the information in the
+            incoming vector, and returns a vector that's one element longer.
+        */
+        int initial_length = num_elements(parameters);
+        int new_length = initial_length + 1;
+        vector[new_length] newparams;
+        real total = 0.0;
+        for (i in 1:initial_length) {
+            real value = parameters[i];
+            newparams[i] = value;
+            total = total + value;
+        }
+        newparams[new_length] = -total;
         return newparams;
     }
 
@@ -105,11 +127,62 @@
         return s_exp_products[index] / sum(s_exp_products);
     }
 
+    real softmaxNthInvTemp(vector softmax_inputs, real inverse_temp, int index)
+    {
+        int length = num_elements(softmax_inputs);
+        vector[length] s_exp_products;
+        if (index < 1 || index > length) {
+            reject("softmaxNthInvTemp(): index is ", index,
+                   " but must be in range 1-", length);
+        }
+        s_exp_products = exp(softmax_inputs * inverse_temp - mean(softmax_inputs));
+        return s_exp_products[index] / sum(s_exp_products);
+    }
+
     real logistic(real x, real x0, real k, real L)
     {
         // Notation as per https://en.wikipedia.org/wiki/Logistic_function
         // x0: centre
         // k: steepness
         // L: maximum (usually 1)
+
         return L / (1 + exp(-k * (x - x0)));
+    }
+
+    real bound(real x, real min_value, real max_value)
+    {
+        // We should simply be able to do this:
+        //     return max(min_value, min(x, max_value));
+        // ... but Stan doesn't have max(real, real) or
+        // min(real, real) functions!
+
+        if (x < min_value) {
+            return min_value;
+        } else if (x > max_value) {
+            return max_value;
+        } else {
+            return x;
+        }
+    }
+
+    real boundLower(real x, real min_value)
+    {
+        // a.k.a. max()
+
+        if (x < min_value) {
+            return min_value;
+        } else {
+            return x;
+        }
+    }
+
+    real boundUpper(real x, real max_value)
+    {
+        // a.k.a. min()
+
+        if (x > max_value) {
+            return max_value;
+        } else {
+            return x;
+        }
     }

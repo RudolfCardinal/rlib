@@ -6,7 +6,9 @@
 #==============================================================================
 
 # http://stackoverflow.com/questions/1826519/function-returning-more-than-one-value/15140507#15140507
+
 list <- structure(NA, class="result")
+
 "[<-.result" <- function(x, ..., value) {
     args <- as.list(match.call())
     args <- args[-c(1:2, length(args))]
@@ -19,3 +21,6 @@ list <- structure(NA, class="result")
     }
     x
 }
+
+# Test:
+# list[x,y,z] <- col2rgb("aquamarine")

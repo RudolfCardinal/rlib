@@ -3,6 +3,7 @@
 library(rstan)
 library(parallel)
 library(coda)
+library(matrixStats)
 library(reshape)
 library(ggplot2)
 library(bridgesampling)
@@ -153,6 +154,112 @@ stanfunc$load_or_run_bridge_sampler <- function(
         cat("... saved\n")
     }
     return(b)
+}
+
+
+stanfunc$compare_model_evidence <- function(bridgesample_list,
+                                            priors = NULL,
+                                            detail = FALSE)
+{
+    # bridgesample_list
+    #   a list or vector whose names are the names of the models, and whose
+    #   values are the results of the bridgesampling::bridge_sampler() function
+    #
+    # priors:
+    #   optional, but can be a vector containing prior probabilities for
+    #   each model
+    #
+    # Note:
+    # - "marginal likelihood" is the same as "evidence" (e.g. Kruschke 2011
+    #   p57-58)
+
+    # https://stackoverflow.com/questions/9950144/access-lapply-index-names-inside-fun
+    # https://stackoverflow.com/questions/4227223/r-list-to-data-frame
+    d <- data.table(
+        t(
+            vapply(
+                X=seq_along(bridgesample_list),
+                FUN=function(y, n, i) {
+                    c(i,  # index
+                      n[[i]],  # model_name
+                      y[[i]]$logml)  # log_marginal_likelihood
+                },
+                FUN.VALUE=c("index"=0,
+                            "model_name"="dummy",
+                            "log_marginal_likelihood"=0),
+                y=bridgesample_list,
+                n=names(bridgesample_list)
+            )
+        )
+    )
+    d[, index := as.numeric(index)]
+    d[, log_marginal_likelihood := as.numeric(log_marginal_likelihood)]
+
+    d[, model_rank := frank(-log_marginal_likelihood,
+                            ties.method="min")]  # "sports method"
+    # ... bigger (less negative) is better
+    # ... and rank() ranks from smallest (-> 1) to biggest, so want the reverse
+    # ... and data.table::frank is quicker than rank (not that we care here!)
+
+    n_models <- nrow(d)
+    if (is.null(priors)) {
+        # Flat priors
+        d[, prior_p_model := 1/n_models]
+    } else {
+        # User-specified priors
+        if (length(priors) != n_models) {
+            stop("priors: wrong length")
+        }
+        if (sum(priors) != 1) {
+            warning("priors sum to ", sum(priors), ", not 1")
+        }
+        d[, prior_p_model := priors]
+    }
+
+    # Work with logs or everything will overflow.
+    d[, log_prior_p_model := log(prior_p_model)]
+
+    # e.g. Grounau 2017 eq 2:
+    #                        marginal_likelihood[i] * prior[i]
+    # posterior_p_model[i] = ---------------------------------------------------
+    #                        sum_over_all_j( marginal_likelihood[j] * prior[j] )
+    #
+    # Taking logs:
+    #
+    # log(posterior_p_model[i]) = log(marginal_likelihood[i]) + log(prior[i]) -
+    #                             log(sum_over_all_j( marginal_likelihood[j] * prior[j] ))
+    #
+    # and note the helpful R function matrixStats::logSumExp, where
+    #
+    #   logSumExp(lx) == log(sum(exp(lx))
+    #
+    # which, for lx == log(x), means
+    #
+    #   logSumExp(lx) == log(sum(x))
+    #
+    # so we will use
+    #
+    #   log(marginal_likelihood[j] * prior[j]) = log(marginal_likelihood[j]) +
+    #                                            log(prior[j])
+
+    d[, log_prior_times_lik :=
+            log_marginal_likelihood + log_prior_p_model]
+    d[, log_sum_prior_times_lik_all_models :=
+            matrixStats::logSumExp(d$log_prior_times_lik)]
+    d[, log_posterior_p_model :=
+            log_prior_times_lik - log_sum_prior_times_lik_all_models]
+    d[, posterior_p_model := exp(log_posterior_p_model)]
+
+    if (!detail) {
+        # Remove working unless the user wants it
+        d[, log_prior_p_model := NULL]
+        # d[, log_prior_times_lik := NULL]
+        # d[, log_sum_prior_times_lik_all_models := NULL]
+        d[, log_posterior_p_model := NULL]
+    }
+
+    # print(d)
+    return(d)
 }
 
 
