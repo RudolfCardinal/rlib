@@ -28,12 +28,14 @@ DESIRED_LIBRARIES = c(
     "arrayhelpers",
     # "base64",
     # "BMS",
+    "bridgesampling",
     "broom",
     "Cairo",
     "car",
     "coda",
     "data.table",
     "diagram",
+    "DiagrammeR",
     "doParallel",
     "doSNOW",
     # WHEN RCPP VERSION CATCHES UP # "dplyr",  # Oct 2014
@@ -58,6 +60,7 @@ DESIRED_LIBRARIES = c(
     "ltm",
     "lubridate",
     "maptools",
+    "matrixStats",
     "MCMCglmm",
     "nlme",
     "nortest",
@@ -71,6 +74,7 @@ DESIRED_LIBRARIES = c(
     "Rcpp", # for RStan
     "raster",
     "readODS",
+    "readr",
     "readxl",
     "reshape",
     "reshape2",
@@ -81,6 +85,8 @@ DESIRED_LIBRARIES = c(
         # ... see https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started
     "RMySQL",
     "RODBC",
+    "semver",
+    "shinystan",
     "snow",
     "sp",  # spatial, for maps
     "sqldf",

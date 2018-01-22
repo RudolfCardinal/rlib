@@ -1,5 +1,11 @@
 # stanfunc.R
 
+# Note re data.table:
+# ... trailing [] to prevent "doesn't print first time" bug:
+# https://stackoverflow.com/questions/32988099/data-table-objects-not-printed-after-returned-from-function
+# https://github.com/Rdatatable/data.table/blob/master/NEWS.md#bug-fixes-5
+
+
 library(rstan)
 library(parallel)
 library(coda)
@@ -248,14 +254,14 @@ stanfunc$compare_model_evidence <- function(bridgesample_list,
             matrixStats::logSumExp(d$log_prior_times_lik)]
     d[, log_posterior_p_model :=
             log_prior_times_lik - log_sum_prior_times_lik_all_models]
-    d[, posterior_p_model := exp(log_posterior_p_model)]
+    d[, posterior_p_model := exp(log_posterior_p_model)][]
 
     if (!detail) {
         # Remove working unless the user wants it
         d[, log_prior_p_model := NULL]
         # d[, log_prior_times_lik := NULL]
         # d[, log_sum_prior_times_lik_all_models := NULL]
-        d[, log_posterior_p_model := NULL]
+        d[, log_posterior_p_model := NULL][]
     }
 
     # print(d)
@@ -298,6 +304,103 @@ stanfunc$sampled_values_from_stanfit <- function(
     }
     return(sampled_values)
 }
+
+
+stanfunc$summary_by_par_regex <- function(fit, pars=NULL, par_regex=NULL, ...)
+{
+    # help("summary,stanfit-method")
+    if (is.null(pars)) {
+        s <- rstan::summary(fit, ...)
+    } else {
+        s <- rstan::summary(fit, pars=pars, ...)
+    }
+    # This summary object, s, has members:
+    #   summary = overall summar
+    #   c_summary = per-chain summary
+    ss <- s$summary
+    parnames <- rownames(ss)
+    ss <- data.table(ss)
+    ss$parameter <- parnames
+    setcolorder(ss, c(ncol(ss), 1:(ncol(ss) - 1)))  # make last move to first
+    # Optionally, filter on a regex
+    if (!is.null(par_regex)) {
+        ss <- ss[grepl(par_regex, ss$parameter), ]
+    }
+    return(ss)
+}
+
+
+stanfunc$annotated_parameters <- function(
+        fit,
+        pars = NULL,
+        ci = c(0.025, 0.975),
+        probs = c(0.025, 0.25, 0.50, 0.75, 0.975),
+        par_regex = NULL,
+        annotate = TRUE,
+        ...
+    )
+{
+    if (length(ci) != 2) {
+        stop("Bad ci parameter")
+    }
+    if (!ci[1] %in% probs || !ci[2] %in% probs) {
+        stop("Elements of ci must be in probs")
+    }
+    initial_probs <- probs
+    if (annotate) {
+        probs <- c(probs, c(0.0005, 0.9995,
+                0.005, 0.995,
+                0.025, 0.975,
+                0.05, 0.95))
+    } else {
+        probs <- initial_probs
+    }
+    probs <- sort(unique(probs))
+    s <- stanfunc$summary_by_par_regex(fit, pars=pars, probs=probs,
+                                       par_regex=par_regex)
+    # Find nonzero parameters (confidence intervals exclude zero)
+
+    get_colname <- function(prob) {
+        return(paste(prob * 100, "%", sep=""))
+    }
+
+    nonzero_at <- function(lower, upper) {
+        lower_name = get_colname(lower)
+        upper_name = get_colname(upper)
+        return(
+            sign(s[, lower_name, with=FALSE]) ==
+                sign(s[, upper_name, with=FALSE]) &
+            s[, lower_name, with=FALSE] != 0 &
+            s[, upper_name, with=FALSE] != 0
+        )
+    }
+
+    s[, nonzero := nonzero_at(ci[1], ci[2])][]
+
+    if (annotate) {
+        p_001 <- nonzero_at(0.0005, 0.9995)
+        p_01 <- nonzero_at(0.005, 0.995)
+        p_05 <- nonzero_at(0.025, 0.975)
+        p_1 <- nonzero_at(0.05, 0.95)
+        s[
+            ,
+            annotation := ifelse(p_001, "***",
+                                 ifelse(p_01, "**",
+                                        ifelse(p_05, "*",
+                                               ifelse(p_1, ".", ""))))
+        ][]
+    }
+    return(s)
+}
+
+
+stanfunc$nonzero_parameters <- function(fit, annotate=FALSE, ...)
+{
+    s <- stanfunc$annotated_parameters(fit=fit, annotate=annotate, ...)
+    s <- s[nonzero == TRUE]  # restrict
+    return(s)
+}
+
 
 #==============================================================================
 # Running in parallel

@@ -996,7 +996,7 @@ miscstat$lmer_effect_size_eta_sq <- function(lmer_model) {
     dt[, SS_total := total_sum_of_squares]
 
     dt[, eta_sq := SS_effect / SS_total]
-    dt[, interp_eta_sq := miscstat$cohen_size_eta_sq(eta_sq)]
+    dt[, interp_eta_sq := miscstat$cohen_size_eta_sq(eta_sq)][]
 
     return(dt)
 }
@@ -1020,7 +1020,7 @@ miscstat$lm_effect_size_eta_sq <- function(lm_model) {
     total_sum_of_squares <- miscstat$ss_total_for_lm_model(lm_model)
     dt[, SS_total := total_sum_of_squares]
     dt[, eta_sq := SS_effect / SS_total]
-    dt[, interp_eta_sq := miscstat$cohen_size_eta_sq(eta_sq)]
+    dt[, interp_eta_sq := miscstat$cohen_size_eta_sq(eta_sq)][]
     return(dt)
 }
 
