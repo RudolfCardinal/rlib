@@ -90,6 +90,7 @@ DESIRED_LIBRARIES = c(
     "snow",
     "sp",  # spatial, for maps
     "sqldf",
+    "stringr",
     "TTR",
     "visreg",
     "XLConnect",

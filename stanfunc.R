@@ -6,13 +6,15 @@
 # https://github.com/Rdatatable/data.table/blob/master/NEWS.md#bug-fixes-5
 
 
-library(rstan)
-library(parallel)
-library(coda)
-library(matrixStats)
-library(reshape)
-library(ggplot2)
 library(bridgesampling)
+library(coda)
+library(ggplot2)
+library(matrixStats)
+library(parallel)
+library(reshape)
+library(rstan)
+library(stringr)
+
 
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
@@ -35,6 +37,7 @@ stanfunc$load_or_run_stan <- function(
         iter = 2000,
         init = "0",  # the default, "random", uses the range -2 to +2
         seed = 1234,  # for consistency across runs
+        cache_filetype=c("rds", "rda"),
         ...)
 {
     # Other potential common parameters:
@@ -44,10 +47,25 @@ stanfunc$load_or_run_stan <- function(
     #           # https://www.rdocumentation.org/packages/rstanarm/versions/2.14.1/topics/adapt_delta
     #   )
 
+    cache_filetype <- match.arg(cache_filetype)
+
     if (!forcerun && file.exists(fit_filename)) {
-        cat("Loading Stan model fit from RDS file: ",
-            fit_filename, "...\n", sep="")
-        fit <- readRDS(fit_filename)
+        if (cache_filetype == "rds") {
+            # .Rds
+            cat("Loading Stan model fit from RDS file: ",
+                fit_filename, "...\n", sep="")
+            fit <- readRDS(fit_filename)
+        } else {
+            # .Rda, .Rdata
+            cat("Loading Stan model fit from RDA file: ",
+                fit_filename, "...\n", sep="")
+            fit <- NULL  # so we can detect the change when we load
+            load(fit_filename)  # assumes it will be called 'fit'
+            if (class(fit) != "stanfit") {
+                stop(paste("No stanfit object called 'fit' in file",
+                           fit_filename))
+            }
+        }
         cat("... loaded\n")
     } else {
         n_cores_stan <- options("mc.cores")
@@ -78,9 +96,17 @@ stanfunc$load_or_run_stan <- function(
             ...
         )
         cat(paste("... Finished Stan run at", Sys.time(), "\n"))
-        cat("--- Saving Stan model fit to RDS file: ",
-            fit_filename, "...\n", sep="")
-        saveRDS(fit, file=fit_filename)  # load with readRDS()
+        if (cache_filetype == "rds") {
+            # .Rds
+            cat("--- Saving Stan model fit to RDS file: ",
+                fit_filename, "...\n", sep="")
+            saveRDS(fit, file=fit_filename)  # load with readRDS()
+        } else {
+            # .Rda, .Rdata
+            cat("--- Saving Stan model fit to RDA file: ",
+                fit_filename, "...\n", sep="")
+            save(list = c("fit"), file=fit_filename)
+        }
         cat("... saved\n")
     }
 
@@ -276,6 +302,7 @@ stanfunc$sampled_values_from_stanfit <- function(
 {
     method <- match.arg(method)
     if (method == "manual") {
+
         # 1. Laborious hand-crafted way.
         n_chains <- slot(fit, "sim")$chains
         n_warmup <- slot(fit, "sim")$warmup
@@ -285,20 +312,44 @@ stanfunc$sampled_values_from_stanfit <- function(
             new_values <- slot(fit, "sim")$samples[[c]][parname][[1]][(n_warmup+1):n_save]
             sampled_values <- c(sampled_values, new_values)
         }
+
     } else if (method == "extract") {
+
         # 2. The way it's meant to be done.
         ex <- rstan::extract(fit, permuted=TRUE)
-        if (!(parname %in% names(ex))) {
-            stop("No such parameter: ", parname)
+        # Now, slightly tricky. For a plain-text parameter like "xyz", this
+        # is simple. For something like "subject_k[1]", it isn't so simple,
+        # because rstan::extract gives us proper structure.
+        SINGLE_PARAM_REGEX = "^(\\w+)\\[(\\d+)\\]$"  # e.g. "somevar[3]"
+        # Grep with capture: https://stackoverflow.com/questions/952275/regex-group-capture-in-r-with-multiple-capture-groups
+        matches <- stringr::str_match(parname, SINGLE_PARAM_REGEX)
+        if (!is.na(matches[1])) {
+            # e.g. "subject_k[3]"
+            parname_par <- matches[2]
+            parname_num <- as.integer(matches[3])
+            if (!(parname_par %in% names(ex))) {
+                stop("No such parameter: ", parname)
+            }
+            sampled_array <- ex[[parname_par]]
+            # ... has indices [samplenum, parnum]
+            sampled_values <- sampled_array[, parname_num]
+        } else {
+            # e.g. "somevar"
+            if (!(parname %in% names(ex))) {
+                stop("No such parameter: ", parname)
+            }
+            sampled_values <- ex[[parname]]
         }
-        sampled_values <- ex[[parname]]
+
     } else if (method == "as.matrix") {
+
         # 3. Another...
         m <- as.matrix(fit)
         if (!(parname %in% colnames(m))) {
             stop("No such parameter: ", parname)
         }
         sampled_values <- m[,parname]
+
     } else {
         stop("Bad method")
     }
@@ -333,7 +384,7 @@ stanfunc$summary_by_par_regex <- function(fit, pars=NULL, par_regex=NULL, ...)
 stanfunc$annotated_parameters <- function(
         fit,
         pars = NULL,
-        ci = c(0.025, 0.975),
+        ci = c(0.025, 0.975),  # for the "nonzero" column
         probs = c(0.025, 0.25, 0.50, 0.75, 0.975),
         par_regex = NULL,
         annotate = TRUE,
@@ -348,10 +399,10 @@ stanfunc$annotated_parameters <- function(
     }
     initial_probs <- probs
     if (annotate) {
-        probs <- c(probs, c(0.0005, 0.9995,
-                0.005, 0.995,
-                0.025, 0.975,
-                0.05, 0.95))
+        probs <- c(probs, c(0.0005, 0.9995,  # p < 0.001 two-tailed
+                0.005, 0.995,  # for "**", p < 0.01 two-tailed
+                0.025, 0.975,  # for "*", p < 0.05 two-tailed
+                0.05, 0.95))  # for ".", p < 0.1 two-tailed
     } else {
         probs <- initial_probs
     }
@@ -390,6 +441,15 @@ stanfunc$annotated_parameters <- function(
                                                ifelse(p_1, ".", ""))))
         ][]
     }
+
+    hidden_probs <- setdiff(probs, initial_probs)  # in former, not latter
+    for (remove_prob in hidden_probs) {
+        remove_colname <- get_colname(remove_prob)
+        # cat(paste("Removing column", remove_colname, "\n"))
+        s[, (remove_colname) := NULL]
+    }
+    s <- s[]  # fix nonprinting bug; see above
+
     return(s)
 }
 
