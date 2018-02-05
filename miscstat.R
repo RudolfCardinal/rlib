@@ -649,7 +649,8 @@ miscstat$proportion_x_from_a_to_b <- function(x, a, b) {
 #==============================================================================
 
 miscstat$coin <- function(p) {
-    return(p > runif(1))
+    n <- length(p)
+    return(p > runif(n))
 }
 
 miscstat$roulette <- function(p) {
