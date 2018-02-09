@@ -452,16 +452,17 @@ LOG_PROB_HELPERS = """
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // See Stan (2017) manual p82.
     // These are internal functions that ASSUME size match.
+    // We can't use a leading "_" prefix on function names (Stan syntax error).
 
     // Lower
 
-    void _checkLowerBound_R_lp(real y, real lower)
+    void enforceLowerBound_R_lp(real y, real lower)
     {
         if (y < lower) {
             target += negative_infinity();
         }
     }
-    void _checkLowerBound_A_lp(real[] y, real lower)
+    void enforceLowerBound_A_lp(real[] y, real lower)
     {
         int length = num_elements(y);
         for (i in 1:length) {
@@ -470,11 +471,11 @@ LOG_PROB_HELPERS = """
             }
         }
     }
-    void _checkLowerBound_2_lp(real[,] y, real lower)
+    void enforceLowerBound_2_lp(real[,] y, real lower)
     {
         int dimensions[2] = dims(y);
         int nrows = dimensions[1];
-        int cols = dimensions[2];
+        int ncols = dimensions[2];
         for (i in 1:nrows) {
             for (j in 1:ncols) {
                 if (y[i, j] < lower) {
@@ -483,7 +484,7 @@ LOG_PROB_HELPERS = """
             }
         }
     }
-    void _checkLowerBound_V_lp(vector y, real lower)
+    void enforceLowerBound_V_lp(vector y, real lower)
     {
         int length = num_elements(y);
         for (i in 1:length) {
@@ -495,13 +496,13 @@ LOG_PROB_HELPERS = """
 
     // Upper
 
-    void _checkUpperBound_R_lp(real y, real upper)
+    void enforceUpperBound_R_lp(real y, real upper)
     {
         if (y > upper) {
             target += negative_infinity();
         }
     }
-    void _checkUpperBound_A_lp(real[] y, real upper)
+    void enforceUpperBound_A_lp(real[] y, real upper)
     {
         int length = num_elements(y);
         for (i in 1:length) {
@@ -510,11 +511,11 @@ LOG_PROB_HELPERS = """
             }
         }
     }
-    void _checkUpperBound_2_lp(real[,] y, real upper)
+    void enforceUpperBound_2_lp(real[,] y, real upper)
     {
         int dimensions[2] = dims(y);
         int nrows = dimensions[1];
-        int cols = dimensions[2];
+        int ncols = dimensions[2];
         for (i in 1:nrows) {
             for (j in 1:ncols) {
                 if (y[i, j] > upper) {
@@ -523,7 +524,7 @@ LOG_PROB_HELPERS = """
             }
         }
     }
-    void _checkUpperBound_V_lp(vector y, real upper)
+    void enforceUpperBound_V_lp(vector y, real upper)
     {
         int length = num_elements(y);
         for (i in 1:length) {
@@ -535,13 +536,13 @@ LOG_PROB_HELPERS = """
 
     // Range
 
-    void _checkRangeBounds_R_lp(real y, real lower, real upper)
+    void enforceRangeBounds_R_lp(real y, real lower, real upper)
     {
         if (y < lower || y > upper) {
             target += negative_infinity();
         }
     }
-    void _checkRangeBounds_A_lp(real[] y, real lower, real upper)
+    void enforceRangeBounds_A_lp(real[] y, real lower, real upper)
     {
         int length = num_elements(y);
         for (i in 1:length) {
@@ -550,11 +551,11 @@ LOG_PROB_HELPERS = """
             }
         }
     }
-    void _checkRangeBounds_2_lp(real[,] y, real lower, real upper)
+    void enforceRangeBounds_2_lp(real[,] y, real lower, real upper)
     {
         int dimensions[2] = dims(y);
         int nrows = dimensions[1];
-        int cols = dimensions[2];
+        int ncols = dimensions[2];
         for (i in 1:nrows) {
             for (j in 1:ncols) {
                 if (y[i, j] < lower || y[i, j] > upper) {
@@ -563,7 +564,7 @@ LOG_PROB_HELPERS = """
             }
         }
     }
-    void _checkRangeBounds_V_lp(vector y, real lower, real upper)
+    void enforceRangeBounds_V_lp(vector y, real lower, real upper)
     {
         int length = num_elements(y);
         for (i in 1:length) {
@@ -631,7 +632,7 @@ def sample_generic(name_caps: str,
             target += {lpdf_func}(y[i] | {pdf_call_params}) -
                       correction;
         }}
-        _checkLowerBound_{ya}_lp(y, lower);
+        enforceLowerBound_{ya}_lp(y, lower);
                 """.format(lpdf_func=lpdf_func,
                            lccdf_func=lccdf_func,
                            pdf_call_params=pdf_call_params,
@@ -640,7 +641,7 @@ def sample_generic(name_caps: str,
             code = """
         target += {lpdf_func}(y | {pdf_call_params}) -
                   {lccdf_func}(lower | {pdf_call_params});
-        _checkLowerBound_{ya}_lp(y, lower);
+        enforceLowerBound_{ya}_lp(y, lower);
             """.format(lpdf_func=lpdf_func,
                        lccdf_func=lccdf_func,
                        pdf_call_params=pdf_call_params,
@@ -657,7 +658,7 @@ def sample_generic(name_caps: str,
             target += {lpdf_func}(y[i] | {pdf_call_params}) -
                       correction;
         }}
-        _checkUpperBound_{ya}_lp(y, upper);
+        enforceUpperBound_{ya}_lp(y, upper);
             """.format(lpdf_func=lpdf_func,
                        lcdf_func=lcdf_func,
                        pdf_call_params=pdf_call_params,
@@ -666,7 +667,7 @@ def sample_generic(name_caps: str,
             code = """
         target += {lpdf_func}(y | {pdf_call_params}) -
                   {lcdf_func}(upper | {pdf_call_params});
-        _checkUpperBound_{ya}_lp(y, upper);
+        enforceUpperBound_{ya}_lp(y, upper);
             """.format(lpdf_func=lpdf_func,
                        lcdf_func=lcdf_func,
                        pdf_call_params=pdf_call_params,
@@ -684,7 +685,7 @@ def sample_generic(name_caps: str,
             target += {lpdf_func}(y[i] | {pdf_call_params}) -
                       correction;
         }}
-        _checkRangeBounds_{ya}_lp(y, lower, upper);
+        enforceRangeBounds_{ya}_lp(y, lower, upper);
             """.format(lpdf_func=lpdf_func,
                        lcdf_func=lcdf_func,
                        pdf_call_params=pdf_call_params,
@@ -694,7 +695,7 @@ def sample_generic(name_caps: str,
         target += {lpdf_func}(y | {pdf_call_params}) -
                   log_diff_exp({lcdf_func}(upper | {pdf_call_params}),
                                {lcdf_func}(lower | {pdf_call_params}));
-        _checkRangeBounds_{ya}_lp(y, lower, upper);
+        enforceRangeBounds_{ya}_lp(y, lower, upper);
             """.format(lpdf_func=lpdf_func,
                        lcdf_func=lcdf_func,
                        pdf_call_params=pdf_call_params,
@@ -1342,12 +1343,12 @@ def make_reparam_cauchy(y: VarDescriptor,
         """
     elif y.vector:
         code += """
-        int length = num_elements(y_unit_normal);
+        int length = num_elements(y_uniform);
         vector[length] result;
         """
     else:
         code += """
-        int length = num_elements(y_unit_normal);
+        int length = num_elements(y_uniform);
         real result[length];
         """
     if using_lower:
