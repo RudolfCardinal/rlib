@@ -388,6 +388,9 @@ stanfunc$annotated_parameters <- function(
         probs = c(0.025, 0.25, 0.50, 0.75, 0.975),
         par_regex = NULL,
         annotate = TRUE,
+        nonzero_as_hdi = TRUE,
+        hdi_proportion = 0.95,
+        hdi_method = "kruschke_mcmc",
         ...
     )
 {
@@ -409,7 +412,7 @@ stanfunc$annotated_parameters <- function(
     probs <- sort(unique(probs))
     s <- stanfunc$summary_by_par_regex(fit, pars=pars, probs=probs,
                                        par_regex=par_regex)
-    # Find nonzero parameters (confidence intervals exclude zero)
+    # Find nonzero parameters (credible interval excludes zero)
 
     get_colname <- function(prob) {
         return(paste(prob * 100, "%", sep=""))
@@ -426,7 +429,21 @@ stanfunc$annotated_parameters <- function(
         )
     }
 
-    s[, nonzero := nonzero_at(ci[1], ci[2])][]
+    if (nonzero_as_hdi) {
+        s[, hdi_lower := NA_real_]
+        s[, hdi_upper := NA_real_]
+        for (rownum in 1:nrow(s)) {
+            parname <- s[rownum, parameter]
+            values <- stanfunc$sampled_values_from_stanfit(fit, parname)
+            hdi_pair <- hdi(values, hdi_proportion=hdi_proportion,
+                            method=hdi_method)
+            s[rownum, hdi_lower := hdi_pair[1]]
+            s[rownum, hdi_upper := hdi_pair[2]]
+        }
+        s[, nonzero := (0 < hdi_lower || hdi_upper < 0)][]
+    } else {
+        s[, nonzero := nonzero_at(ci[1], ci[2])][]
+    }
 
     if (annotate) {
         p_001 <- nonzero_at(0.0005, 0.9995)
@@ -457,7 +474,7 @@ stanfunc$annotated_parameters <- function(
 stanfunc$nonzero_parameters <- function(fit, annotate=FALSE, ...)
 {
     s <- stanfunc$annotated_parameters(fit=fit, annotate=annotate, ...)
-    s <- s[nonzero == TRUE]  # restrict
+    s <- s[nonzero == TRUE][]  # restrict
     return(s)
 }
 
@@ -691,7 +708,7 @@ stanfunc$calculate_hdi_from_sample_piecewise <- function(x, hdi_proportion = 0.9
     # http://www.sumsar.net/best_online/js/js_mcmc.js
     n <- length(x)
     ci_nbr_of_points <- floor(n * hdi_proportion) # want this many samples in the HDI
-    min_width_ci <- c(min(x), max(y)) # initialize
+    min_width_ci <- c(min(x), max(x)) # initialize
     for (i in 1:(n - ci_nbr_of_points)) {
         ci_width <- x[i + ci_nbr_of_points] - x[i]
         if (ci_width < min_width_ci[2] - min_width_ci[1]) {
@@ -704,7 +721,7 @@ stanfunc$calculate_hdi_from_sample_piecewise <- function(x, hdi_proportion = 0.9
     # and   PDF(upper) = PDF(lower)
 }
 
-stanfunc$HDIofMCMC = function(sampleVec, credMass = 0.95)
+stanfunc$HDIofMCMC <- function(sampleVec, credMass = 0.95)
 {
     # Krushke, p628, HDIofMCMC.R
     # Computes highest density interval from a sample of representative values,
@@ -730,10 +747,33 @@ stanfunc$HDIofMCMC = function(sampleVec, credMass = 0.95)
     return(HDIlim)
 }
 
+TEST_HDI_OF_MCMC <- '
+    # See Kruschke (2011) p41, p628
+    set.seed(1234)
+    n = 20000
+    symmetric_y <- rnorm(n, mean=0, sd=1)
+    symmetric_d <- density(symmetric_y)
+    symmetric_hdi <- stanfunc$HDIofMCMC(symmetric_y)  # -1.975671  1.904936
+    plot(symmetric_d)
+    abline(v=symmetric_hdi[1])
+    abline(v=symmetric_hdi[2])
+    asymmetric_y <- rgamma(n, shape=2, scale=2)
+    asymmetric_d <- density(asymmetric_y)
+    asymmetric_hdi <- stanfunc$HDIofMCMC(asymmetric_y)  #
+    plot(asymmetric_d)
+    abline(v=asymmetric_hdi[1])
+    abline(v=asymmetric_hdi[2])
+'
+
+
 stanfunc$hdi_via_coda <- function(sampled_values, hdi_proportion = 0.95)
 {
     hdi_limits_matrix <- coda::HPDinterval(as.mcmc(sampled_values),
                                            prob = hdi_proportion)
+    # ... Sometimes crashes with
+    # "Error in dimnames(x)[[2]] : subscript out of bounds"
+    # for perfectly valid-looking data that works with other methods.
+
     return(c(hdi_limits_matrix[1, "lower"], hdi_limits_matrix[1, "upper"]))
 }
 
@@ -746,9 +786,9 @@ stanfunc$hdi_via_lme4 <- function(sampled_values, hdi_proportion = 0.95)
 
 stanfunc$compare_hdi_methods <- function(sampled_values, hdi_proportion)
 {
-    cat("RNC:\n")
+    cat("Bååth:\n")
     print(calculate_hdi_from_sample_piecewise(sampled_values, hdi_proportion))
-    cat("Krushke:\n")
+    cat("Kruschke:\n")
     print(HDIofMCMC(sampled_values, hdi_proportion))
     cat("coda:\n")
     print(hdi_via_coda(sampled_values, hdi_proportion))
@@ -756,12 +796,25 @@ stanfunc$compare_hdi_methods <- function(sampled_values, hdi_proportion)
     print(hdi_via_lme4(sampled_values, hdi_proportion))
 }
 
-# Method chooser!
-stanfunc$hdi <- function(sampled_values, hdi_proportion = 0.95)
+stanfunc$hdi <- function(sampled_values, hdi_proportion = 0.95,
+                         method=c("kruschke_mcmc",
+                                  "coda",
+                                  "baath",
+                                  "lme4"))
 {
-    HDIofMCMC(sampled_values, hdi_proportion)
-    # hdi_via_coda(sampled_values, hdi_proportion)
-    # calculate_hdi_from_sample_piecewise(sampled_values, hdi_proportion)
+    # Method chooser!
+    method <- match.arg(method)
+    if (method == "kruschke_mcmc") {
+        return(HDIofMCMC(sampled_values, hdi_proportion))
+    } else if (method == "coda") {
+        return(hdi_via_coda(sampled_values, hdi_proportion))
+    } else if (method == "baath") {
+        return(calculate_hdi_from_sample_piecewise(sampled_values, hdi_proportion))
+    } else if (method == "lme4") {
+        return(hdi_via_lme4(sampled_values, hdi_proportion))
+    } else {
+        stop("Bad method")
+    }
 }
 
 stanfunc$interval_includes <- function(interval, testval,
@@ -1010,7 +1063,12 @@ stanfunc$ggplot_density_function <- function(
         ypos_quantiles = 1.15,
         ypos_mean = 0.6,
         ypos_mode = 0.4,
-        theme = theme_bw())
+        xlim = NULL,
+        theme = theme_bw(),
+        ypos_hdi_text = NULL,
+        ypos_hdi_nums = NULL,
+        hdi_text_vjust = 0.5,
+        hdi_nums_vjust = 0.5)
 {
     my_density <- density(sampled_values)
     max_density <- max(my_density$y)
@@ -1034,6 +1092,9 @@ stanfunc$ggplot_density_function <- function(
         + ggtitle(paste("Posterior distribution of ", parname, sep=""))
         + ylim(0, max_density * 1.2)
     )
+    if (!is.null(xlim)) {
+        p <- p + ggplot2::xlim(xlim)
+    }
 
     ypos_quantiles_upper <- max_density * ypos_quantiles
     ypos_quantiles_lower <- max_density * (ypos_quantiles - 0.05)
@@ -1089,8 +1150,12 @@ stanfunc$ggplot_density_function <- function(
         # these will be imprecise (based on sampled density); the HDI itself is precise
         # So for visual reasons we take an approximate "water level":
         mean_density_at_hdi <- mean(density_at_hdi)
-        ypos_hdi_text <- mean_density_at_hdi + max_density * -0.05
-        ypos_hdi_nums <- mean_density_at_hdi + max_density * 0.05
+        if (is.null(ypos_hdi_text)) {
+            ypos_hdi_text <- mean_density_at_hdi + max_density * -0.05
+        }
+        if (is.null(ypos_hdi_nums)) {
+            ypos_hdi_nums <- mean_density_at_hdi + max_density * 0.05
+        }
         hdidf <- data.frame(
             x = c(hdi_limits[1], hdi_limits[1], hdi_limits[2], hdi_limits[2]),
             y = c(ypos_baseline, density_at_hdi[1], density_at_hdi[2], ypos_baseline)
@@ -1099,18 +1164,21 @@ stanfunc$ggplot_density_function <- function(
         p <- (p
             + geom_line(
                 data = hdidf,
-                aes = aes(x = x, y = y),
+                # aes = aes(x = x, y = y),
                 colour = colour_hdi
             )
             + annotate("text", x = mean(hdi_limits), y = ypos_hdi_text,
                        label = paste(hdi_percent, "% HDI", sep=""),
-                       colour = colour_hdi)
+                       colour = colour_hdi,
+                       vjust = hdi_text_vjust)
             + annotate("text", x = hdi_limits[1], y = ypos_hdi_nums,
                        label = prettyNum(hdi_limits[1], digits = digits),
-                       colour = colour_hdi)
+                       colour = colour_hdi,
+                       vjust = hdi_nums_vjust)
             + annotate("text", x = hdi_limits[2], y = ypos_hdi_nums,
                        label = prettyNum(hdi_limits[2], digits = digits),
-                       colour = colour_hdi)
+                       colour = colour_hdi,
+                       vjust = hdi_nums_vjust)
         )
     }
     return(p)

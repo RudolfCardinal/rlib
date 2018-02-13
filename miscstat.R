@@ -44,8 +44,10 @@ miscstat$log_of_mean_of_numbers_in_log_domain <- function(log_v) {
 #==============================================================================
 
 miscstat$sem <- function(x) {
-    # won't do anything silly with NA values since var() will return NA in that case
-    # ... but does fail with NULL == c()
+    # Calculate the standard error of the mean (SEM).
+    # - SEM = SD / sqrt(n) = sqrt(variance / n).
+    # - Won't do anything silly with NA values since var() will return NA in
+    #   that case... but does fail with NULL == c()
     if (is.null(x)) return(NA)  # as for mean(NULL)
     sqrt(var(x)/length(x))
 }
