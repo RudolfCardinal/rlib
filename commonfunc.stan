@@ -2735,6 +2735,10 @@
     {
         target += bernoulli_lpmf(y | theta);
     }
+    void sampleBernoulli_AR_lp(int[] y, real theta)
+    {
+        target += bernoulli_lpmf(y | theta);
+    }
     void sampleBernoulli_AA_lp(int[] y, real[] theta)
     {
         target += bernoulli_lpmf(y | theta);

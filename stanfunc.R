@@ -189,17 +189,30 @@ stanfunc$load_or_run_bridge_sampler <- function(
 }
 
 
-stanfunc$compare_model_evidence <- function(bridgesample_list,
+stanfunc$compare_model_evidence <- function(bridgesample_list_list,
                                             priors = NULL,
                                             detail = FALSE)
 {
-    # bridgesample_list
-    #   a list or vector whose names are the names of the models, and whose
-    #   values are the results of the bridgesampling::bridge_sampler() function
+    # bridgesample_list_list
+    #   A list of lists. Each item is a list with names:
+    #           name: the model name
+    #           bridgesample: the output from the
+    #                   bridgesampling::bridge_sampler() function (an item of
+    #                   class bridge_list)
+    #           stanfit (optional): a corresponding Stan fit
+    #                   ... useful to show e.g. maximum R-hat summaries
+    #   (R note: if x is a list, then if x *doesn't* have item y, x$y == NULL.)
     #
     # priors:
     #   optional, but can be a vector containing prior probabilities for
     #   each model
+    #
+    # detail:
+    #   keep the details used for intermediate calculations
+    #
+    # stanfit_list:
+    #   NULL, or a list of stanfits whose order must match bridgesample_list;
+    #   if present, summary statistics (such as maximum R-hat) are included
     #
     # Note:
     # - "marginal likelihood" is the same as "evidence" (e.g. Kruschke 2011
@@ -210,17 +223,27 @@ stanfunc$compare_model_evidence <- function(bridgesample_list,
     d <- data.table(
         t(
             vapply(
-                X=seq_along(bridgesample_list),
-                FUN=function(y, n, i) {
-                    c(i,  # index
-                      n[[i]],  # model_name
-                      y[[i]]$logml)  # log_marginal_likelihood
+                X=seq_along(bridgesample_list_list),
+                FUN=function(y, i) {
+                    item <- y[[i]]
+                    if (is.null(item$stanfit)) {
+                        max_rhat <- NA_real_
+                    } else {
+                        fit <- item$stanfit
+                        max_rhat <- stanfunc$max_rhat(fit)
+                    }
+                    return(c(
+                        i,  # index
+                        item$name,  # model_name
+                        item$bridgesample$logml,  # log_marginal_likelihood
+                        max_rhat  # max_rhat
+                    ))
                 },
-                FUN.VALUE=c("index"=0,
-                            "model_name"="dummy",
-                            "log_marginal_likelihood"=0),
-                y=bridgesample_list,
-                n=names(bridgesample_list)
+                FUN.VALUE=c("index"=NA_integer_,
+                            "model_name"=NA_character_,
+                            "log_marginal_likelihood"=NA_real_,
+                            "max_rhat"=NA_real_),
+                y=bridgesample_list_list
             )
         )
     )
@@ -357,27 +380,49 @@ stanfunc$sampled_values_from_stanfit <- function(
 }
 
 
-stanfunc$summary_by_par_regex <- function(fit, pars=NULL, par_regex=NULL, ...)
+stanfunc$summary_data_table <- function(fit, ...)
 {
     # help("summary,stanfit-method")
-    if (is.null(pars)) {
-        s <- rstan::summary(fit, ...)
-    } else {
-        s <- rstan::summary(fit, pars=pars, ...)
-    }
+    s <- rstan::summary(fit, ...)
     # This summary object, s, has members:
-    #   summary = overall summar
+    #   summary = overall summary
     #   c_summary = per-chain summary
     ss <- s$summary
     parnames <- rownames(ss)
     ss <- data.table(ss)
     ss$parameter <- parnames
+    # Move the "parameters" column so it's first:
     setcolorder(ss, c(ncol(ss), 1:(ncol(ss) - 1)))  # make last move to first
+    return(ss)
+}
+
+
+stanfunc$params_with_high_rhat <- function(fit, threshold = 1.1)
+{
+    s <- stanfunc$summary_data_table(fit)
+    return(s[Rhat >= threshold])
+}
+
+
+stanfunc$max_rhat <- function(fit)
+{
+    s <- stanfunc$summary_data_table(fit)
+    return(max(s$Rhat))
+}
+
+
+stanfunc$summary_by_par_regex <- function(fit, pars=NULL, par_regex=NULL, ...)
+{
+    if (is.null(pars)) {
+        s <- stanfunc$summary_data_table(fit, ...)
+    } else {
+        s <- stanfunc$summary_data_table(fit, pars=pars, ...)
+    }
     # Optionally, filter on a regex
     if (!is.null(par_regex)) {
-        ss <- ss[grepl(par_regex, ss$parameter), ]
+        s <- s[grepl(par_regex, s$parameter), ]
     }
-    return(ss)
+    return(s)
 }
 
 
@@ -422,27 +467,8 @@ stanfunc$annotated_parameters <- function(
         lower_name = get_colname(lower)
         upper_name = get_colname(upper)
         return(
-            sign(s[, lower_name, with=FALSE]) ==
-                sign(s[, upper_name, with=FALSE]) &
-            s[, lower_name, with=FALSE] != 0 &
-            s[, upper_name, with=FALSE] != 0
+            0 < s[, lower_name, with=FALSE] | s[, upper_name, with=FALSE] < 0
         )
-    }
-
-    if (nonzero_as_hdi) {
-        s[, hdi_lower := NA_real_]
-        s[, hdi_upper := NA_real_]
-        for (rownum in 1:nrow(s)) {
-            parname <- s[rownum, parameter]
-            values <- stanfunc$sampled_values_from_stanfit(fit, parname)
-            hdi_pair <- hdi(values, hdi_proportion=hdi_proportion,
-                            method=hdi_method)
-            s[rownum, hdi_lower := hdi_pair[1]]
-            s[rownum, hdi_upper := hdi_pair[2]]
-        }
-        s[, nonzero := (0 < hdi_lower || hdi_upper < 0)][]
-    } else {
-        s[, nonzero := nonzero_at(ci[1], ci[2])][]
     }
 
     if (annotate) {
@@ -456,7 +482,23 @@ stanfunc$annotated_parameters <- function(
                                  ifelse(p_01, "**",
                                         ifelse(p_05, "*",
                                                ifelse(p_1, ".", ""))))
-        ][]
+        ]
+    }
+
+    if (nonzero_as_hdi) {
+        s[, hdi_lower := NA_real_]
+        s[, hdi_upper := NA_real_]
+        for (rownum in 1:nrow(s)) {
+            parname <- s[rownum, parameter]
+            values <- stanfunc$sampled_values_from_stanfit(fit, parname)
+            hdi_pair <- hdi(values, hdi_proportion=hdi_proportion,
+                            method=hdi_method)
+            s[rownum, hdi_lower := hdi_pair[1]]
+            s[rownum, hdi_upper := hdi_pair[2]]
+        }
+        s[, nonzero := (0 < hdi_lower | hdi_upper < 0)]
+    } else {
+        s[, nonzero := nonzero_at(ci[1], ci[2])]
     }
 
     hidden_probs <- setdiff(probs, initial_probs)  # in former, not latter
@@ -465,8 +507,8 @@ stanfunc$annotated_parameters <- function(
         # cat(paste("Removing column", remove_colname, "\n"))
         s[, (remove_colname) := NULL]
     }
-    s <- s[]  # fix nonprinting bug; see above
 
+    s <- s[]  # fix nonprinting bug; see above
     return(s)
 }
 
