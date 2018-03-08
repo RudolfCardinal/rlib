@@ -935,7 +935,7 @@ cris$get_drug_sql <- function(drug, fieldname="drug")
     # BIPHASIC INSULIN ASPART
     # BIPHASIC INSULIN LISPRO
     # BIPHASIC ISOPHANE INSULIN
-    else if (drug == "metformin") {
+    else if (drug == "insulin") {  # bugfix 2018-02-19: was "metformin"! Didn't affect any actual data thus far.
         sql <- paste(
             "drug LIKE '%insulin%'"
             , "drug LIKE '%aspart%'"

@@ -191,7 +191,8 @@ stanfunc$load_or_run_bridge_sampler <- function(
 
 stanfunc$compare_model_evidence <- function(bridgesample_list_list,
                                             priors = NULL,
-                                            detail = FALSE)
+                                            detail = FALSE,
+                                            rhat_warning_threshold = 1.1)
 {
     # bridgesample_list_list
     #   A list of lists. Each item is a list with names:
@@ -249,6 +250,11 @@ stanfunc$compare_model_evidence <- function(bridgesample_list_list,
     )
     d[, index := as.numeric(index)]
     d[, log_marginal_likelihood := as.numeric(log_marginal_likelihood)]
+    d[, rhat_warning := ifelse(
+        is.na(max_rhat),
+        NA_character_,
+        ifelse(max_rhat > rhat_warning_threshold, "WARNING: HIGH R-HAT", "OK")
+    )]
 
     d[, model_rank := frank(-log_marginal_likelihood,
                             ties.method="min")]  # "sports method"
@@ -275,7 +281,7 @@ stanfunc$compare_model_evidence <- function(bridgesample_list_list,
     d[, log_prior_p_model := log(prior_p_model)]
 
     # e.g. Grounau 2017 eq 2:
-    #                        marginal_likelihood[i] * prior[i]
+    #                                 marginal_likelihood[i] * prior[i]
     # posterior_p_model[i] = ---------------------------------------------------
     #                        sum_over_all_j( marginal_likelihood[j] * prior[j] )
     #
@@ -308,9 +314,9 @@ stanfunc$compare_model_evidence <- function(bridgesample_list_list,
     if (!detail) {
         # Remove working unless the user wants it
         d[, log_prior_p_model := NULL]
-        # d[, log_prior_times_lik := NULL]
-        # d[, log_sum_prior_times_lik_all_models := NULL]
-        d[, log_posterior_p_model := NULL][]
+        d[, log_prior_times_lik := NULL]
+        d[, log_sum_prior_times_lik_all_models := NULL]
+        # d[, log_posterior_p_model := NULL][]
     }
 
     # print(d)
@@ -343,19 +349,40 @@ stanfunc$sampled_values_from_stanfit <- function(
         # Now, slightly tricky. For a plain-text parameter like "xyz", this
         # is simple. For something like "subject_k[1]", it isn't so simple,
         # because rstan::extract gives us proper structure.
-        SINGLE_PARAM_REGEX = "^(\\w+)\\[(\\d+)\\]$"  # e.g. "somevar[3]"
+        # Can also be e.g. parname[1,1], etc.
         # Grep with capture: https://stackoverflow.com/questions/952275/regex-group-capture-in-r-with-multiple-capture-groups
-        matches <- stringr::str_match(parname, SINGLE_PARAM_REGEX)
+
+        PARAM_WITH_INDEX_REGEX = "^(\\w+)\\[((?:\\d+,)*\\d+)\\]$"  # e.g. "somevar[3]", "blah[1,2]"
+        # matches <- stringr::str_match("blah", PARAM_WITH_INDEX_REGEX)
+        # matches <- stringr::str_match("blah[1]", PARAM_WITH_INDEX_REGEX)
+        # matches <- stringr::str_match("blah[2,3]", PARAM_WITH_INDEX_REGEX)
+        matches <- stringr::str_match(parname, PARAM_WITH_INDEX_REGEX)
         if (!is.na(matches[1])) {
-            # e.g. "subject_k[3]"
+            # parameter with index/indices e.g. "subject_k[3]", "blah[1,1]"
             parname_par <- matches[2]
-            parname_num <- as.integer(matches[3])
+            index_csv_numbers <- matches[3]
+            indices <- as.integer(unlist(strsplit(index_csv_numbers, ",")))
             if (!(parname_par %in% names(ex))) {
                 stop("No such parameter: ", parname)
             }
             sampled_array <- ex[[parname_par]]
-            # ... has indices [samplenum, parnum]
-            sampled_values <- sampled_array[, parname_num]
+            # ... for one index, sampled_array has indices [samplenum, parnum]
+            #     so one can use sampled_values <- sampled_array[, parname_num]
+            # ... but for two, dim(sampled_array) is e.g. c(8000, 3, 3); this
+            #     means 8000 samples of a 3x3 array.
+            # To retrieve them... see http://r.789695.n4.nabble.com/array-slice-notation-td902486.html
+            arraydims <- dim(sampled_array)
+            if (length(indices) != length(arraydims) - 1) {
+                stop("Bad indices for parameter: ", parname,
+                     ". Indices were: ", indices,
+                     " and dimensions were: ", arraydims)
+            }
+            n_samples <- arraydims[1]
+            slicelist <- c(list(1:n_samples), as.list(indices))
+            # e.g. for param[3, 3], slicelist should be a list whose first
+            # element is 1:8000 (for 8000 samples), whose second element is 3,
+            # and whose third element is 3.
+            sampled_values <- do.call("[", c(list(sampled_array), slicelist))
         } else {
             # e.g. "somevar"
             if (!(parname %in% names(ex))) {
