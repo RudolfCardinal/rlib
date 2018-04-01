@@ -349,6 +349,9 @@
 
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Normal distribution
+    // - mu is the mean; sigma is the standard deviation
+    // - See Stan 2.16.0 manual p512;
+    //   http://mathworld.wolfram.com/NormalDistribution.html
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     
     // Sampling
@@ -916,6 +919,7 @@
     
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Cauchy distribution
+    // - mu is location parameter; sigma is scale parameter
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     
     // Sampling
@@ -1483,6 +1487,9 @@
     
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Beta distribution
+    // - in R, alpha is called scale1, and beta is called scale2
+    // - Stan 2.16.0 manual p532; R ?dbeta;
+    //   https://www.rdocumentation.org/packages/visualize/versions/4.3.0/topics/visualize.beta
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     
     // Sampling
@@ -2050,6 +2057,9 @@
     
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Gamma distribution
+    // - Stan's alpha is R's shape; Stan's beta is R's rate.
+    //   (R also offers scale = 1/rate.)
+    // - https://en.wikipedia.org/wiki/Gamma_distribution
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     
     // Sampling
@@ -3972,7 +3982,7 @@
     real reparameterizedCauchyBoundary(real boundary, real mu, real sigma)
     {
         // boundary: in real-world Cauchy(mu, sigma) space
-        // return value: equivalent in the reparameterized uniform [-pi/2, +pi/2] space 
+        // return value: equivalent in the reparameterized uniform [-pi/2, +pi/2] space
         return atan((boundary - mu) / sigma);
     }
     

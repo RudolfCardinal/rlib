@@ -779,6 +779,9 @@ def get_normal_distribution() -> str:
     code = """
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Normal distribution
+    // - mu is the mean; sigma is the standard deviation
+    // - See Stan 2.16.0 manual p512;
+    //   http://mathworld.wolfram.com/NormalDistribution.html
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     """
 
@@ -836,6 +839,7 @@ def get_cauchy_distribution() -> str:
     code = """
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Cauchy distribution
+    // - mu is location parameter; sigma is scale parameter
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     """
 
@@ -893,6 +897,9 @@ def get_beta_distribution() -> str:
     code = """
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Beta distribution
+    // - in R, alpha is called scale1, and beta is called scale2
+    // - Stan 2.16.0 manual p532; R ?dbeta;
+    //   https://www.rdocumentation.org/packages/visualize/versions/4.3.0/topics/visualize.beta
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     """
 
@@ -950,6 +957,9 @@ def get_gamma_distribution() -> str:
     code = """
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Gamma distribution
+    // - Stan's alpha is R's shape; Stan's beta is R's rate.
+    //   (R also offers scale = 1/rate.)
+    // - https://en.wikipedia.org/wiki/Gamma_distribution
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     """
 
@@ -1252,7 +1262,7 @@ def get_reparamaterized_normal() -> str:
                 if lower.dimensions == 2 or upper.dimensions == 2:
                     continue
                 supported_combinations.append((y, lower, upper))
-    
+
     def do_call(y_: VarDescriptor,
                 mu_: VarDescriptor,
                 sigma_: VarDescriptor,
@@ -1470,7 +1480,7 @@ def get_reparamaterized_cauchy() -> str:
     real reparameterizedCauchyBoundary(real boundary, real mu, real sigma)
     {
         // boundary: in real-world Cauchy(mu, sigma) space
-        // return value: equivalent in the reparameterized uniform [-pi/2, +pi/2] space 
+        // return value: equivalent in the reparameterized uniform [-pi/2, +pi/2] space
         return atan((boundary - mu) / sigma);
     }
     """  # noqa
