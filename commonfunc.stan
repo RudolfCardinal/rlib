@@ -22,6 +22,9 @@
 
     real softmaxNth(vector softmax_inputs, int index)
     {
+        // Returns the nth value (at "index") of the softmax of the inputs.
+        // Assumes an inverse temperature of 1.
+        
         /*
             For softmax: see my miscstat.R; the important points for
             optimization are (1) that softmax is invariant to the addition/
@@ -48,6 +51,8 @@
 
     real softmaxNthInvTemp(vector softmax_inputs, real inverse_temp, int index)
     {
+        // Version of softmaxNth allowing you to specify the inverse temp.
+        
         int length = num_elements(softmax_inputs);
         vector[length] s_exp_products;
         if (index < 1 || index > length) {
@@ -60,6 +65,7 @@
 
     real logistic(real x, real x0, real k, real L)
     {
+        // Returns x transformed through a logistic function.
         // Notation as per https://en.wikipedia.org/wiki/Logistic_function
         // x0: centre
         // k: steepness
@@ -70,6 +76,7 @@
 
     real bound(real x, real min_value, real max_value)
     {
+        // Returns x with minimum/maximum boundaries applied.
         // We should simply be able to do this:
         //     return max(min_value, min(x, max_value));
         // ... but Stan doesn't have max(real, real) or
@@ -134,6 +141,7 @@
          real
          real[]  // one-dimensional array
          real[,]  // two-dimensional array
+         real[,,]  // three-dimensional array
          vector  // vector, similar to a one-dimensional array.
          matrix  // matrix, similar to a two-dimensional array.
     See p297 of the 2017 Stan manual, and also p319.
@@ -147,7 +155,7 @@
     - For something with two distribution parameters, like the normal
       distribution and many others, that means that we have 3*3*3 combinations
       for each thing. Urgh. Stan should allow user overloading ;).
-    - Let's do it and define "R", "A", "2", "V" for the parameters
+    - Let's do it and define "R", "A", "2", "3", "V" for the parameters
     - Except we won't be returning R unless it's RRR!
     - Last thing cycles fastest.
     So:
@@ -164,6 +172,9 @@
         AVV
 
         2RR
+            ...
+            
+        3RR
             ...
 
         VRA
@@ -209,6 +220,8 @@
 
     Now:
         num_elements() gives the total, in this case N_A * N_B;
+            ... but when *accessing* a 2D array, my_array[1] gives the first 
+                row, not the first element; see Stan 2017 manual p323.
         size() gives the size of first dimension, in this case N_A;
         dims() gives all dimensions, in this case an int[] containing {N_A, N_B}.
 
@@ -247,12 +260,23 @@
     void enforceLowerBound_2_lp(real[,] y, real lower)
     {
         int dimensions[2] = dims(y);
-        int nrows = dimensions[1];
-        int ncols = dimensions[2];
-        for (i in 1:nrows) {
-            for (j in 1:ncols) {
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
                 if (y[i, j] < lower) {
                     target += negative_infinity();
+                }
+            }
+        }
+    }
+    void enforceLowerBound_3_lp(real[,,] y, real lower)
+    {
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    if (y[i, j, k] < lower) {
+                        target += negative_infinity();
+                    }
                 }
             }
         }
@@ -287,12 +311,23 @@
     void enforceUpperBound_2_lp(real[,] y, real upper)
     {
         int dimensions[2] = dims(y);
-        int nrows = dimensions[1];
-        int ncols = dimensions[2];
-        for (i in 1:nrows) {
-            for (j in 1:ncols) {
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
                 if (y[i, j] > upper) {
                     target += negative_infinity();
+                }
+            }
+        }
+    }
+    void enforceUpperBound_3_lp(real[,,] y, real upper)
+    {
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    if (y[i, j, k] > upper) {
+                        target += negative_infinity();
+                    }
                 }
             }
         }
@@ -319,7 +354,8 @@
     {
         int length = num_elements(y);
         for (i in 1:length) {
-            if (y[i] < lower || y[i] > upper) {
+            real value = y[i];  // lookup only once
+            if (value < lower || value > upper) {
                 target += negative_infinity();
             }
         }
@@ -327,12 +363,25 @@
     void enforceRangeBounds_2_lp(real[,] y, real lower, real upper)
     {
         int dimensions[2] = dims(y);
-        int nrows = dimensions[1];
-        int ncols = dimensions[2];
-        for (i in 1:nrows) {
-            for (j in 1:ncols) {
-                if (y[i, j] < lower || y[i, j] > upper) {
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                real value = y[i, j];  // lookup only once
+                if (value < lower || value > upper) {
                     target += negative_infinity();
+                }
+            }
+        }
+    }
+    void enforceRangeBounds_3_lp(real[,,] y, real lower, real upper)
+    {
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    real value = y[i, j, k];  // lookup only once
+                    if (value < lower || value > upper) {
+                        target += negative_infinity();
+                    }
                 }
             }
         }
@@ -341,7 +390,8 @@
     {
         int length = num_elements(y);
         for (i in 1:length) {
-            if (y[i] < lower || y[i] > upper) {
+            real value = y[i];  // lookup only once
+            if (value < lower || value > upper) {
                 target += negative_infinity();
             }
         }
@@ -366,51 +416,24 @@
         target += normal_lpdf(y | mu, sigma);
     }
     
-    void sampleNormal_ARA_lp(real[] y, real mu, real[] sigma)
-    {
-        target += normal_lpdf(y | mu, sigma);
-    }
-    
-    void sampleNormal_ARV_lp(real[] y, real mu, vector sigma)
-    {
-        target += normal_lpdf(y | mu, sigma);
-    }
-    
-    void sampleNormal_AAR_lp(real[] y, real[] mu, real sigma)
-    {
-        target += normal_lpdf(y | mu, sigma);
-    }
-    
-    void sampleNormal_AAA_lp(real[] y, real[] mu, real[] sigma)
-    {
-        target += normal_lpdf(y | mu, sigma);
-    }
-    
-    void sampleNormal_AAV_lp(real[] y, real[] mu, vector sigma)
-    {
-        target += normal_lpdf(y | mu, sigma);
-    }
-    
-    void sampleNormal_AVR_lp(real[] y, vector mu, real sigma)
-    {
-        target += normal_lpdf(y | mu, sigma);
-    }
-    
-    void sampleNormal_AVA_lp(real[] y, vector mu, real[] sigma)
-    {
-        target += normal_lpdf(y | mu, sigma);
-    }
-    
-    void sampleNormal_AVV_lp(real[] y, vector mu, vector sigma)
-    {
-        target += normal_lpdf(y | mu, sigma);
-    }
-    
     void sampleNormal_2RR_lp(real[,] y, real mu, real sigma)
     {
         int nrows = size(y);
         for (i in 1:nrows) {
             target += normal_lpdf(y[i] | mu, sigma);
+            // ... y[i] is a one-dimensional array
+        }
+    }
+    
+    void sampleNormal_3RR_lp(real[,,] y, real mu, real sigma)
+    {
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += normal_lpdf(y[i, j, k] | mu, sigma);
+                }
+            }
         }
     }
     
@@ -419,189 +442,57 @@
         target += normal_lpdf(y | mu, sigma);
     }
     
-    void sampleNormal_VRA_lp(vector y, real mu, real[] sigma)
-    {
-        target += normal_lpdf(y | mu, sigma);
-    }
-    
-    void sampleNormal_VRV_lp(vector y, real mu, vector sigma)
-    {
-        target += normal_lpdf(y | mu, sigma);
-    }
-    
-    void sampleNormal_VAR_lp(vector y, real[] mu, real sigma)
-    {
-        target += normal_lpdf(y | mu, sigma);
-    }
-    
-    void sampleNormal_VAA_lp(vector y, real[] mu, real[] sigma)
-    {
-        target += normal_lpdf(y | mu, sigma);
-    }
-    
-    void sampleNormal_VAV_lp(vector y, real[] mu, vector sigma)
-    {
-        target += normal_lpdf(y | mu, sigma);
-    }
-    
-    void sampleNormal_VVR_lp(vector y, vector mu, real sigma)
-    {
-        target += normal_lpdf(y | mu, sigma);
-    }
-    
-    void sampleNormal_VVA_lp(vector y, vector mu, real[] sigma)
-    {
-        target += normal_lpdf(y | mu, sigma);
-    }
-    
-    void sampleNormal_VVV_lp(vector y, vector mu, vector sigma)
-    {
-        target += normal_lpdf(y | mu, sigma);
-    }
-    
     // Sampling with lower bound
     
     void sampleNormalLowerBound_RRR_lp(real y, real mu, real sigma, real lower)
     {
+        real correction_per_value = normal_lccdf(lower | mu, sigma);
         target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
+                  correction_per_value;
         enforceLowerBound_R_lp(y, lower);
     }
     
     void sampleNormalLowerBound_ARR_lp(real[] y, real mu, real sigma, real lower)
     {
+        real correction_per_value = normal_lccdf(lower | mu, sigma);
         target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleNormalLowerBound_ARA_lp(real[] y, real mu, real[] sigma, real lower)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleNormalLowerBound_ARV_lp(real[] y, real mu, vector sigma, real lower)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleNormalLowerBound_AAR_lp(real[] y, real[] mu, real sigma, real lower)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleNormalLowerBound_AAA_lp(real[] y, real[] mu, real[] sigma, real lower)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleNormalLowerBound_AAV_lp(real[] y, real[] mu, vector sigma, real lower)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleNormalLowerBound_AVR_lp(real[] y, vector mu, real sigma, real lower)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleNormalLowerBound_AVA_lp(real[] y, vector mu, real[] sigma, real lower)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleNormalLowerBound_AVV_lp(real[] y, vector mu, vector sigma, real lower)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
+                  correction_per_value * num_elements(y);
         enforceLowerBound_A_lp(y, lower);
     }
     
     void sampleNormalLowerBound_2RR_lp(real[,] y, real mu, real sigma, real lower)
     {
-        int nrows = size(y);
-        real correction = normal_lccdf(lower | mu, sigma);
-        for (i in 1:nrows) {
+        real correction_per_value = normal_lccdf(lower | mu, sigma);
+        int dimensions[2] = dims(y);
+        real correction_per_row = correction_per_value * dimensions[2];
+        for (i in 1:dimensions[1]) {
             target += normal_lpdf(y[i] | mu, sigma) -
-                      correction;
+                      correction_per_row;
+            // ... y[i] is a one-dimensional array
         }
         enforceLowerBound_2_lp(y, lower);
     }
     
+    void sampleNormalLowerBound_3RR_lp(real[,,] y, real mu, real sigma, real lower)
+    {
+        real correction_per_value = normal_lccdf(lower | mu, sigma);
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += normal_lpdf(y[i, j, k] | mu, sigma) -
+                              correction_per_value;
+                }
+            }
+        }
+        enforceLowerBound_3_lp(y, lower);
+    }
+    
     void sampleNormalLowerBound_VRR_lp(vector y, real mu, real sigma, real lower)
     {
+        real correction_per_value = normal_lccdf(lower | mu, sigma);
         target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleNormalLowerBound_VRA_lp(vector y, real mu, real[] sigma, real lower)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleNormalLowerBound_VRV_lp(vector y, real mu, vector sigma, real lower)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleNormalLowerBound_VAR_lp(vector y, real[] mu, real sigma, real lower)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleNormalLowerBound_VAA_lp(vector y, real[] mu, real[] sigma, real lower)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleNormalLowerBound_VAV_lp(vector y, real[] mu, vector sigma, real lower)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleNormalLowerBound_VVR_lp(vector y, vector mu, real sigma, real lower)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleNormalLowerBound_VVA_lp(vector y, vector mu, real[] sigma, real lower)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleNormalLowerBound_VVV_lp(vector y, vector mu, vector sigma, real lower)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lccdf(lower | mu, sigma);
+                  correction_per_value * num_elements(y);
         enforceLowerBound_V_lp(y, lower);
     }
     
@@ -609,145 +500,53 @@
     
     void sampleNormalUpperBound_RRR_lp(real y, real mu, real sigma, real upper)
     {
+        real correction_per_value = normal_lcdf(upper | mu, sigma);
         target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
+                  correction_per_value;
         enforceUpperBound_R_lp(y, upper);
     }
     
     void sampleNormalUpperBound_ARR_lp(real[] y, real mu, real sigma, real upper)
     {
+        real correction_per_value = normal_lcdf(upper | mu, sigma);
         target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleNormalUpperBound_ARA_lp(real[] y, real mu, real[] sigma, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleNormalUpperBound_ARV_lp(real[] y, real mu, vector sigma, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleNormalUpperBound_AAR_lp(real[] y, real[] mu, real sigma, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleNormalUpperBound_AAA_lp(real[] y, real[] mu, real[] sigma, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleNormalUpperBound_AAV_lp(real[] y, real[] mu, vector sigma, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleNormalUpperBound_AVR_lp(real[] y, vector mu, real sigma, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleNormalUpperBound_AVA_lp(real[] y, vector mu, real[] sigma, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleNormalUpperBound_AVV_lp(real[] y, vector mu, vector sigma, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
+                  correction_per_value * num_elements(y);
         enforceUpperBound_A_lp(y, upper);
     }
     
     void sampleNormalUpperBound_2RR_lp(real[,] y, real mu, real sigma, real upper)
     {
-        int nrows = size(y);
-        real correction = normal_lcdf(upper | mu, sigma);
-        for (i in 1:nrows) {
+        real correction_per_value = normal_lcdf(upper | mu, sigma);
+        int dimensions[2] = dims(y);
+        real correction_per_row = correction_per_value * dimensions[2];
+        for (i in 1:dimensions[1]) {
             target += normal_lpdf(y[i] | mu, sigma) -
-                      correction;
+                      correction_per_row;
+            // ... y[i] is a one-dimensional array
         }
         enforceUpperBound_2_lp(y, upper);
     }
     
+    void sampleNormalUpperBound_3RR_lp(real[,,] y, real mu, real sigma, real upper)
+    {
+        real correction_per_value = normal_lcdf(upper | mu, sigma);
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += normal_lpdf(y[i, j, k] | mu, sigma) -
+                              correction_per_value;
+                }
+            }
+        }
+        enforceUpperBound_3_lp(y, upper);
+    }
+    
     void sampleNormalUpperBound_VRR_lp(vector y, real mu, real sigma, real upper)
     {
+        real correction_per_value = normal_lcdf(upper | mu, sigma);
         target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleNormalUpperBound_VRA_lp(vector y, real mu, real[] sigma, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleNormalUpperBound_VRV_lp(vector y, real mu, vector sigma, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleNormalUpperBound_VAR_lp(vector y, real[] mu, real sigma, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleNormalUpperBound_VAA_lp(vector y, real[] mu, real[] sigma, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleNormalUpperBound_VAV_lp(vector y, real[] mu, vector sigma, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleNormalUpperBound_VVR_lp(vector y, vector mu, real sigma, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleNormalUpperBound_VVA_lp(vector y, vector mu, real[] sigma, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleNormalUpperBound_VVV_lp(vector y, vector mu, vector sigma, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  normal_lcdf(upper | mu, sigma);
+                  correction_per_value * num_elements(y);
         enforceUpperBound_V_lp(y, upper);
     }
     
@@ -755,165 +554,63 @@
     
     void sampleNormalRangeBound_RRR_lp(real y, real mu, real sigma, real lower, real upper)
     {
+        real correction_per_value = log_diff_exp(
+            normal_lcdf(upper | mu, sigma),
+            normal_lcdf(lower | mu, sigma));
         target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
+                  correction_per_value;
         enforceRangeBounds_R_lp(y, lower, upper);
     }
     
     void sampleNormalRangeBound_ARR_lp(real[] y, real mu, real sigma, real lower, real upper)
     {
+        real correction_per_value = log_diff_exp(
+            normal_lcdf(upper | mu, sigma),
+            normal_lcdf(lower | mu, sigma));
         target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleNormalRangeBound_ARA_lp(real[] y, real mu, real[] sigma, real lower, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleNormalRangeBound_ARV_lp(real[] y, real mu, vector sigma, real lower, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleNormalRangeBound_AAR_lp(real[] y, real[] mu, real sigma, real lower, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleNormalRangeBound_AAA_lp(real[] y, real[] mu, real[] sigma, real lower, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleNormalRangeBound_AAV_lp(real[] y, real[] mu, vector sigma, real lower, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleNormalRangeBound_AVR_lp(real[] y, vector mu, real sigma, real lower, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleNormalRangeBound_AVA_lp(real[] y, vector mu, real[] sigma, real lower, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleNormalRangeBound_AVV_lp(real[] y, vector mu, vector sigma, real lower, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
+                  correction_per_value * num_elements(y);
         enforceRangeBounds_A_lp(y, lower, upper);
     }
     
     void sampleNormalRangeBound_2RR_lp(real[,] y, real mu, real sigma, real lower, real upper)
     {
-        int nrows = size(y);
-        real correction = log_diff_exp(normal_lcdf(upper | mu, sigma),
-                                       normal_lcdf(lower | mu, sigma));
-        for (i in 1:nrows) {
+        real correction_per_value = log_diff_exp(
+            normal_lcdf(upper | mu, sigma),
+            normal_lcdf(lower | mu, sigma));
+        int dimensions[2] = dims(y);
+        real correction_per_row = correction_per_value * dimensions[2];
+        for (i in 1:dimensions[1]) {
             target += normal_lpdf(y[i] | mu, sigma) -
-                      correction;
+                      correction_per_row;
+            // ... y[i] is a one-dimensional array
         }
         enforceRangeBounds_2_lp(y, lower, upper);
     }
     
+    void sampleNormalRangeBound_3RR_lp(real[,,] y, real mu, real sigma, real lower, real upper)
+    {
+        real correction_per_value = log_diff_exp(
+            normal_lcdf(upper | mu, sigma),
+            normal_lcdf(lower | mu, sigma));
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += normal_lpdf(y[i, j, k] | mu, sigma) -
+                              correction_per_value;
+                }
+            }
+        }
+        enforceRangeBounds_3_lp(y, lower, upper);
+    }
+    
     void sampleNormalRangeBound_VRR_lp(vector y, real mu, real sigma, real lower, real upper)
     {
+        real correction_per_value = log_diff_exp(
+            normal_lcdf(upper | mu, sigma),
+            normal_lcdf(lower | mu, sigma));
         target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleNormalRangeBound_VRA_lp(vector y, real mu, real[] sigma, real lower, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleNormalRangeBound_VRV_lp(vector y, real mu, vector sigma, real lower, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleNormalRangeBound_VAR_lp(vector y, real[] mu, real sigma, real lower, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleNormalRangeBound_VAA_lp(vector y, real[] mu, real[] sigma, real lower, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleNormalRangeBound_VAV_lp(vector y, real[] mu, vector sigma, real lower, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleNormalRangeBound_VVR_lp(vector y, vector mu, real sigma, real lower, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleNormalRangeBound_VVA_lp(vector y, vector mu, real[] sigma, real lower, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleNormalRangeBound_VVV_lp(vector y, vector mu, vector sigma, real lower, real upper)
-    {
-        target += normal_lpdf(y | mu, sigma) -
-                  log_diff_exp(normal_lcdf(upper | mu, sigma),
-                               normal_lcdf(lower | mu, sigma));
+                  correction_per_value * num_elements(y);
         enforceRangeBounds_V_lp(y, lower, upper);
     }
     
@@ -934,51 +631,24 @@
         target += cauchy_lpdf(y | mu, sigma);
     }
     
-    void sampleCauchy_ARA_lp(real[] y, real mu, real[] sigma)
-    {
-        target += cauchy_lpdf(y | mu, sigma);
-    }
-    
-    void sampleCauchy_ARV_lp(real[] y, real mu, vector sigma)
-    {
-        target += cauchy_lpdf(y | mu, sigma);
-    }
-    
-    void sampleCauchy_AAR_lp(real[] y, real[] mu, real sigma)
-    {
-        target += cauchy_lpdf(y | mu, sigma);
-    }
-    
-    void sampleCauchy_AAA_lp(real[] y, real[] mu, real[] sigma)
-    {
-        target += cauchy_lpdf(y | mu, sigma);
-    }
-    
-    void sampleCauchy_AAV_lp(real[] y, real[] mu, vector sigma)
-    {
-        target += cauchy_lpdf(y | mu, sigma);
-    }
-    
-    void sampleCauchy_AVR_lp(real[] y, vector mu, real sigma)
-    {
-        target += cauchy_lpdf(y | mu, sigma);
-    }
-    
-    void sampleCauchy_AVA_lp(real[] y, vector mu, real[] sigma)
-    {
-        target += cauchy_lpdf(y | mu, sigma);
-    }
-    
-    void sampleCauchy_AVV_lp(real[] y, vector mu, vector sigma)
-    {
-        target += cauchy_lpdf(y | mu, sigma);
-    }
-    
     void sampleCauchy_2RR_lp(real[,] y, real mu, real sigma)
     {
         int nrows = size(y);
         for (i in 1:nrows) {
             target += cauchy_lpdf(y[i] | mu, sigma);
+            // ... y[i] is a one-dimensional array
+        }
+    }
+    
+    void sampleCauchy_3RR_lp(real[,,] y, real mu, real sigma)
+    {
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += cauchy_lpdf(y[i, j, k] | mu, sigma);
+                }
+            }
         }
     }
     
@@ -987,189 +657,57 @@
         target += cauchy_lpdf(y | mu, sigma);
     }
     
-    void sampleCauchy_VRA_lp(vector y, real mu, real[] sigma)
-    {
-        target += cauchy_lpdf(y | mu, sigma);
-    }
-    
-    void sampleCauchy_VRV_lp(vector y, real mu, vector sigma)
-    {
-        target += cauchy_lpdf(y | mu, sigma);
-    }
-    
-    void sampleCauchy_VAR_lp(vector y, real[] mu, real sigma)
-    {
-        target += cauchy_lpdf(y | mu, sigma);
-    }
-    
-    void sampleCauchy_VAA_lp(vector y, real[] mu, real[] sigma)
-    {
-        target += cauchy_lpdf(y | mu, sigma);
-    }
-    
-    void sampleCauchy_VAV_lp(vector y, real[] mu, vector sigma)
-    {
-        target += cauchy_lpdf(y | mu, sigma);
-    }
-    
-    void sampleCauchy_VVR_lp(vector y, vector mu, real sigma)
-    {
-        target += cauchy_lpdf(y | mu, sigma);
-    }
-    
-    void sampleCauchy_VVA_lp(vector y, vector mu, real[] sigma)
-    {
-        target += cauchy_lpdf(y | mu, sigma);
-    }
-    
-    void sampleCauchy_VVV_lp(vector y, vector mu, vector sigma)
-    {
-        target += cauchy_lpdf(y | mu, sigma);
-    }
-    
     // Sampling with lower bound
     
     void sampleCauchyLowerBound_RRR_lp(real y, real mu, real sigma, real lower)
     {
+        real correction_per_value = cauchy_lccdf(lower | mu, sigma);
         target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
+                  correction_per_value;
         enforceLowerBound_R_lp(y, lower);
     }
     
     void sampleCauchyLowerBound_ARR_lp(real[] y, real mu, real sigma, real lower)
     {
+        real correction_per_value = cauchy_lccdf(lower | mu, sigma);
         target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleCauchyLowerBound_ARA_lp(real[] y, real mu, real[] sigma, real lower)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleCauchyLowerBound_ARV_lp(real[] y, real mu, vector sigma, real lower)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleCauchyLowerBound_AAR_lp(real[] y, real[] mu, real sigma, real lower)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleCauchyLowerBound_AAA_lp(real[] y, real[] mu, real[] sigma, real lower)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleCauchyLowerBound_AAV_lp(real[] y, real[] mu, vector sigma, real lower)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleCauchyLowerBound_AVR_lp(real[] y, vector mu, real sigma, real lower)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleCauchyLowerBound_AVA_lp(real[] y, vector mu, real[] sigma, real lower)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleCauchyLowerBound_AVV_lp(real[] y, vector mu, vector sigma, real lower)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
+                  correction_per_value * num_elements(y);
         enforceLowerBound_A_lp(y, lower);
     }
     
     void sampleCauchyLowerBound_2RR_lp(real[,] y, real mu, real sigma, real lower)
     {
-        int nrows = size(y);
-        real correction = cauchy_lccdf(lower | mu, sigma);
-        for (i in 1:nrows) {
+        real correction_per_value = cauchy_lccdf(lower | mu, sigma);
+        int dimensions[2] = dims(y);
+        real correction_per_row = correction_per_value * dimensions[2];
+        for (i in 1:dimensions[1]) {
             target += cauchy_lpdf(y[i] | mu, sigma) -
-                      correction;
+                      correction_per_row;
+            // ... y[i] is a one-dimensional array
         }
         enforceLowerBound_2_lp(y, lower);
     }
     
+    void sampleCauchyLowerBound_3RR_lp(real[,,] y, real mu, real sigma, real lower)
+    {
+        real correction_per_value = cauchy_lccdf(lower | mu, sigma);
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += cauchy_lpdf(y[i, j, k] | mu, sigma) -
+                              correction_per_value;
+                }
+            }
+        }
+        enforceLowerBound_3_lp(y, lower);
+    }
+    
     void sampleCauchyLowerBound_VRR_lp(vector y, real mu, real sigma, real lower)
     {
+        real correction_per_value = cauchy_lccdf(lower | mu, sigma);
         target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleCauchyLowerBound_VRA_lp(vector y, real mu, real[] sigma, real lower)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleCauchyLowerBound_VRV_lp(vector y, real mu, vector sigma, real lower)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleCauchyLowerBound_VAR_lp(vector y, real[] mu, real sigma, real lower)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleCauchyLowerBound_VAA_lp(vector y, real[] mu, real[] sigma, real lower)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleCauchyLowerBound_VAV_lp(vector y, real[] mu, vector sigma, real lower)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleCauchyLowerBound_VVR_lp(vector y, vector mu, real sigma, real lower)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleCauchyLowerBound_VVA_lp(vector y, vector mu, real[] sigma, real lower)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleCauchyLowerBound_VVV_lp(vector y, vector mu, vector sigma, real lower)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lccdf(lower | mu, sigma);
+                  correction_per_value * num_elements(y);
         enforceLowerBound_V_lp(y, lower);
     }
     
@@ -1177,145 +715,53 @@
     
     void sampleCauchyUpperBound_RRR_lp(real y, real mu, real sigma, real upper)
     {
+        real correction_per_value = cauchy_lcdf(upper | mu, sigma);
         target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
+                  correction_per_value;
         enforceUpperBound_R_lp(y, upper);
     }
     
     void sampleCauchyUpperBound_ARR_lp(real[] y, real mu, real sigma, real upper)
     {
+        real correction_per_value = cauchy_lcdf(upper | mu, sigma);
         target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleCauchyUpperBound_ARA_lp(real[] y, real mu, real[] sigma, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleCauchyUpperBound_ARV_lp(real[] y, real mu, vector sigma, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleCauchyUpperBound_AAR_lp(real[] y, real[] mu, real sigma, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleCauchyUpperBound_AAA_lp(real[] y, real[] mu, real[] sigma, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleCauchyUpperBound_AAV_lp(real[] y, real[] mu, vector sigma, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleCauchyUpperBound_AVR_lp(real[] y, vector mu, real sigma, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleCauchyUpperBound_AVA_lp(real[] y, vector mu, real[] sigma, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleCauchyUpperBound_AVV_lp(real[] y, vector mu, vector sigma, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
+                  correction_per_value * num_elements(y);
         enforceUpperBound_A_lp(y, upper);
     }
     
     void sampleCauchyUpperBound_2RR_lp(real[,] y, real mu, real sigma, real upper)
     {
-        int nrows = size(y);
-        real correction = cauchy_lcdf(upper | mu, sigma);
-        for (i in 1:nrows) {
+        real correction_per_value = cauchy_lcdf(upper | mu, sigma);
+        int dimensions[2] = dims(y);
+        real correction_per_row = correction_per_value * dimensions[2];
+        for (i in 1:dimensions[1]) {
             target += cauchy_lpdf(y[i] | mu, sigma) -
-                      correction;
+                      correction_per_row;
+            // ... y[i] is a one-dimensional array
         }
         enforceUpperBound_2_lp(y, upper);
     }
     
+    void sampleCauchyUpperBound_3RR_lp(real[,,] y, real mu, real sigma, real upper)
+    {
+        real correction_per_value = cauchy_lcdf(upper | mu, sigma);
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += cauchy_lpdf(y[i, j, k] | mu, sigma) -
+                              correction_per_value;
+                }
+            }
+        }
+        enforceUpperBound_3_lp(y, upper);
+    }
+    
     void sampleCauchyUpperBound_VRR_lp(vector y, real mu, real sigma, real upper)
     {
+        real correction_per_value = cauchy_lcdf(upper | mu, sigma);
         target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleCauchyUpperBound_VRA_lp(vector y, real mu, real[] sigma, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleCauchyUpperBound_VRV_lp(vector y, real mu, vector sigma, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleCauchyUpperBound_VAR_lp(vector y, real[] mu, real sigma, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleCauchyUpperBound_VAA_lp(vector y, real[] mu, real[] sigma, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleCauchyUpperBound_VAV_lp(vector y, real[] mu, vector sigma, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleCauchyUpperBound_VVR_lp(vector y, vector mu, real sigma, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleCauchyUpperBound_VVA_lp(vector y, vector mu, real[] sigma, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleCauchyUpperBound_VVV_lp(vector y, vector mu, vector sigma, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  cauchy_lcdf(upper | mu, sigma);
+                  correction_per_value * num_elements(y);
         enforceUpperBound_V_lp(y, upper);
     }
     
@@ -1323,165 +769,63 @@
     
     void sampleCauchyRangeBound_RRR_lp(real y, real mu, real sigma, real lower, real upper)
     {
+        real correction_per_value = log_diff_exp(
+            cauchy_lcdf(upper | mu, sigma),
+            cauchy_lcdf(lower | mu, sigma));
         target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
+                  correction_per_value;
         enforceRangeBounds_R_lp(y, lower, upper);
     }
     
     void sampleCauchyRangeBound_ARR_lp(real[] y, real mu, real sigma, real lower, real upper)
     {
+        real correction_per_value = log_diff_exp(
+            cauchy_lcdf(upper | mu, sigma),
+            cauchy_lcdf(lower | mu, sigma));
         target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleCauchyRangeBound_ARA_lp(real[] y, real mu, real[] sigma, real lower, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleCauchyRangeBound_ARV_lp(real[] y, real mu, vector sigma, real lower, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleCauchyRangeBound_AAR_lp(real[] y, real[] mu, real sigma, real lower, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleCauchyRangeBound_AAA_lp(real[] y, real[] mu, real[] sigma, real lower, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleCauchyRangeBound_AAV_lp(real[] y, real[] mu, vector sigma, real lower, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleCauchyRangeBound_AVR_lp(real[] y, vector mu, real sigma, real lower, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleCauchyRangeBound_AVA_lp(real[] y, vector mu, real[] sigma, real lower, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleCauchyRangeBound_AVV_lp(real[] y, vector mu, vector sigma, real lower, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
+                  correction_per_value * num_elements(y);
         enforceRangeBounds_A_lp(y, lower, upper);
     }
     
     void sampleCauchyRangeBound_2RR_lp(real[,] y, real mu, real sigma, real lower, real upper)
     {
-        int nrows = size(y);
-        real correction = log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                                       cauchy_lcdf(lower | mu, sigma));
-        for (i in 1:nrows) {
+        real correction_per_value = log_diff_exp(
+            cauchy_lcdf(upper | mu, sigma),
+            cauchy_lcdf(lower | mu, sigma));
+        int dimensions[2] = dims(y);
+        real correction_per_row = correction_per_value * dimensions[2];
+        for (i in 1:dimensions[1]) {
             target += cauchy_lpdf(y[i] | mu, sigma) -
-                      correction;
+                      correction_per_row;
+            // ... y[i] is a one-dimensional array
         }
         enforceRangeBounds_2_lp(y, lower, upper);
     }
     
+    void sampleCauchyRangeBound_3RR_lp(real[,,] y, real mu, real sigma, real lower, real upper)
+    {
+        real correction_per_value = log_diff_exp(
+            cauchy_lcdf(upper | mu, sigma),
+            cauchy_lcdf(lower | mu, sigma));
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += cauchy_lpdf(y[i, j, k] | mu, sigma) -
+                              correction_per_value;
+                }
+            }
+        }
+        enforceRangeBounds_3_lp(y, lower, upper);
+    }
+    
     void sampleCauchyRangeBound_VRR_lp(vector y, real mu, real sigma, real lower, real upper)
     {
+        real correction_per_value = log_diff_exp(
+            cauchy_lcdf(upper | mu, sigma),
+            cauchy_lcdf(lower | mu, sigma));
         target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleCauchyRangeBound_VRA_lp(vector y, real mu, real[] sigma, real lower, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleCauchyRangeBound_VRV_lp(vector y, real mu, vector sigma, real lower, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleCauchyRangeBound_VAR_lp(vector y, real[] mu, real sigma, real lower, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleCauchyRangeBound_VAA_lp(vector y, real[] mu, real[] sigma, real lower, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleCauchyRangeBound_VAV_lp(vector y, real[] mu, vector sigma, real lower, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleCauchyRangeBound_VVR_lp(vector y, vector mu, real sigma, real lower, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleCauchyRangeBound_VVA_lp(vector y, vector mu, real[] sigma, real lower, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleCauchyRangeBound_VVV_lp(vector y, vector mu, vector sigma, real lower, real upper)
-    {
-        target += cauchy_lpdf(y | mu, sigma) -
-                  log_diff_exp(cauchy_lcdf(upper | mu, sigma),
-                               cauchy_lcdf(lower | mu, sigma));
+                  correction_per_value * num_elements(y);
         enforceRangeBounds_V_lp(y, lower, upper);
     }
     
@@ -1504,51 +848,24 @@
         target += beta_lpdf(y | alpha, beta);
     }
     
-    void sampleBeta_ARA_lp(real[] y, real alpha, real[] beta)
-    {
-        target += beta_lpdf(y | alpha, beta);
-    }
-    
-    void sampleBeta_ARV_lp(real[] y, real alpha, vector beta)
-    {
-        target += beta_lpdf(y | alpha, beta);
-    }
-    
-    void sampleBeta_AAR_lp(real[] y, real[] alpha, real beta)
-    {
-        target += beta_lpdf(y | alpha, beta);
-    }
-    
-    void sampleBeta_AAA_lp(real[] y, real[] alpha, real[] beta)
-    {
-        target += beta_lpdf(y | alpha, beta);
-    }
-    
-    void sampleBeta_AAV_lp(real[] y, real[] alpha, vector beta)
-    {
-        target += beta_lpdf(y | alpha, beta);
-    }
-    
-    void sampleBeta_AVR_lp(real[] y, vector alpha, real beta)
-    {
-        target += beta_lpdf(y | alpha, beta);
-    }
-    
-    void sampleBeta_AVA_lp(real[] y, vector alpha, real[] beta)
-    {
-        target += beta_lpdf(y | alpha, beta);
-    }
-    
-    void sampleBeta_AVV_lp(real[] y, vector alpha, vector beta)
-    {
-        target += beta_lpdf(y | alpha, beta);
-    }
-    
     void sampleBeta_2RR_lp(real[,] y, real alpha, real beta)
     {
         int nrows = size(y);
         for (i in 1:nrows) {
             target += beta_lpdf(y[i] | alpha, beta);
+            // ... y[i] is a one-dimensional array
+        }
+    }
+    
+    void sampleBeta_3RR_lp(real[,,] y, real alpha, real beta)
+    {
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += beta_lpdf(y[i, j, k] | alpha, beta);
+                }
+            }
         }
     }
     
@@ -1557,189 +874,57 @@
         target += beta_lpdf(y | alpha, beta);
     }
     
-    void sampleBeta_VRA_lp(vector y, real alpha, real[] beta)
-    {
-        target += beta_lpdf(y | alpha, beta);
-    }
-    
-    void sampleBeta_VRV_lp(vector y, real alpha, vector beta)
-    {
-        target += beta_lpdf(y | alpha, beta);
-    }
-    
-    void sampleBeta_VAR_lp(vector y, real[] alpha, real beta)
-    {
-        target += beta_lpdf(y | alpha, beta);
-    }
-    
-    void sampleBeta_VAA_lp(vector y, real[] alpha, real[] beta)
-    {
-        target += beta_lpdf(y | alpha, beta);
-    }
-    
-    void sampleBeta_VAV_lp(vector y, real[] alpha, vector beta)
-    {
-        target += beta_lpdf(y | alpha, beta);
-    }
-    
-    void sampleBeta_VVR_lp(vector y, vector alpha, real beta)
-    {
-        target += beta_lpdf(y | alpha, beta);
-    }
-    
-    void sampleBeta_VVA_lp(vector y, vector alpha, real[] beta)
-    {
-        target += beta_lpdf(y | alpha, beta);
-    }
-    
-    void sampleBeta_VVV_lp(vector y, vector alpha, vector beta)
-    {
-        target += beta_lpdf(y | alpha, beta);
-    }
-    
     // Sampling with lower bound
     
     void sampleBetaLowerBound_RRR_lp(real y, real alpha, real beta, real lower)
     {
+        real correction_per_value = beta_lccdf(lower | alpha, beta);
         target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
+                  correction_per_value;
         enforceLowerBound_R_lp(y, lower);
     }
     
     void sampleBetaLowerBound_ARR_lp(real[] y, real alpha, real beta, real lower)
     {
+        real correction_per_value = beta_lccdf(lower | alpha, beta);
         target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleBetaLowerBound_ARA_lp(real[] y, real alpha, real[] beta, real lower)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleBetaLowerBound_ARV_lp(real[] y, real alpha, vector beta, real lower)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleBetaLowerBound_AAR_lp(real[] y, real[] alpha, real beta, real lower)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleBetaLowerBound_AAA_lp(real[] y, real[] alpha, real[] beta, real lower)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleBetaLowerBound_AAV_lp(real[] y, real[] alpha, vector beta, real lower)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleBetaLowerBound_AVR_lp(real[] y, vector alpha, real beta, real lower)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleBetaLowerBound_AVA_lp(real[] y, vector alpha, real[] beta, real lower)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleBetaLowerBound_AVV_lp(real[] y, vector alpha, vector beta, real lower)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
+                  correction_per_value * num_elements(y);
         enforceLowerBound_A_lp(y, lower);
     }
     
     void sampleBetaLowerBound_2RR_lp(real[,] y, real alpha, real beta, real lower)
     {
-        int nrows = size(y);
-        real correction = beta_lccdf(lower | alpha, beta);
-        for (i in 1:nrows) {
+        real correction_per_value = beta_lccdf(lower | alpha, beta);
+        int dimensions[2] = dims(y);
+        real correction_per_row = correction_per_value * dimensions[2];
+        for (i in 1:dimensions[1]) {
             target += beta_lpdf(y[i] | alpha, beta) -
-                      correction;
+                      correction_per_row;
+            // ... y[i] is a one-dimensional array
         }
         enforceLowerBound_2_lp(y, lower);
     }
     
+    void sampleBetaLowerBound_3RR_lp(real[,,] y, real alpha, real beta, real lower)
+    {
+        real correction_per_value = beta_lccdf(lower | alpha, beta);
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += beta_lpdf(y[i, j, k] | alpha, beta) -
+                              correction_per_value;
+                }
+            }
+        }
+        enforceLowerBound_3_lp(y, lower);
+    }
+    
     void sampleBetaLowerBound_VRR_lp(vector y, real alpha, real beta, real lower)
     {
+        real correction_per_value = beta_lccdf(lower | alpha, beta);
         target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleBetaLowerBound_VRA_lp(vector y, real alpha, real[] beta, real lower)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleBetaLowerBound_VRV_lp(vector y, real alpha, vector beta, real lower)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleBetaLowerBound_VAR_lp(vector y, real[] alpha, real beta, real lower)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleBetaLowerBound_VAA_lp(vector y, real[] alpha, real[] beta, real lower)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleBetaLowerBound_VAV_lp(vector y, real[] alpha, vector beta, real lower)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleBetaLowerBound_VVR_lp(vector y, vector alpha, real beta, real lower)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleBetaLowerBound_VVA_lp(vector y, vector alpha, real[] beta, real lower)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleBetaLowerBound_VVV_lp(vector y, vector alpha, vector beta, real lower)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lccdf(lower | alpha, beta);
+                  correction_per_value * num_elements(y);
         enforceLowerBound_V_lp(y, lower);
     }
     
@@ -1747,145 +932,53 @@
     
     void sampleBetaUpperBound_RRR_lp(real y, real alpha, real beta, real upper)
     {
+        real correction_per_value = beta_lcdf(upper | alpha, beta);
         target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
+                  correction_per_value;
         enforceUpperBound_R_lp(y, upper);
     }
     
     void sampleBetaUpperBound_ARR_lp(real[] y, real alpha, real beta, real upper)
     {
+        real correction_per_value = beta_lcdf(upper | alpha, beta);
         target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleBetaUpperBound_ARA_lp(real[] y, real alpha, real[] beta, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleBetaUpperBound_ARV_lp(real[] y, real alpha, vector beta, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleBetaUpperBound_AAR_lp(real[] y, real[] alpha, real beta, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleBetaUpperBound_AAA_lp(real[] y, real[] alpha, real[] beta, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleBetaUpperBound_AAV_lp(real[] y, real[] alpha, vector beta, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleBetaUpperBound_AVR_lp(real[] y, vector alpha, real beta, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleBetaUpperBound_AVA_lp(real[] y, vector alpha, real[] beta, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleBetaUpperBound_AVV_lp(real[] y, vector alpha, vector beta, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
+                  correction_per_value * num_elements(y);
         enforceUpperBound_A_lp(y, upper);
     }
     
     void sampleBetaUpperBound_2RR_lp(real[,] y, real alpha, real beta, real upper)
     {
-        int nrows = size(y);
-        real correction = beta_lcdf(upper | alpha, beta);
-        for (i in 1:nrows) {
+        real correction_per_value = beta_lcdf(upper | alpha, beta);
+        int dimensions[2] = dims(y);
+        real correction_per_row = correction_per_value * dimensions[2];
+        for (i in 1:dimensions[1]) {
             target += beta_lpdf(y[i] | alpha, beta) -
-                      correction;
+                      correction_per_row;
+            // ... y[i] is a one-dimensional array
         }
         enforceUpperBound_2_lp(y, upper);
     }
     
+    void sampleBetaUpperBound_3RR_lp(real[,,] y, real alpha, real beta, real upper)
+    {
+        real correction_per_value = beta_lcdf(upper | alpha, beta);
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += beta_lpdf(y[i, j, k] | alpha, beta) -
+                              correction_per_value;
+                }
+            }
+        }
+        enforceUpperBound_3_lp(y, upper);
+    }
+    
     void sampleBetaUpperBound_VRR_lp(vector y, real alpha, real beta, real upper)
     {
+        real correction_per_value = beta_lcdf(upper | alpha, beta);
         target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleBetaUpperBound_VRA_lp(vector y, real alpha, real[] beta, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleBetaUpperBound_VRV_lp(vector y, real alpha, vector beta, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleBetaUpperBound_VAR_lp(vector y, real[] alpha, real beta, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleBetaUpperBound_VAA_lp(vector y, real[] alpha, real[] beta, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleBetaUpperBound_VAV_lp(vector y, real[] alpha, vector beta, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleBetaUpperBound_VVR_lp(vector y, vector alpha, real beta, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleBetaUpperBound_VVA_lp(vector y, vector alpha, real[] beta, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleBetaUpperBound_VVV_lp(vector y, vector alpha, vector beta, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  beta_lcdf(upper | alpha, beta);
+                  correction_per_value * num_elements(y);
         enforceUpperBound_V_lp(y, upper);
     }
     
@@ -1893,165 +986,63 @@
     
     void sampleBetaRangeBound_RRR_lp(real y, real alpha, real beta, real lower, real upper)
     {
+        real correction_per_value = log_diff_exp(
+            beta_lcdf(upper | alpha, beta),
+            beta_lcdf(lower | alpha, beta));
         target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
+                  correction_per_value;
         enforceRangeBounds_R_lp(y, lower, upper);
     }
     
     void sampleBetaRangeBound_ARR_lp(real[] y, real alpha, real beta, real lower, real upper)
     {
+        real correction_per_value = log_diff_exp(
+            beta_lcdf(upper | alpha, beta),
+            beta_lcdf(lower | alpha, beta));
         target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleBetaRangeBound_ARA_lp(real[] y, real alpha, real[] beta, real lower, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleBetaRangeBound_ARV_lp(real[] y, real alpha, vector beta, real lower, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleBetaRangeBound_AAR_lp(real[] y, real[] alpha, real beta, real lower, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleBetaRangeBound_AAA_lp(real[] y, real[] alpha, real[] beta, real lower, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleBetaRangeBound_AAV_lp(real[] y, real[] alpha, vector beta, real lower, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleBetaRangeBound_AVR_lp(real[] y, vector alpha, real beta, real lower, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleBetaRangeBound_AVA_lp(real[] y, vector alpha, real[] beta, real lower, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleBetaRangeBound_AVV_lp(real[] y, vector alpha, vector beta, real lower, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
+                  correction_per_value * num_elements(y);
         enforceRangeBounds_A_lp(y, lower, upper);
     }
     
     void sampleBetaRangeBound_2RR_lp(real[,] y, real alpha, real beta, real lower, real upper)
     {
-        int nrows = size(y);
-        real correction = log_diff_exp(beta_lcdf(upper | alpha, beta),
-                                       beta_lcdf(lower | alpha, beta));
-        for (i in 1:nrows) {
+        real correction_per_value = log_diff_exp(
+            beta_lcdf(upper | alpha, beta),
+            beta_lcdf(lower | alpha, beta));
+        int dimensions[2] = dims(y);
+        real correction_per_row = correction_per_value * dimensions[2];
+        for (i in 1:dimensions[1]) {
             target += beta_lpdf(y[i] | alpha, beta) -
-                      correction;
+                      correction_per_row;
+            // ... y[i] is a one-dimensional array
         }
         enforceRangeBounds_2_lp(y, lower, upper);
     }
     
+    void sampleBetaRangeBound_3RR_lp(real[,,] y, real alpha, real beta, real lower, real upper)
+    {
+        real correction_per_value = log_diff_exp(
+            beta_lcdf(upper | alpha, beta),
+            beta_lcdf(lower | alpha, beta));
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += beta_lpdf(y[i, j, k] | alpha, beta) -
+                              correction_per_value;
+                }
+            }
+        }
+        enforceRangeBounds_3_lp(y, lower, upper);
+    }
+    
     void sampleBetaRangeBound_VRR_lp(vector y, real alpha, real beta, real lower, real upper)
     {
+        real correction_per_value = log_diff_exp(
+            beta_lcdf(upper | alpha, beta),
+            beta_lcdf(lower | alpha, beta));
         target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleBetaRangeBound_VRA_lp(vector y, real alpha, real[] beta, real lower, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleBetaRangeBound_VRV_lp(vector y, real alpha, vector beta, real lower, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleBetaRangeBound_VAR_lp(vector y, real[] alpha, real beta, real lower, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleBetaRangeBound_VAA_lp(vector y, real[] alpha, real[] beta, real lower, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleBetaRangeBound_VAV_lp(vector y, real[] alpha, vector beta, real lower, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleBetaRangeBound_VVR_lp(vector y, vector alpha, real beta, real lower, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleBetaRangeBound_VVA_lp(vector y, vector alpha, real[] beta, real lower, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleBetaRangeBound_VVV_lp(vector y, vector alpha, vector beta, real lower, real upper)
-    {
-        target += beta_lpdf(y | alpha, beta) -
-                  log_diff_exp(beta_lcdf(upper | alpha, beta),
-                               beta_lcdf(lower | alpha, beta));
+                  correction_per_value * num_elements(y);
         enforceRangeBounds_V_lp(y, lower, upper);
     }
     
@@ -2074,51 +1065,24 @@
         target += gamma_lpdf(y | alpha, beta);
     }
     
-    void sampleGamma_ARA_lp(real[] y, real alpha, real[] beta)
-    {
-        target += gamma_lpdf(y | alpha, beta);
-    }
-    
-    void sampleGamma_ARV_lp(real[] y, real alpha, vector beta)
-    {
-        target += gamma_lpdf(y | alpha, beta);
-    }
-    
-    void sampleGamma_AAR_lp(real[] y, real[] alpha, real beta)
-    {
-        target += gamma_lpdf(y | alpha, beta);
-    }
-    
-    void sampleGamma_AAA_lp(real[] y, real[] alpha, real[] beta)
-    {
-        target += gamma_lpdf(y | alpha, beta);
-    }
-    
-    void sampleGamma_AAV_lp(real[] y, real[] alpha, vector beta)
-    {
-        target += gamma_lpdf(y | alpha, beta);
-    }
-    
-    void sampleGamma_AVR_lp(real[] y, vector alpha, real beta)
-    {
-        target += gamma_lpdf(y | alpha, beta);
-    }
-    
-    void sampleGamma_AVA_lp(real[] y, vector alpha, real[] beta)
-    {
-        target += gamma_lpdf(y | alpha, beta);
-    }
-    
-    void sampleGamma_AVV_lp(real[] y, vector alpha, vector beta)
-    {
-        target += gamma_lpdf(y | alpha, beta);
-    }
-    
     void sampleGamma_2RR_lp(real[,] y, real alpha, real beta)
     {
         int nrows = size(y);
         for (i in 1:nrows) {
             target += gamma_lpdf(y[i] | alpha, beta);
+            // ... y[i] is a one-dimensional array
+        }
+    }
+    
+    void sampleGamma_3RR_lp(real[,,] y, real alpha, real beta)
+    {
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += gamma_lpdf(y[i, j, k] | alpha, beta);
+                }
+            }
         }
     }
     
@@ -2127,189 +1091,57 @@
         target += gamma_lpdf(y | alpha, beta);
     }
     
-    void sampleGamma_VRA_lp(vector y, real alpha, real[] beta)
-    {
-        target += gamma_lpdf(y | alpha, beta);
-    }
-    
-    void sampleGamma_VRV_lp(vector y, real alpha, vector beta)
-    {
-        target += gamma_lpdf(y | alpha, beta);
-    }
-    
-    void sampleGamma_VAR_lp(vector y, real[] alpha, real beta)
-    {
-        target += gamma_lpdf(y | alpha, beta);
-    }
-    
-    void sampleGamma_VAA_lp(vector y, real[] alpha, real[] beta)
-    {
-        target += gamma_lpdf(y | alpha, beta);
-    }
-    
-    void sampleGamma_VAV_lp(vector y, real[] alpha, vector beta)
-    {
-        target += gamma_lpdf(y | alpha, beta);
-    }
-    
-    void sampleGamma_VVR_lp(vector y, vector alpha, real beta)
-    {
-        target += gamma_lpdf(y | alpha, beta);
-    }
-    
-    void sampleGamma_VVA_lp(vector y, vector alpha, real[] beta)
-    {
-        target += gamma_lpdf(y | alpha, beta);
-    }
-    
-    void sampleGamma_VVV_lp(vector y, vector alpha, vector beta)
-    {
-        target += gamma_lpdf(y | alpha, beta);
-    }
-    
     // Sampling with lower bound
     
     void sampleGammaLowerBound_RRR_lp(real y, real alpha, real beta, real lower)
     {
+        real correction_per_value = gamma_lccdf(lower | alpha, beta);
         target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
+                  correction_per_value;
         enforceLowerBound_R_lp(y, lower);
     }
     
     void sampleGammaLowerBound_ARR_lp(real[] y, real alpha, real beta, real lower)
     {
+        real correction_per_value = gamma_lccdf(lower | alpha, beta);
         target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleGammaLowerBound_ARA_lp(real[] y, real alpha, real[] beta, real lower)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleGammaLowerBound_ARV_lp(real[] y, real alpha, vector beta, real lower)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleGammaLowerBound_AAR_lp(real[] y, real[] alpha, real beta, real lower)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleGammaLowerBound_AAA_lp(real[] y, real[] alpha, real[] beta, real lower)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleGammaLowerBound_AAV_lp(real[] y, real[] alpha, vector beta, real lower)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleGammaLowerBound_AVR_lp(real[] y, vector alpha, real beta, real lower)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleGammaLowerBound_AVA_lp(real[] y, vector alpha, real[] beta, real lower)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
-        enforceLowerBound_A_lp(y, lower);
-    }
-    
-    void sampleGammaLowerBound_AVV_lp(real[] y, vector alpha, vector beta, real lower)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
+                  correction_per_value * num_elements(y);
         enforceLowerBound_A_lp(y, lower);
     }
     
     void sampleGammaLowerBound_2RR_lp(real[,] y, real alpha, real beta, real lower)
     {
-        int nrows = size(y);
-        real correction = gamma_lccdf(lower | alpha, beta);
-        for (i in 1:nrows) {
+        real correction_per_value = gamma_lccdf(lower | alpha, beta);
+        int dimensions[2] = dims(y);
+        real correction_per_row = correction_per_value * dimensions[2];
+        for (i in 1:dimensions[1]) {
             target += gamma_lpdf(y[i] | alpha, beta) -
-                      correction;
+                      correction_per_row;
+            // ... y[i] is a one-dimensional array
         }
         enforceLowerBound_2_lp(y, lower);
     }
     
+    void sampleGammaLowerBound_3RR_lp(real[,,] y, real alpha, real beta, real lower)
+    {
+        real correction_per_value = gamma_lccdf(lower | alpha, beta);
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += gamma_lpdf(y[i, j, k] | alpha, beta) -
+                              correction_per_value;
+                }
+            }
+        }
+        enforceLowerBound_3_lp(y, lower);
+    }
+    
     void sampleGammaLowerBound_VRR_lp(vector y, real alpha, real beta, real lower)
     {
+        real correction_per_value = gamma_lccdf(lower | alpha, beta);
         target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleGammaLowerBound_VRA_lp(vector y, real alpha, real[] beta, real lower)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleGammaLowerBound_VRV_lp(vector y, real alpha, vector beta, real lower)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleGammaLowerBound_VAR_lp(vector y, real[] alpha, real beta, real lower)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleGammaLowerBound_VAA_lp(vector y, real[] alpha, real[] beta, real lower)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleGammaLowerBound_VAV_lp(vector y, real[] alpha, vector beta, real lower)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleGammaLowerBound_VVR_lp(vector y, vector alpha, real beta, real lower)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleGammaLowerBound_VVA_lp(vector y, vector alpha, real[] beta, real lower)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
-        enforceLowerBound_V_lp(y, lower);
-    }
-    
-    void sampleGammaLowerBound_VVV_lp(vector y, vector alpha, vector beta, real lower)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lccdf(lower | alpha, beta);
+                  correction_per_value * num_elements(y);
         enforceLowerBound_V_lp(y, lower);
     }
     
@@ -2317,145 +1149,53 @@
     
     void sampleGammaUpperBound_RRR_lp(real y, real alpha, real beta, real upper)
     {
+        real correction_per_value = gamma_lcdf(upper | alpha, beta);
         target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
+                  correction_per_value;
         enforceUpperBound_R_lp(y, upper);
     }
     
     void sampleGammaUpperBound_ARR_lp(real[] y, real alpha, real beta, real upper)
     {
+        real correction_per_value = gamma_lcdf(upper | alpha, beta);
         target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleGammaUpperBound_ARA_lp(real[] y, real alpha, real[] beta, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleGammaUpperBound_ARV_lp(real[] y, real alpha, vector beta, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleGammaUpperBound_AAR_lp(real[] y, real[] alpha, real beta, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleGammaUpperBound_AAA_lp(real[] y, real[] alpha, real[] beta, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleGammaUpperBound_AAV_lp(real[] y, real[] alpha, vector beta, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleGammaUpperBound_AVR_lp(real[] y, vector alpha, real beta, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleGammaUpperBound_AVA_lp(real[] y, vector alpha, real[] beta, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
-        enforceUpperBound_A_lp(y, upper);
-    }
-    
-    void sampleGammaUpperBound_AVV_lp(real[] y, vector alpha, vector beta, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
+                  correction_per_value * num_elements(y);
         enforceUpperBound_A_lp(y, upper);
     }
     
     void sampleGammaUpperBound_2RR_lp(real[,] y, real alpha, real beta, real upper)
     {
-        int nrows = size(y);
-        real correction = gamma_lcdf(upper | alpha, beta);
-        for (i in 1:nrows) {
+        real correction_per_value = gamma_lcdf(upper | alpha, beta);
+        int dimensions[2] = dims(y);
+        real correction_per_row = correction_per_value * dimensions[2];
+        for (i in 1:dimensions[1]) {
             target += gamma_lpdf(y[i] | alpha, beta) -
-                      correction;
+                      correction_per_row;
+            // ... y[i] is a one-dimensional array
         }
         enforceUpperBound_2_lp(y, upper);
     }
     
+    void sampleGammaUpperBound_3RR_lp(real[,,] y, real alpha, real beta, real upper)
+    {
+        real correction_per_value = gamma_lcdf(upper | alpha, beta);
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += gamma_lpdf(y[i, j, k] | alpha, beta) -
+                              correction_per_value;
+                }
+            }
+        }
+        enforceUpperBound_3_lp(y, upper);
+    }
+    
     void sampleGammaUpperBound_VRR_lp(vector y, real alpha, real beta, real upper)
     {
+        real correction_per_value = gamma_lcdf(upper | alpha, beta);
         target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleGammaUpperBound_VRA_lp(vector y, real alpha, real[] beta, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleGammaUpperBound_VRV_lp(vector y, real alpha, vector beta, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleGammaUpperBound_VAR_lp(vector y, real[] alpha, real beta, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleGammaUpperBound_VAA_lp(vector y, real[] alpha, real[] beta, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleGammaUpperBound_VAV_lp(vector y, real[] alpha, vector beta, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleGammaUpperBound_VVR_lp(vector y, vector alpha, real beta, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleGammaUpperBound_VVA_lp(vector y, vector alpha, real[] beta, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
-        enforceUpperBound_V_lp(y, upper);
-    }
-    
-    void sampleGammaUpperBound_VVV_lp(vector y, vector alpha, vector beta, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  gamma_lcdf(upper | alpha, beta);
+                  correction_per_value * num_elements(y);
         enforceUpperBound_V_lp(y, upper);
     }
     
@@ -2463,165 +1203,63 @@
     
     void sampleGammaRangeBound_RRR_lp(real y, real alpha, real beta, real lower, real upper)
     {
+        real correction_per_value = log_diff_exp(
+            gamma_lcdf(upper | alpha, beta),
+            gamma_lcdf(lower | alpha, beta));
         target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
+                  correction_per_value;
         enforceRangeBounds_R_lp(y, lower, upper);
     }
     
     void sampleGammaRangeBound_ARR_lp(real[] y, real alpha, real beta, real lower, real upper)
     {
+        real correction_per_value = log_diff_exp(
+            gamma_lcdf(upper | alpha, beta),
+            gamma_lcdf(lower | alpha, beta));
         target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleGammaRangeBound_ARA_lp(real[] y, real alpha, real[] beta, real lower, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleGammaRangeBound_ARV_lp(real[] y, real alpha, vector beta, real lower, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleGammaRangeBound_AAR_lp(real[] y, real[] alpha, real beta, real lower, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleGammaRangeBound_AAA_lp(real[] y, real[] alpha, real[] beta, real lower, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleGammaRangeBound_AAV_lp(real[] y, real[] alpha, vector beta, real lower, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleGammaRangeBound_AVR_lp(real[] y, vector alpha, real beta, real lower, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleGammaRangeBound_AVA_lp(real[] y, vector alpha, real[] beta, real lower, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
-        enforceRangeBounds_A_lp(y, lower, upper);
-    }
-    
-    void sampleGammaRangeBound_AVV_lp(real[] y, vector alpha, vector beta, real lower, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
+                  correction_per_value * num_elements(y);
         enforceRangeBounds_A_lp(y, lower, upper);
     }
     
     void sampleGammaRangeBound_2RR_lp(real[,] y, real alpha, real beta, real lower, real upper)
     {
-        int nrows = size(y);
-        real correction = log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                                       gamma_lcdf(lower | alpha, beta));
-        for (i in 1:nrows) {
+        real correction_per_value = log_diff_exp(
+            gamma_lcdf(upper | alpha, beta),
+            gamma_lcdf(lower | alpha, beta));
+        int dimensions[2] = dims(y);
+        real correction_per_row = correction_per_value * dimensions[2];
+        for (i in 1:dimensions[1]) {
             target += gamma_lpdf(y[i] | alpha, beta) -
-                      correction;
+                      correction_per_row;
+            // ... y[i] is a one-dimensional array
         }
         enforceRangeBounds_2_lp(y, lower, upper);
     }
     
+    void sampleGammaRangeBound_3RR_lp(real[,,] y, real alpha, real beta, real lower, real upper)
+    {
+        real correction_per_value = log_diff_exp(
+            gamma_lcdf(upper | alpha, beta),
+            gamma_lcdf(lower | alpha, beta));
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += gamma_lpdf(y[i, j, k] | alpha, beta) -
+                              correction_per_value;
+                }
+            }
+        }
+        enforceRangeBounds_3_lp(y, lower, upper);
+    }
+    
     void sampleGammaRangeBound_VRR_lp(vector y, real alpha, real beta, real lower, real upper)
     {
+        real correction_per_value = log_diff_exp(
+            gamma_lcdf(upper | alpha, beta),
+            gamma_lcdf(lower | alpha, beta));
         target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleGammaRangeBound_VRA_lp(vector y, real alpha, real[] beta, real lower, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleGammaRangeBound_VRV_lp(vector y, real alpha, vector beta, real lower, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleGammaRangeBound_VAR_lp(vector y, real[] alpha, real beta, real lower, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleGammaRangeBound_VAA_lp(vector y, real[] alpha, real[] beta, real lower, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleGammaRangeBound_VAV_lp(vector y, real[] alpha, vector beta, real lower, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleGammaRangeBound_VVR_lp(vector y, vector alpha, real beta, real lower, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleGammaRangeBound_VVA_lp(vector y, vector alpha, real[] beta, real lower, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
-        enforceRangeBounds_V_lp(y, lower, upper);
-    }
-    
-    void sampleGammaRangeBound_VVV_lp(vector y, vector alpha, vector beta, real lower, real upper)
-    {
-        target += gamma_lpdf(y | alpha, beta) -
-                  log_diff_exp(gamma_lcdf(upper | alpha, beta),
-                               gamma_lcdf(lower | alpha, beta));
+                  correction_per_value * num_elements(y);
         enforceRangeBounds_V_lp(y, lower, upper);
     }
     
@@ -2688,6 +1326,19 @@
         int nrows = size(y);
         for (i in 1:nrows) {
             target += uniform_lpdf(y[i] | lower, upper);
+            // ... y[i] is a one-dimensional array
+        }
+    }
+    
+    void sampleUniform_3RR_lp(real[,,] y, real lower, real upper)
+    {
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += uniform_lpdf(y[i, j, k] | lower, upper);
+                }
+            }
         }
     }
     
@@ -2904,6 +1555,34 @@
         for (i in 1:length) {
             sampleNormal_RRR_lp(y_unit_normal[i], 0, 1);
             result[i] = mu[i] + sigma[i] * y_unit_normal[i];
+        }
+        return result;
+    }
+    
+    real[,] getReparameterizedNormal_2RR_lp(real[,] y_unit_normal, real mu, real sigma)
+    {
+        int dimensions[2] = dims(y_unit_normal);
+        real result[dimensions[1], dimensions[2]];
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                sampleNormal_RRR_lp(y_unit_normal[i, j], 0, 1);
+                result[i, j] = mu + sigma * y_unit_normal[i, j];
+            }
+        }
+        return result;
+    }
+    
+    real[,,] getReparameterizedNormal_3RR_lp(real[,,] y_unit_normal, real mu, real sigma)
+    {
+        int dimensions[3] = dims(y_unit_normal);
+        real result[dimensions[1], dimensions[2], dimensions[3]];
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    sampleNormal_RRR_lp(y_unit_normal[i, j, k], 0, 1);
+                    result[i, j, k] = mu + sigma * y_unit_normal[i, j, k];
+                }
+            }
         }
         return result;
     }
@@ -3180,6 +1859,38 @@
             lower_transformed = (lower - mu[i]) / sigma[i];
             sampleNormalLowerBound_RRR_lp(y_unit_normal[i], 0, 1, lower_transformed);
             result[i] = mu[i] + sigma[i] * y_unit_normal[i];
+        }
+        return result;
+    }
+    
+    real[,] getReparameterizedNormalLowerBound_2RR_lp(real[,] y_unit_normal, real mu, real sigma, real lower)
+    {
+        int dimensions[2] = dims(y_unit_normal);
+        real result[dimensions[1], dimensions[2]];
+        real lower_transformed;
+        lower_transformed = (lower - mu) / sigma;
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                sampleNormalLowerBound_RRR_lp(y_unit_normal[i, j], 0, 1, lower_transformed);
+                result[i, j] = mu + sigma * y_unit_normal[i, j];
+            }
+        }
+        return result;
+    }
+    
+    real[,,] getReparameterizedNormalLowerBound_3RR_lp(real[,,] y_unit_normal, real mu, real sigma, real lower)
+    {
+        int dimensions[3] = dims(y_unit_normal);
+        real result[dimensions[1], dimensions[2], dimensions[3]];
+        real lower_transformed;
+        lower_transformed = (lower - mu) / sigma;
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    sampleNormalLowerBound_RRR_lp(y_unit_normal[i, j, k], 0, 1, lower_transformed);
+                    result[i, j, k] = mu + sigma * y_unit_normal[i, j, k];
+                }
+            }
         }
         return result;
     }
@@ -3474,6 +2185,38 @@
             upper_transformed = (upper - mu[i]) / sigma[i];
             sampleNormalUpperBound_RRR_lp(y_unit_normal[i], 0, 1, upper_transformed);
             result[i] = mu[i] + sigma[i] * y_unit_normal[i];
+        }
+        return result;
+    }
+    
+    real[,] getReparameterizedNormalUpperBound_2RR_lp(real[,] y_unit_normal, real mu, real sigma, real upper)
+    {
+        int dimensions[2] = dims(y_unit_normal);
+        real result[dimensions[1], dimensions[2]];
+        real upper_transformed;
+        upper_transformed = (upper - mu) / sigma;
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                sampleNormalUpperBound_RRR_lp(y_unit_normal[i, j], 0, 1, upper_transformed);
+                result[i, j] = mu + sigma * y_unit_normal[i, j];
+            }
+        }
+        return result;
+    }
+    
+    real[,,] getReparameterizedNormalUpperBound_3RR_lp(real[,,] y_unit_normal, real mu, real sigma, real upper)
+    {
+        int dimensions[3] = dims(y_unit_normal);
+        real result[dimensions[1], dimensions[2], dimensions[3]];
+        real upper_transformed;
+        upper_transformed = (upper - mu) / sigma;
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    sampleNormalUpperBound_RRR_lp(y_unit_normal[i, j, k], 0, 1, upper_transformed);
+                    result[i, j, k] = mu + sigma * y_unit_normal[i, j, k];
+                }
+            }
         }
         return result;
     }
@@ -3788,6 +2531,42 @@
             upper_transformed = (upper - mu[i]) / sigma[i];
             sampleNormalRangeBound_RRR_lp(y_unit_normal[i], 0, 1, lower_transformed, upper_transformed);
             result[i] = mu[i] + sigma[i] * y_unit_normal[i];
+        }
+        return result;
+    }
+    
+    real[,] getReparameterizedNormalRangeBound_2RR_lp(real[,] y_unit_normal, real mu, real sigma, real lower, real upper)
+    {
+        int dimensions[2] = dims(y_unit_normal);
+        real result[dimensions[1], dimensions[2]];
+        real lower_transformed;
+        real upper_transformed;
+        lower_transformed = (lower - mu) / sigma;
+        upper_transformed = (upper - mu) / sigma;
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                sampleNormalRangeBound_RRR_lp(y_unit_normal[i, j], 0, 1, lower_transformed, upper_transformed);
+                result[i, j] = mu + sigma * y_unit_normal[i, j];
+            }
+        }
+        return result;
+    }
+    
+    real[,,] getReparameterizedNormalRangeBound_3RR_lp(real[,,] y_unit_normal, real mu, real sigma, real lower, real upper)
+    {
+        int dimensions[3] = dims(y_unit_normal);
+        real result[dimensions[1], dimensions[2], dimensions[3]];
+        real lower_transformed;
+        real upper_transformed;
+        lower_transformed = (lower - mu) / sigma;
+        upper_transformed = (upper - mu) / sigma;
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    sampleNormalRangeBound_RRR_lp(y_unit_normal[i, j, k], 0, 1, lower_transformed, upper_transformed);
+                    result[i, j, k] = mu + sigma * y_unit_normal[i, j, k];
+                }
+            }
         }
         return result;
     }
@@ -4119,6 +2898,34 @@
         return result;
     }
     
+    real[,] getReparameterizedCauchy_2RR_lp(real[,] y_uniform, real mu, real sigma)
+    {
+        int dimensions[2] = dims(y_uniform);
+        real result[dimensions[1], dimensions[2]];
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                sampleUniform_RRR_lp(y_uniform[i, j], -pi()/2, pi()/2);
+                result[i, j] = mu + sigma * tan(y_uniform[i, j]);
+            }
+        }
+        return result;
+    }
+    
+    real[,,] getReparameterizedCauchy_3RR_lp(real[,,] y_uniform, real mu, real sigma)
+    {
+        int dimensions[3] = dims(y_uniform);
+        real result[dimensions[1], dimensions[2], dimensions[3]];
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    sampleUniform_RRR_lp(y_uniform[i, j, k], -pi()/2, pi()/2);
+                    result[i, j, k] = mu + sigma * tan(y_uniform[i, j, k]);
+                }
+            }
+        }
+        return result;
+    }
+    
     vector getReparameterizedCauchy_VRR_lp(vector y_uniform, real mu, real sigma)
     {
         int length = num_elements(y_uniform);
@@ -4391,6 +3198,38 @@
             lower_transformed = atan((lower - mu[i]) / sigma[i]);
             sampleUniform_RRR_lp(y_uniform[i], lower_transformed, pi()/2);
             result[i] = mu[i] + sigma[i] * tan(y_uniform[i]);
+        }
+        return result;
+    }
+    
+    real[,] getReparameterizedCauchyLowerBound_2RR_lp(real[,] y_uniform, real mu, real sigma, real lower)
+    {
+        int dimensions[2] = dims(y_uniform);
+        real result[dimensions[1], dimensions[2]];
+        real lower_transformed;
+        lower_transformed = atan((lower - mu) / sigma);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                sampleUniform_RRR_lp(y_uniform[i, j], lower_transformed, pi()/2);
+                result[i, j] = mu + sigma * tan(y_uniform[i, j]);
+            }
+        }
+        return result;
+    }
+    
+    real[,,] getReparameterizedCauchyLowerBound_3RR_lp(real[,,] y_uniform, real mu, real sigma, real lower)
+    {
+        int dimensions[3] = dims(y_uniform);
+        real result[dimensions[1], dimensions[2], dimensions[3]];
+        real lower_transformed;
+        lower_transformed = atan((lower - mu) / sigma);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    sampleUniform_RRR_lp(y_uniform[i, j, k], lower_transformed, pi()/2);
+                    result[i, j, k] = mu + sigma * tan(y_uniform[i, j, k]);
+                }
+            }
         }
         return result;
     }
@@ -4685,6 +3524,38 @@
             upper_transformed = atan((upper - mu[i]) / sigma[i]);
             sampleUniform_RRR_lp(y_uniform[i], -pi()/2, upper_transformed);
             result[i] = mu[i] + sigma[i] * tan(y_uniform[i]);
+        }
+        return result;
+    }
+    
+    real[,] getReparameterizedCauchyUpperBound_2RR_lp(real[,] y_uniform, real mu, real sigma, real upper)
+    {
+        int dimensions[2] = dims(y_uniform);
+        real result[dimensions[1], dimensions[2]];
+        real upper_transformed;
+        upper_transformed = atan((upper - mu) / sigma);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                sampleUniform_RRR_lp(y_uniform[i, j], -pi()/2, upper_transformed);
+                result[i, j] = mu + sigma * tan(y_uniform[i, j]);
+            }
+        }
+        return result;
+    }
+    
+    real[,,] getReparameterizedCauchyUpperBound_3RR_lp(real[,,] y_uniform, real mu, real sigma, real upper)
+    {
+        int dimensions[3] = dims(y_uniform);
+        real result[dimensions[1], dimensions[2], dimensions[3]];
+        real upper_transformed;
+        upper_transformed = atan((upper - mu) / sigma);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    sampleUniform_RRR_lp(y_uniform[i, j, k], -pi()/2, upper_transformed);
+                    result[i, j, k] = mu + sigma * tan(y_uniform[i, j, k]);
+                }
+            }
         }
         return result;
     }
@@ -4999,6 +3870,42 @@
             upper_transformed = atan((upper - mu[i]) / sigma[i]);
             sampleUniform_RRR_lp(y_uniform[i], lower_transformed, upper_transformed);
             result[i] = mu[i] + sigma[i] * tan(y_uniform[i]);
+        }
+        return result;
+    }
+    
+    real[,] getReparameterizedCauchyRangeBound_2RR_lp(real[,] y_uniform, real mu, real sigma, real lower, real upper)
+    {
+        int dimensions[2] = dims(y_uniform);
+        real result[dimensions[1], dimensions[2]];
+        real lower_transformed;
+        real upper_transformed;
+        lower_transformed = atan((lower - mu) / sigma);
+        upper_transformed = atan((upper - mu) / sigma);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                sampleUniform_RRR_lp(y_uniform[i, j], lower_transformed, upper_transformed);
+                result[i, j] = mu + sigma * tan(y_uniform[i, j]);
+            }
+        }
+        return result;
+    }
+    
+    real[,,] getReparameterizedCauchyRangeBound_3RR_lp(real[,,] y_uniform, real mu, real sigma, real lower, real upper)
+    {
+        int dimensions[3] = dims(y_uniform);
+        real result[dimensions[1], dimensions[2], dimensions[3]];
+        real lower_transformed;
+        real upper_transformed;
+        lower_transformed = atan((lower - mu) / sigma);
+        upper_transformed = atan((upper - mu) / sigma);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    sampleUniform_RRR_lp(y_uniform[i, j, k], lower_transformed, upper_transformed);
+                    result[i, j, k] = mu + sigma * tan(y_uniform[i, j, k]);
+                }
+            }
         }
         return result;
     }

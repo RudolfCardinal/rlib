@@ -24,6 +24,23 @@ Stan doesn't allow templating of its user-defined functions.
 As a result, we end up repeating boilerplate code.
 This is probably preferable - a script to make the .stan file.
 
+2018-04-23:
+    - updated for 3D arrays
+    - bugfix for bridgesampling normalization. The bridgesampling manual
+      uses the example
+
+        target += normal_lpdf(y | mu, sigma) - normal_lcdf(upper | mu, sigma);
+
+      but note that Stan allows this sampling notation for vectors and one-
+      dimensional arrays. In this situation the left-hand term is the sum
+      of log probabilities for many values, whereas the right-hand term is
+      a correction for a single value. Need, therefore, to multiply it by the
+      number of terms being sampled.
+
+      Confirmed by Quentin Gronau, personal communication, 2018-04-23; he
+      notes also that this is done on the example on p23 of their more
+      R-focused paper on bridgesampling, https://arxiv.org/pdf/1710.08162.pdf
+
 """
 
 import argparse
@@ -42,12 +59,14 @@ class VarDescriptor(object):
                  singleton: bool,
                  dimensions: int,
                  vector: bool,
+                 array: bool,
                  name: str = None) -> None:
         self.abbreviation = abbreviation
         self.typedef = typedef
         self.singleton = singleton
         self.dimensions = dimensions
         self.vector = vector
+        self.array = array
         self.name = name
 
     def __str__(self) -> str:
@@ -66,40 +85,57 @@ class VarDescriptor(object):
             singleton=self.singleton,
             dimensions=self.dimensions,
             vector=self.vector,
+            array=self.array,
             name=self.name
         )
+
+    @property
+    def polydim_array(self) -> bool:
+        return self.array and self.dimensions > 1
 
 
 REAL = VarDescriptor(
     abbreviation="R",
     typedef="real",
     singleton=True,
-    dimensions=1,
-    vector=False
+    dimensions=0,
+    vector=False,
+    array=False
 )
 ARRAY = VarDescriptor(
     abbreviation="A",
     typedef="real[]",
     singleton=False,
     dimensions=1,
-    vector=False
+    vector=False,
+    array=True
 )
 ARRAY_2D = VarDescriptor(
     abbreviation="2",
     typedef="real[,]",
     singleton=False,
     dimensions=2,
-    vector=False
+    vector=False,
+    array=True
+)
+ARRAY_3D = VarDescriptor(
+    abbreviation="3",
+    typedef="real[,,]",
+    singleton=False,
+    dimensions=3,
+    vector=False,
+    array=True
 )
 VECTOR = VarDescriptor(
     abbreviation="V",
     typedef="vector",
     singleton=False,
     dimensions=1,
-    vector=True
+    vector=True,
+    array=False
 )
 
-ALL_TYPES = [REAL, ARRAY, ARRAY_2D, VECTOR]
+ALL_TYPES = [REAL, ARRAY, ARRAY_2D, ARRAY_3D, VECTOR]
 
 
 class SampleMethod(Enum):
@@ -154,6 +190,9 @@ SIMPLE_FUNCTIONS = """
 
     real softmaxNth(vector softmax_inputs, int index)
     {
+        // Returns the nth value (at "index") of the softmax of the inputs.
+        // Assumes an inverse temperature of 1.
+        
         /*
             For softmax: see my miscstat.R; the important points for
             optimization are (1) that softmax is invariant to the addition/
@@ -180,6 +219,8 @@ SIMPLE_FUNCTIONS = """
 
     real softmaxNthInvTemp(vector softmax_inputs, real inverse_temp, int index)
     {
+        // Version of softmaxNth allowing you to specify the inverse temp.
+        
         int length = num_elements(softmax_inputs);
         vector[length] s_exp_products;
         if (index < 1 || index > length) {
@@ -192,6 +233,7 @@ SIMPLE_FUNCTIONS = """
 
     real logistic(real x, real x0, real k, real L)
     {
+        // Returns x transformed through a logistic function.
         // Notation as per https://en.wikipedia.org/wiki/Logistic_function
         // x0: centre
         // k: steepness
@@ -202,6 +244,7 @@ SIMPLE_FUNCTIONS = """
 
     real bound(real x, real min_value, real max_value)
     {
+        // Returns x with minimum/maximum boundaries applied.
         // We should simply be able to do this:
         //     return max(min_value, min(x, max_value));
         // ... but Stan doesn't have max(real, real) or
@@ -359,6 +402,7 @@ LOG_PROB_HEADER = """
          real
          real[]  // one-dimensional array
          real[,]  // two-dimensional array
+         real[,,]  // three-dimensional array
          vector  // vector, similar to a one-dimensional array.
          matrix  // matrix, similar to a two-dimensional array.
     See p297 of the 2017 Stan manual, and also p319.
@@ -372,7 +416,7 @@ LOG_PROB_HEADER = """
     - For something with two distribution parameters, like the normal
       distribution and many others, that means that we have 3*3*3 combinations
       for each thing. Urgh. Stan should allow user overloading ;).
-    - Let's do it and define "R", "A", "2", "V" for the parameters
+    - Let's do it and define "R", "A", "2", "3", "V" for the parameters
     - Except we won't be returning R unless it's RRR!
     - Last thing cycles fastest.
     So:
@@ -389,6 +433,9 @@ LOG_PROB_HEADER = """
         AVV
 
         2RR
+            ...
+            
+        3RR
             ...
 
         VRA
@@ -434,6 +481,8 @@ LOG_PROB_HEADER = """
 
     Now:
         num_elements() gives the total, in this case N_A * N_B;
+            ... but when *accessing* a 2D array, my_array[1] gives the first 
+                row, not the first element; see Stan 2017 manual p323.
         size() gives the size of first dimension, in this case N_A;
         dims() gives all dimensions, in this case an int[] containing {N_A, N_B}.
 
@@ -474,12 +523,23 @@ LOG_PROB_HELPERS = """
     void enforceLowerBound_2_lp(real[,] y, real lower)
     {
         int dimensions[2] = dims(y);
-        int nrows = dimensions[1];
-        int ncols = dimensions[2];
-        for (i in 1:nrows) {
-            for (j in 1:ncols) {
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
                 if (y[i, j] < lower) {
                     target += negative_infinity();
+                }
+            }
+        }
+    }
+    void enforceLowerBound_3_lp(real[,,] y, real lower)
+    {
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    if (y[i, j, k] < lower) {
+                        target += negative_infinity();
+                    }
                 }
             }
         }
@@ -514,12 +574,23 @@ LOG_PROB_HELPERS = """
     void enforceUpperBound_2_lp(real[,] y, real upper)
     {
         int dimensions[2] = dims(y);
-        int nrows = dimensions[1];
-        int ncols = dimensions[2];
-        for (i in 1:nrows) {
-            for (j in 1:ncols) {
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
                 if (y[i, j] > upper) {
                     target += negative_infinity();
+                }
+            }
+        }
+    }
+    void enforceUpperBound_3_lp(real[,,] y, real upper)
+    {
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    if (y[i, j, k] > upper) {
+                        target += negative_infinity();
+                    }
                 }
             }
         }
@@ -546,7 +617,8 @@ LOG_PROB_HELPERS = """
     {
         int length = num_elements(y);
         for (i in 1:length) {
-            if (y[i] < lower || y[i] > upper) {
+            real value = y[i];  // lookup only once
+            if (value < lower || value > upper) {
                 target += negative_infinity();
             }
         }
@@ -554,12 +626,25 @@ LOG_PROB_HELPERS = """
     void enforceRangeBounds_2_lp(real[,] y, real lower, real upper)
     {
         int dimensions[2] = dims(y);
-        int nrows = dimensions[1];
-        int ncols = dimensions[2];
-        for (i in 1:nrows) {
-            for (j in 1:ncols) {
-                if (y[i, j] < lower || y[i, j] > upper) {
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                real value = y[i, j];  // lookup only once
+                if (value < lower || value > upper) {
                     target += negative_infinity();
+                }
+            }
+        }
+    }
+    void enforceRangeBounds_3_lp(real[,,] y, real lower, real upper)
+    {
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    real value = y[i, j, k];  // lookup only once
+                    if (value < lower || value > upper) {
+                        target += negative_infinity();
+                    }
                 }
             }
         }
@@ -568,7 +653,8 @@ LOG_PROB_HELPERS = """
     {
         int length = num_elements(y);
         for (i in 1:length) {
-            if (y[i] < lower || y[i] > upper) {
+            real value = y[i];  // lookup only once
+            if (value < lower || value > upper) {
                 target += negative_infinity();
             }
         }
@@ -592,8 +678,15 @@ def sample_generic(name_caps: str,
                    y: VarDescriptor,
                    distribution_params: List[VarDescriptor],
                    method: SampleMethod) -> str:
-    if (y.dimensions == 2 and
-            any(vd.dimensions > 1 for vd in distribution_params)):
+    """
+    Writes functions to sample from arbitrary Stan distributions, with
+    - correction of the "target" special log-probability variable for
+      bridgesampling;
+    - upper/lower boundary checking if required.
+
+    NOT YET (RE)IMPLEMENTED: multiple values for the distribution parameters.
+    """
+    if any(vd.dimensions > 0 for vd in distribution_params):
         raise NotImplementedError("y={}, distribution_params={}".format(
             y, distribution_params))
     y.name = "y"
@@ -606,102 +699,129 @@ def sample_generic(name_caps: str,
     lcdf_func = "{}_lcdf".format(name_lower)
     lccdf_func = "{}_lccdf".format(name_lower)
     pdf_call_params = ", ".join(vd.name for vd in distribution_params)
+    funcname_extra = ""
 
     if method == SampleMethod.PLAIN:
-        if y.dimensions == 2:
+        if y.dimensions == 3:
+            code = """
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {{
+            for (j in 1:dimensions[2]) {{
+                for (k in 1:dimensions[3]) {{
+                    target += {lpdf_func}(y[i, j, k] | {pdf_call_params});
+                }}
+            }}
+        }}
+            """.format(lpdf_func=lpdf_func,
+                       pdf_call_params=pdf_call_params)
+        elif y.dimensions == 2:
             code = """
         int nrows = size(y);
         for (i in 1:nrows) {{
             target += {lpdf_func}(y[i] | {pdf_call_params});
+            // ... y[i] is a one-dimensional array
         }}
-            """.format(lpdf_func=lpdf_func,
-                       pdf_call_params=pdf_call_params)
-        else:
+           """.format(lpdf_func=lpdf_func,
+                      pdf_call_params=pdf_call_params)
+        else:  # vector, 1D array, real
             code = """
         target += {lpdf_func}(y | {pdf_call_params});
             """.format(lpdf_func=lpdf_func,
                        pdf_call_params=pdf_call_params)
-        funcname_extra = ""
 
-    elif method == SampleMethod.LOWER:
-        if y.dimensions == 2:
+    elif method in [SampleMethod.LOWER,
+                    SampleMethod.UPPER,
+                    SampleMethod.RANGE]:
+        # Some sort of bridgesampling correction.
+
+        # Define the correction PER SAMPLED VALUE.
+        if method == SampleMethod.LOWER:
             code = """
-        int nrows = size(y);
-        real correction = {lccdf_func}(lower | {pdf_call_params});
-        for (i in 1:nrows) {{
-            target += {lpdf_func}(y[i] | {pdf_call_params}) -
-                      correction;
+        real correction_per_value = {lccdf_func}(lower | {pdf_call_params});
+            """.format(lccdf_func=lccdf_func,
+                       pdf_call_params=pdf_call_params)
+        elif method == SampleMethod.UPPER:
+            code = """
+        real correction_per_value = {lcdf_func}(upper | {pdf_call_params});
+            """.format(lcdf_func=lcdf_func,
+                       pdf_call_params=pdf_call_params)
+        elif method == SampleMethod.RANGE:
+            code = """
+        real correction_per_value = log_diff_exp(
+            {lcdf_func}(upper | {pdf_call_params}),
+            {lcdf_func}(lower | {pdf_call_params}));
+            """.format(lcdf_func=lcdf_func,
+                       pdf_call_params=pdf_call_params)
+        else:
+            raise AssertionError("bug")
+        code = code.rstrip()
+
+        # Sample, and apply the correction to the "target" special log-prob
+        # variable.
+        if y.dimensions == 3:
+            code += """
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {{
+            for (j in 1:dimensions[2]) {{
+                for (k in 1:dimensions[3]) {{
+                    target += {lpdf_func}(y[i, j, k] | {pdf_call_params}) -
+                              correction_per_value;
+                }}
+            }}
         }}
-        enforceLowerBound_{ya}_lp(y, lower);
                 """.format(lpdf_func=lpdf_func,
-                           lccdf_func=lccdf_func,
-                           pdf_call_params=pdf_call_params,
-                           ya=y.abbreviation)
-        else:
-            code = """
+                           pdf_call_params=pdf_call_params)
+        elif y.dimensions == 2:
+            code += """
+        int dimensions[2] = dims(y);
+        real correction_per_row = correction_per_value * dimensions[2];
+        for (i in 1:dimensions[1]) {{
+            target += {lpdf_func}(y[i] | {pdf_call_params}) -
+                      correction_per_row;
+            // ... y[i] is a one-dimensional array
+        }}
+                """.format(lpdf_func=lpdf_func,
+                           pdf_call_params=pdf_call_params)
+        elif y.dimensions == 1:  # vector or 1D array
+            code += """
         target += {lpdf_func}(y | {pdf_call_params}) -
-                  {lccdf_func}(lower | {pdf_call_params});
+                  correction_per_value * num_elements(y);
+               """.format(lpdf_func=lpdf_func,
+                          pdf_call_params=pdf_call_params)
+        elif y.singleton:
+            code += """
+        target += {lpdf_func}(y | {pdf_call_params}) -
+                  correction_per_value;
+            """.format(lpdf_func=lpdf_func,
+                       pdf_call_params=pdf_call_params)
+        else:
+            raise AssertionError("bug")
+        code = code.rstrip()
+
+        # Apply bounds checking
+        if method == SampleMethod.LOWER:
+            code += """
         enforceLowerBound_{ya}_lp(y, lower);
-            """.format(lpdf_func=lpdf_func,
-                       lccdf_func=lccdf_func,
-                       pdf_call_params=pdf_call_params,
-                       ya=y.abbreviation)
-        funcname_extra = "LowerBound"
-        call_params += [lower]
+            """.format(ya=y.abbreviation)
+            funcname_extra = "LowerBound"
+            call_params += [lower]
 
-    elif method == SampleMethod.UPPER:
-        if y.dimensions == 2:
-            code = """
-        int nrows = size(y);
-        real correction = {lcdf_func}(upper | {pdf_call_params});
-        for (i in 1:nrows) {{
-            target += {lpdf_func}(y[i] | {pdf_call_params}) -
-                      correction;
-        }}
+        elif method == SampleMethod.UPPER:
+            code += """
         enforceUpperBound_{ya}_lp(y, upper);
-            """.format(lpdf_func=lpdf_func,
-                       lcdf_func=lcdf_func,
-                       pdf_call_params=pdf_call_params,
-                       ya=y.abbreviation)
-        else:
-            code = """
-        target += {lpdf_func}(y | {pdf_call_params}) -
-                  {lcdf_func}(upper | {pdf_call_params});
-        enforceUpperBound_{ya}_lp(y, upper);
-            """.format(lpdf_func=lpdf_func,
-                       lcdf_func=lcdf_func,
-                       pdf_call_params=pdf_call_params,
-                       ya=y.abbreviation)
-        funcname_extra = "UpperBound"
-        call_params += [upper]
+            """.format(ya=y.abbreviation)
+            funcname_extra = "UpperBound"
+            call_params += [upper]
 
-    elif method == SampleMethod.RANGE:
-        if y.dimensions == 2:
-            code = """
-        int nrows = size(y);
-        real correction = log_diff_exp({lcdf_func}(upper | {pdf_call_params}),
-                                       {lcdf_func}(lower | {pdf_call_params}));
-        for (i in 1:nrows) {{
-            target += {lpdf_func}(y[i] | {pdf_call_params}) -
-                      correction;
-        }}
+        elif method == SampleMethod.RANGE:
+            code += """
         enforceRangeBounds_{ya}_lp(y, lower, upper);
-            """.format(lpdf_func=lpdf_func,
-                       lcdf_func=lcdf_func,
-                       pdf_call_params=pdf_call_params,
-                       ya=y.abbreviation)
+            """.format(ya=y.abbreviation)
+            funcname_extra = "RangeBound"
+            call_params += [lower, upper]
         else:
-            code = """
-        target += {lpdf_func}(y | {pdf_call_params}) -
-                  log_diff_exp({lcdf_func}(upper | {pdf_call_params}),
-                               {lcdf_func}(lower | {pdf_call_params}));
-        enforceRangeBounds_{ya}_lp(y, lower, upper);
-            """.format(lpdf_func=lpdf_func,
-                       lcdf_func=lcdf_func,
-                       pdf_call_params=pdf_call_params,
-                       ya=y.abbreviation)
-        funcname_extra = "RangeBound"
-        call_params += [lower, upper]
+            raise AssertionError("bug")
+
     else:
         raise AssertionError("bug")
 
@@ -714,7 +834,6 @@ def sample_generic(name_caps: str,
         "{} {}".format(vd.typedef, vd.name)
         for vd in call_params
     )
-
     return """
     void {funcname}({param_defs})
     {{
@@ -729,8 +848,13 @@ def sample_generic(name_caps: str,
 
 def sample_uniform(y: VarDescriptor, lower: VarDescriptor,
                    upper: VarDescriptor) -> str:
+    """
+    This one gets its own function because boundaries are an intrinsic part
+    of uniform distributions (and so, also, no additional boundary corrections
+    are required for bridgesampling).
+    """
     distribution_params = [lower, upper]
-    if (y.dimensions == 2 and
+    if (y.dimensions > 1 and
             any(vd.dimensions > 1 for vd in distribution_params)):
         raise NotImplementedError("y={}, distribution_params={}".format(
             y, distribution_params))
@@ -738,14 +862,26 @@ def sample_uniform(y: VarDescriptor, lower: VarDescriptor,
     lower.name = "lower"
     upper.name = "upper"
 
-    if y.dimensions == 2:
+    if y.dimensions == 3:
+        code = """
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += uniform_lpdf(y[i, j, k] | lower, upper);
+                }
+            }
+        }
+        """
+    elif y.dimensions == 2:
         code = """
         int nrows = size(y);
         for (i in 1:nrows) {
             target += uniform_lpdf(y[i] | lower, upper);
+            // ... y[i] is a one-dimensional array
         }
         """
-    else:
+    else:  # vector, 1D array, real
         code = """
         target += uniform_lpdf(y | lower, upper);
         """
@@ -789,11 +925,7 @@ def get_normal_distribution() -> str:
     for y in ALL_TYPES:
         for mu in ALL_TYPES:
             for sigma in ALL_TYPES:
-                if y == REAL and (mu != REAL or sigma != REAL):
-                    continue
-                if y == ARRAY_2D and (mu != REAL or sigma != REAL):
-                    continue
-                if mu.dimensions == 2 or sigma.dimensions == 2:
+                if mu != REAL or sigma != REAL:
                     continue
                 supported_combinations.append((y, mu, sigma))
 
@@ -847,11 +979,7 @@ def get_cauchy_distribution() -> str:
     for y in ALL_TYPES:
         for mu in ALL_TYPES:
             for sigma in ALL_TYPES:
-                if y == REAL and (mu != REAL or sigma != REAL):
-                    continue
-                if y == ARRAY_2D and (mu != REAL or sigma != REAL):
-                    continue
-                if mu.dimensions == 2 or sigma.dimensions == 2:
+                if mu != REAL or sigma != REAL:
                     continue
                 supported_combinations.append((y, mu, sigma))
 
@@ -907,11 +1035,7 @@ def get_beta_distribution() -> str:
     for y in ALL_TYPES:
         for alpha in ALL_TYPES:
             for beta in ALL_TYPES:
-                if y == REAL and (alpha != REAL or beta != REAL):
-                    continue
-                if y == ARRAY_2D and (alpha != REAL or beta != REAL):
-                    continue
-                if alpha.dimensions == 2 or beta.dimensions == 2:
+                if alpha != REAL or beta != REAL:
                     continue
                 supported_combinations.append((y, alpha, beta))
 
@@ -967,11 +1091,7 @@ def get_gamma_distribution() -> str:
     for y in ALL_TYPES:
         for alpha in ALL_TYPES:
             for beta in ALL_TYPES:
-                if y == REAL and (alpha != REAL or beta != REAL):
-                    continue
-                if y == ARRAY_2D and (alpha != REAL or beta != REAL):
-                    continue
-                if alpha.dimensions == 2 or beta.dimensions == 2:
+                if alpha != REAL or beta != REAL:
                     continue
                 supported_combinations.append((y, alpha, beta))
 
@@ -1028,9 +1148,10 @@ def get_uniform_distribution() -> str:
             for upper in ALL_TYPES:
                 if y == REAL and (lower != REAL or upper != REAL):
                     continue
-                if y == ARRAY_2D and (lower != REAL or upper != REAL):
+                if (y.array and y.dimensions > 1 and
+                        (lower != REAL or upper != REAL)):
                     continue
-                if lower.dimensions == 2 or upper.dimensions == 2:
+                if lower.dimensions > 1 or upper.dimensions > 1:
                     continue
                 supported_combinations.append((y, lower, upper))
 
@@ -1055,6 +1176,7 @@ def get_uniform_distribution() -> str:
 # =============================================================================
 # Bernoulli distribution
 # =============================================================================
+# So specialized that we just write the code manually.
 
 SAMPLE_BERNOULLI = """
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1089,8 +1211,12 @@ def make_reparam_normal(y: VarDescriptor,
                         mu: VarDescriptor,
                         sigma: VarDescriptor,
                         method: SampleMethod) -> str:
-    if (y.dimensions == 2 or
-            (y.singleton and (not mu.singleton or not sigma.singleton))):
+    """
+    The reparameterization is to a standard (unit) normal distribution,
+    N(0, 1). See get_reparamaterized_normal().
+    """
+    if ((y.dimensions > 1  or y.singleton) and
+            (not mu.singleton or not sigma.singleton)):
         raise NotImplementedError("y={}, mu={}, sigma={}".format(
             y, mu, sigma))
     y.name = "y_unit_normal"
@@ -1152,11 +1278,23 @@ def make_reparam_normal(y: VarDescriptor,
         int length = num_elements(y_unit_normal);
         vector[length] result;
         """
-    else:
+    elif y.dimensions == 1:  # 1D array
         code += """
         int length = num_elements(y_unit_normal);
         real result[length];
         """
+    elif y.dimensions == 2:
+        code += """
+        int dimensions[2] = dims(y_unit_normal);
+        real result[dimensions[1], dimensions[2]];
+        """
+    elif y.dimensions == 3:
+        code += """
+        int dimensions[3] = dims(y_unit_normal);
+        real result[dimensions[1], dimensions[2], dimensions[3]];
+        """
+    else:
+        raise AssertionError("bug")
     if using_lower:
         code += """
         real lower_transformed;
@@ -1193,7 +1331,7 @@ def make_reparam_normal(y: VarDescriptor,
             ya=y.abbreviation,
             constraints=constraints,
         )
-    else:
+    elif y.dimensions == 1:  # vector, 1D array
         code += """
         for (i in 1:length) {{
             {calc_transformed_1}
@@ -1210,6 +1348,44 @@ def make_reparam_normal(y: VarDescriptor,
             mu_i=mu_i,
             sigma_i=sigma_i
         )
+    elif y.dimensions == 2:
+        code += """
+        {calc_transformed_1}
+        {calc_transformed_2}
+        for (i in 1:dimensions[1]) {{
+            for (j in 1:dimensions[2]) {{
+                sampleNormal{fe}_RRR_lp(y_unit_normal[i, j], 0, 1{constraints});
+                result[i, j] = mu + sigma * y_unit_normal[i, j];
+            }}
+        }}
+        """.format(
+            calc_transformed_1=calc_transformed_1,
+            calc_transformed_2=calc_transformed_2,
+            fe=funcname_extra,
+            ya=y.abbreviation,
+            constraints=constraints,
+        )
+    elif y.dimensions == 3:
+        code += """
+        {calc_transformed_1}
+        {calc_transformed_2}
+        for (i in 1:dimensions[1]) {{
+            for (j in 1:dimensions[2]) {{
+                for (k in 1:dimensions[3]) {{
+                    sampleNormal{fe}_RRR_lp(y_unit_normal[i, j, k], 0, 1{constraints});
+                    result[i, j, k] = mu + sigma * y_unit_normal[i, j, k];
+                }}
+            }}
+        }}
+        """.format(
+            calc_transformed_1=calc_transformed_1,
+            calc_transformed_2=calc_transformed_2,
+            fe=funcname_extra,
+            ya=y.abbreviation,
+            constraints=constraints,
+        )
+    else:
+        raise AssertionError("bug")
 
     # Return value
     code += """
@@ -1255,11 +1431,10 @@ def get_reparamaterized_normal() -> str:
     for y in ALL_TYPES:
         for lower in ALL_TYPES:
             for upper in ALL_TYPES:
-                if y == REAL and (lower != REAL or upper != REAL):
+                if ((y == REAL or y.polydim_array) and
+                        (lower != REAL or upper != REAL)):
                     continue
-                if y == ARRAY_2D:
-                    continue
-                if lower.dimensions == 2 or upper.dimensions == 2:
+                if lower.dimensions > 1 or upper.dimensions > 1:
                     continue
                 supported_combinations.append((y, lower, upper))
 
@@ -1297,8 +1472,12 @@ def make_reparam_cauchy(y: VarDescriptor,
                         mu: VarDescriptor,
                         sigma: VarDescriptor,
                         method: SampleMethod) -> str:
-    if (y.dimensions == 2 or
-            (y.singleton and (not mu.singleton or not sigma.singleton))):
+    """
+    The reparameterization is to a uniform distribution.
+    See get_reparameterized_cauchy() for docs.
+    """
+    if ((y.dimensions > 1  or y.singleton) and
+            (not mu.singleton or not sigma.singleton)):
         raise NotImplementedError("y={}, mu={}, sigma={}".format(
             y, mu, sigma))
     y.name = "y_uniform"
@@ -1360,11 +1539,23 @@ def make_reparam_cauchy(y: VarDescriptor,
         int length = num_elements(y_uniform);
         vector[length] result;
         """
-    else:
+    elif y.dimensions == 1:  # 1D array
         code += """
         int length = num_elements(y_uniform);
         real result[length];
         """
+    elif y.dimensions == 2:
+        code += """
+        int dimensions[2] = dims(y_uniform);
+        real result[dimensions[1], dimensions[2]];
+        """
+    elif y.dimensions == 3:
+        code += """
+        int dimensions[3] = dims(y_uniform);
+        real result[dimensions[1], dimensions[2], dimensions[3]];
+        """
+    else:
+        raise AssertionError("bug")
     if using_lower:
         code += """
         real lower_transformed;
@@ -1404,7 +1595,7 @@ def make_reparam_cauchy(y: VarDescriptor,
             lp=lower_param,
             up=upper_param,
         )
-    else:
+    elif y.dimensions == 1:  # vector, 1D array
         code += """
         for (i in 1:length) {{
             {calc_transformed_1}
@@ -1421,6 +1612,44 @@ def make_reparam_cauchy(y: VarDescriptor,
             mu_i=mu_i,
             sigma_i=sigma_i
         )
+    elif y.dimensions == 2:
+        code += """
+        {calc_transformed_1}
+        {calc_transformed_2}
+        for (i in 1:dimensions[1]) {{
+            for (j in 1:dimensions[2]) {{
+                sampleUniform_RRR_lp(y_uniform[i, j], {lp}, {up});
+                result[i, j] = mu + sigma * tan(y_uniform[i, j]);
+            }}
+        }}
+        """.format(
+            calc_transformed_1=calc_transformed_1,
+            calc_transformed_2=calc_transformed_2,
+            ya=y.abbreviation,
+            lp=lower_param,
+            up=upper_param,
+        )
+    elif y.dimensions == 3:
+        code += """
+        {calc_transformed_1}
+        {calc_transformed_2}
+        for (i in 1:dimensions[1]) {{
+            for (j in 1:dimensions[2]) {{
+                for (k in 1:dimensions[3]) {{
+                    sampleUniform_RRR_lp(y_uniform[i, j, k], {lp}, {up});
+                    result[i, j, k] = mu + sigma * tan(y_uniform[i, j, k]);
+                }}
+            }}
+        }}
+        """.format(
+            calc_transformed_1=calc_transformed_1,
+            calc_transformed_2=calc_transformed_2,
+            ya=y.abbreviation,
+            lp=lower_param,
+            up=upper_param,
+        )
+    else:
+        raise AssertionError("bug")
 
     # Return value
     code += """
@@ -1489,11 +1718,10 @@ def get_reparamaterized_cauchy() -> str:
     for y in ALL_TYPES:
         for lower in ALL_TYPES:
             for upper in ALL_TYPES:
-                if y == REAL and (lower != REAL or upper != REAL):
+                if ((y == REAL or y.polydim_array) and
+                        (lower != REAL or upper != REAL)):
                     continue
-                if y == ARRAY_2D:
-                    continue
-                if lower.dimensions == 2 or upper.dimensions == 2:
+                if lower.dimensions > 1 or upper.dimensions > 1:
                     continue
                 supported_combinations.append((y, lower, upper))
 
