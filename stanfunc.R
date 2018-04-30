@@ -68,7 +68,11 @@ stanfunc$load_or_run_stan <- function(
         }
         cat("... loaded\n")
     } else {
-        n_cores_stan <- options("mc.cores")
+        n_cores_stan <- getOption("mc.cores")
+        if (is.null(n_cores_stan)) {
+            n_cores_stan <- 0
+            # https://github.com/HenrikBengtsson/Wishlist-for-R/issues/7
+        }
         n_cores_available <- parallel::detectCores()
         if (n_cores_stan < n_cores_available) {
             warning(paste(
@@ -78,7 +82,7 @@ stanfunc$load_or_run_stan <- function(
                 "    options(mc.cores = parallel::detectCores())",
                 sep=""))
         }
-        if (n_cores_stan == 1) {
+        if (n_cores_stan <= 1) {
             warning("Running with a single CPU core; Stan may be slow")
         }
 

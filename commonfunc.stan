@@ -24,7 +24,7 @@
     {
         // Returns the nth value (at "index") of the softmax of the inputs.
         // Assumes an inverse temperature of 1.
-        
+
         /*
             For softmax: see my miscstat.R; the important points for
             optimization are (1) that softmax is invariant to the addition/
@@ -52,7 +52,7 @@
     real softmaxNthInvTemp(vector softmax_inputs, real inverse_temp, int index)
     {
         // Version of softmaxNth allowing you to specify the inverse temp.
-        
+
         int length = num_elements(softmax_inputs);
         vector[length] s_exp_products;
         if (index < 1 || index > length) {
@@ -173,7 +173,7 @@
 
         2RR
             ...
-            
+
         3RR
             ...
 
@@ -220,7 +220,7 @@
 
     Now:
         num_elements() gives the total, in this case N_A * N_B;
-            ... but when *accessing* a 2D array, my_array[1] gives the first 
+            ... but when *accessing* a 2D array, my_array[1] gives the first
                 row, not the first element; see Stan 2017 manual p323.
         size() gives the size of first dimension, in this case N_A;
         dims() gives all dimensions, in this case an int[] containing {N_A, N_B}.
@@ -1390,7 +1390,7 @@
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Bernoulli distribution
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    // y is in {0, 1} and theta is in the range [0, 1].
+    // y is in {0, 1} and theta is a probability in the range [0, 1].
 
     void sampleBernoulli_IR_lp(int y, real theta)
     {
@@ -1408,6 +1408,29 @@
     {
         target += bernoulli_lpmf(y | theta);
     }
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Bernoulli logit distribution
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // y is in {0, 1} and alpha is a logit (log odds) in the range [-inf, +inf].
+
+    void sampleBernoulliLogit_IR_lp(int y, real alpha)
+    {
+        target += bernoulli_logit_lpmf(y | alpha);
+    }
+    void sampleBernoulliLogit_AR_lp(int[] y, real alpha)
+    {
+        target += bernoulli_logit_lpmf(y | alpha);
+    }
+    void sampleBernoulliLogit_AA_lp(int[] y, real[] alpha)
+    {
+        target += bernoulli_logit_lpmf(y | alpha);
+    }
+    void sampleBernoulliLogit_AV_lp(int[] y, vector alpha)
+    {
+        target += bernoulli_logit_lpmf(y | alpha);
+    }
+
 
     // ------------------------------------------------------------------------
     // LOG PROBABILITY FUNCTIONS FOR BRIDGE SAMPLING WITH NON-CENTERED
