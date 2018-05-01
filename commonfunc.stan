@@ -5,64 +5,61 @@
     // Common functions
     // ========================================================================
     /*
-    Reminders:
-    - Annoyingly, you can't modify arguments to Stan user-defined functions.
-      (No pass-by-reference.)
-    - size() doesn't work on a plain "vector". Use num_elements().
-    - Array/vector indexing is 1-based.
-    - The addition-assignment (+=) operator generally doesn't work (it
-      appears to be reserved for the one variable "target += ...").
-      Similarly for all others you might expect.
-    - Can't define constants in a functions{} block.
+        Reminders:
+        - Annoyingly, you can't modify arguments to Stan user-defined
+          functions. (No pass-by-reference.)
+        - size() doesn't work on a plain "vector". Use num_elements().
+        - Array/vector indexing is 1-based.
+        - The addition-assignment (+=) operator generally doesn't work (it
+          appears to be reserved for the one variable "target += ...").
+          Similarly for all others you might expect.
+        - Can't define constants in a functions{} block.
     */
 
     // ------------------------------------------------------------------------
-    // Simple functions
+    // Simple functions: softmax
+    // ------------------------------------------------------------------------
+    
+    /*
+        REMOVED 2018-05-01:
+            real softmaxNth(vector softmax_inputs, int index);
+        INSTEAD, REPLACE THIS SORT OF CALL:
+            result = softmaxNth(softmax_inputs, index);
+        WITH THIS STAN FUNCTION:
+            result = softmax(softmax_inputs)[index];
+    */
+    
+    /*
+        REMOVED 2018-05-01:
+            real softmaxNthInvTemp(vector softmax_inputs, real inverse_temp, 
+                int index);
+        INSTEAD, REPLACE THIS SORT OF CALL:
+            result = softmaxNthInvTemp(softmax_inputs, inverse_temp, index);
+        WITH THIS STAN FUNCTION:
+            result = softmax(softmax_inputs * inverse_temp)[index];
+    */
+
+    real logitSoftmaxNth(vector inputs, int index)
+    {
+        // Returns logit(softmax(inputs))[index].
+
+        // METHOD 1 (fewer calculations involved):
+        real log_p = inputs[index] - log_sum_exp(inputs);
+        
+        // METHOD 2:
+        // real log_p = log_softmax(inputs)[index];
+
+        // EITHER WAY:
+        real log_1mp = log1m_exp(log_p);  // = log(1 - exp(log_p)) = log(1 - p)
+        return log_p - log_1mp;  // logit = log(p) - log(1 - p)
+    }
+    
+    // ------------------------------------------------------------------------
+    // Simple functions: logistic
     // ------------------------------------------------------------------------
 
-    real softmaxNth(vector softmax_inputs, int index)
-    {
-        // Returns the nth value (at "index") of the softmax of the inputs.
-        // Assumes an inverse temperature of 1.
-
-        /*
-            For softmax: see my miscstat.R; the important points for
-            optimization are (1) that softmax is invariant to the addition/
-            subtraction of a constant, and subtracting the mean makes the
-            numbers less likely to fall over computationally; (2) we only
-            need the final part of the computation for a single number
-            (preference for the right), so we don't have to waste time
-            vector-calculating the preference for the left as well [that is:
-            we don't have to calculate s_exp_products / sum(s_exp_products)].
-
-            Since Stan 2.0.0, the alternative is to use softmax(); see
-            stan/math/fwd/mat/fun/softmax.hpp. Not sure which is faster, or
-            whether it really matters.
-        */
-        int length = num_elements(softmax_inputs);
-        vector[length] s_exp_products;
-        if (index < 1 || index > length) {
-            reject("softmaxNth(): index is ", index,
-                   " but must be in range 1-", length);
-        }
-        s_exp_products = exp(softmax_inputs - mean(softmax_inputs));
-        return s_exp_products[index] / sum(s_exp_products);
-    }
-
-    real softmaxNthInvTemp(vector softmax_inputs, real inverse_temp, int index)
-    {
-        // Version of softmaxNth allowing you to specify the inverse temp.
-
-        int length = num_elements(softmax_inputs);
-        vector[length] s_exp_products;
-        if (index < 1 || index > length) {
-            reject("softmaxNthInvTemp(): index is ", index,
-                   " but must be in range 1-", length);
-        }
-        s_exp_products = exp(softmax_inputs * inverse_temp - mean(softmax_inputs));
-        return s_exp_products[index] / sum(s_exp_products);
-    }
-
+    // For the logit function, use Stan's built-in logit().
+    
     real logistic(real x, real x0, real k, real L)
     {
         // Returns x transformed through a logistic function.
@@ -73,14 +70,21 @@
 
         return L / (1 + exp(-k * (x - x0)));
     }
+    
+    // For the standard logistic (with x0 = 0, k = 1, L = 1), use Stan's
+    // inv_logit(). 
+
+    // ------------------------------------------------------------------------
+    // Simple functions: boundaries (min, max)
+    // ------------------------------------------------------------------------
 
     real bound(real x, real min_value, real max_value)
     {
         // Returns x with minimum/maximum boundaries applied.
         // We should simply be able to do this:
         //     return max(min_value, min(x, max_value));
-        // ... but Stan doesn't have max(real, real) or
-        // min(real, real) functions!
+        // ... but Stan doesn't have max(real, real) or min(real, real) 
+        // functions!
 
         if (x < min_value) {
             return min_value;
