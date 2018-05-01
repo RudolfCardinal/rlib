@@ -429,24 +429,56 @@ SIMPLE_FUNCTIONS = """
     // Simple functions: softmax
     // ------------------------------------------------------------------------
     
-    /*
-        REMOVED 2018-05-01:
-            real softmaxNth(vector softmax_inputs, int index);
-        INSTEAD, REPLACE THIS SORT OF CALL:
-            result = softmaxNth(softmax_inputs, index);
-        WITH THIS STAN FUNCTION:
-            result = softmax(softmax_inputs)[index];
-    */
-    
-    /*
-        REMOVED 2018-05-01:
-            real softmaxNthInvTemp(vector softmax_inputs, real inverse_temp, 
-                int index);
-        INSTEAD, REPLACE THIS SORT OF CALL:
-            result = softmaxNthInvTemp(softmax_inputs, inverse_temp, index);
-        WITH THIS STAN FUNCTION:
-            result = softmax(softmax_inputs * inverse_temp)[index];
-    */
+    real softmaxNth(vector softmax_inputs, int index)
+    {
+        /*
+            Returns the nth value (at "index") of the softmax of the inputs.
+            Assumes an inverse temperature of 1.
+
+        NOTES:
+            A softmax function takes several inputs and normalizes them so 
+            that:
+                - the outputs are in the same relative order as the inputs
+                - the outputs sum to 1.
+            
+            For softmax: see my miscstat.R; the important points for
+            optimization are (1) that softmax is invariant to the addition/
+            subtraction of a constant, and subtracting the mean makes the
+            numbers less likely to fall over computationally; (2) we only
+            need the final part of the computation for a single number
+            (preference for the right), so we don't have to waste time
+            vector-calculating the preference for the left as well [that is:
+            we don't have to calculate s_exp_products / sum(s_exp_products)].
+            
+            The constant can be the mean, or the max; Stan uses the max, which
+            is probably a little more efficient.
+
+            Since Stan 2.0.0, the alternative is to use softmax(); see
+            https://github.com/stan-dev/math/blob/develop/stan/math/prim/mat/fun/softmax.hpp
+            The exact syntactic equivalence is:
+            
+                real result = softmaxNth(inputs, index);
+                real result = softmax(inputs)[index];
+        */
+        int length = num_elements(softmax_inputs);
+        real constant = max(softmax_inputs);
+        vector[length] s_exp_products = exp(softmax_inputs - constant);
+        return s_exp_products[index] / sum(s_exp_products);
+    }
+
+    real softmaxNthInvTemp(vector softmax_inputs, real inverse_temp, int index)
+    {
+        /*
+            Version of softmaxNth allowing you to specify the inverse temp.
+            
+            The direct Stan equivalent is:
+            
+                real result = softmaxNthInvTemp(inputs, invtemp, index);
+                real result = softmax(inputs * invtemp)[index];
+        */
+        
+        return softmaxNth(softmax_inputs * inverse_temp, index);
+    }
 
     real logitSoftmaxNth(vector inputs, int index)
     {
