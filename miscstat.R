@@ -618,13 +618,16 @@ miscstat$p_data_or_more_extreme_from_normal <- function(x, means, sds) {
 miscstat$softmax <- function(x, b = 1, debug = TRUE) {
     # x: vector of values
     # b: exploration parameter, or inverse temperature [Daw2009], or 1/t where:
-    # t: temperature (towards infinity: all actions equally likely; towards zero: probability of action with highest value tends to 1)
-    # DO NOT USE TEMPERATURE DIRECTLY: the optimizer may take it to zero, giving an infinity.
-    # vector may have NA values in
-    # return value: vector of probabilities
+    # t: temperature (towards infinity: all actions equally likely; towards
+    #    zero: probability of action with highest value tends to 1)
+    # - DO NOT USE TEMPERATURE DIRECTLY: the optimizer may take it to zero,
+    #   giving an infinity.
+    # - input vector may have NA values in
+    # - return value: vector of probabilities
     constant = mean(x, na.rm=TRUE)
     products = x * b - constant
-    # ... softmax is invariant to addition of a constant: Daw article and http://www.faqs.org/faqs/ai-faq/neural-nets/part2/section-12.html#b
+    # ... softmax is invariant to addition of a constant: Daw article and
+    #     http://www.faqs.org/faqs/ai-faq/neural-nets/part2/section-12.html#b
     if (max(products, na.rm=TRUE) > MAX_EXPONENT) {
         if (debug) cat("OVERFLOW in softmax(): x =", x, ", b =", b, ", constant =", constant, ", products=", products, "\n")
         answer = rep(0, length(x))
