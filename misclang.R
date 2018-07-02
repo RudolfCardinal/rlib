@@ -29,6 +29,27 @@ misclang$vector_element_by_index_of_last_element <- function(x)
 # Caching
 #==============================================================================
 
+misclang$load_rds_or_run_function <- function(
+        filename, fn, ...,
+        forcerun=FALSE)
+{
+    # Simplified version of load_or_run_function() that only uses RDS files,
+    # so doesn't need varname.
+
+    if (!forcerun && file.exists(filename)) {
+        cat("Loading from file:", filename, "\n")
+        result <- readRDS(filename)
+        cat("... loaded\n")
+    } else {
+        cat("Running function:", deparse(substitute(fn)), "\n")
+        result <- fn(...)
+        cat("--- Saving to file:", filename, "\n")
+        saveRDS(result, file=filename)
+    }
+    return(result)
+}
+
+
 misclang$load_or_run_function <- function(
         varname, filename, fn, ...,
         forcerun=FALSE,

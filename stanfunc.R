@@ -15,12 +15,16 @@ library(reshape)
 library(rstan)
 library(stringr)
 
-
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 #==============================================================================
 
 stanfunc = new.env()
+
+DEFAULT_CHAINS = 8
+DEFAULT_ITER = 2000
+DEFAULT_INIT = "0"  # the Stan default, "random", uses the range -2 to +2
+DEFAULT_SEED = 1234  # for consistency across runs
 
 #==============================================================================
 # Core functions for e.g. rstan 2.16.2:
@@ -31,12 +35,12 @@ stanfunc$load_or_run_stan <- function(
         model_code,
         fit_filename,
         model_name,
-        save_code_filename = NULL,
+        save_code_filename = NULL,  # unnecessary; both Stan and C++ code is extractable from the Stan fit
         forcerun = FALSE,
-        chains = 8,
-        iter = 2000,
-        init = "0",  # the default, "random", uses the range -2 to +2
-        seed = 1234,  # for consistency across runs
+        chains = DEFAULT_CHAINS,
+        iter = DEFAULT_ITER,
+        init = DEFAULT_INIT,  # the default, "random", uses the range -2 to +2
+        seed = DEFAULT_SEED,  # for consistency across runs
         cache_filetype=c("rds", "rda"),
         ...)
 {
@@ -86,7 +90,8 @@ stanfunc$load_or_run_stan <- function(
             warning("Running with a single CPU core; Stan may be slow")
         }
 
-        cat(paste("--- Running Stan, starting at", Sys.time(), "...\n"))
+        cat(paste("--- Running Stan, model ", model_name,
+                  ", starting at ", Sys.time(), "...\n", sep=""))
 
         # Stan now supports parallel operation directly
         fit <- rstan::stan(
@@ -190,6 +195,148 @@ stanfunc$load_or_run_bridge_sampler <- function(
         cat("... saved\n")
     }
     return(b)
+}
+
+
+stanfunc$load_or_run_vb <- function(
+        data,
+        model_code,
+        vbfit_filename,
+        model_name,
+        forcerun = FALSE,
+        init = DEFAULT_INIT,
+        seed = DEFAULT_SEED,
+        ...)
+{
+    if (!forcerun && file.exists(vbfit_filename)) {
+
+        cat("Loading Stan VB fit from RDS file: ",
+            vbfit_filename, "...\n", sep="")
+        vb_fit <- readRDS(vbfit_filename)
+        cat("... loaded\n")
+
+    } else {
+
+        cat(paste("Running variational Bayes approximation to Stan model ",
+                  model_name, ", starting at", Sys.time(), "...\n", sep=""))
+
+        cat("Building model...")
+        vb_model <- rstan::stan_model(model_name=model_name,
+                                      model_code=code)
+
+        cat("Running VB...")
+        vb_fit <- rstan::vb(
+            object=vb_model,
+            data=standata,
+            seed=SEED,
+            init=initfunc
+        )
+
+        cat(paste("... Finished Stan VB run at", Sys.time(), "\n"))
+
+        cat("--- Saving Stan model fit to RDS file: ",
+            vbfit_filename, "...\n", sep="")
+        saveRDS(vb_fit, file=vbfit_filename)  # load with readRDS()
+        cat("... saved\n")
+    }
+
+    return(vb_fit)
+}
+
+
+
+stanfunc$quickrun <- function(
+    data,
+    model_name,
+    model_code,
+    fit_cache_dir,
+    forcerun = FALSE,
+    chains = DEFAULT_CHAINS,
+    iter = DEFAULT_ITER,
+    init = DEFAULT_INIT,  # the default, "random", uses the range -2 to +2
+    seed = DEFAULT_SEED,  # for consistency across runs
+    control = NULL,
+    vb = FALSE,  # quick-and-dirty variational Bayes
+    save_code = FALSE,  # unnecessary; both Stan and C++ code is extractable from the Stan fit
+    FIT_SUFFIX = "_stanfit.rds",
+    BRIDGE_SUFFIX = "_bridgesampling.rds",
+    VBFIT_SUFFIX = "_stanvbfit.rds",
+    CPP_SUFFIX = "_code.cpp",
+    ...)  # additional parameters to rstan::stan
+{
+    # Note that C++ code is extractable from the Stan fit.
+    fit_filename <- file.path(fit_cache_dir,
+                              paste(model_name, FIT_SUFFIX, sep=""))
+    bridge_filename <- file.path(fit_cache_dir,
+                              paste(model_name, BRIDGE_SUFFIX, sep=""))
+    vbfit_filename <- file.path(fit_cache_dir,
+                                paste(model_name, VBFIT_SUFFIX, sep=""))
+    if (save_code) {
+        cpp_filename <- file.path(fit_cache_dir,
+                                  paste(model_name, CPP_SUFFIX, sep=""))
+    } else {
+        cpp_filename <- NULL
+    }
+
+    result <- list(
+        model_name = model_name,
+        fit = NULL,
+        bridge = NULL,
+        shinystan = NULL,
+        vb_fit = NULL
+    )
+
+    if (vb) {
+
+        cat(paste("Running variational Bayes approximation to Stan model ",
+                  model_name, "...\n", sep=""))
+        result$vb_fit <- stanfunc$load_or_run_vb(
+            data = data,
+            model_code = model_code,
+            vbfit_filename = vbfit_filename,
+            model_name = model_name,
+            forcerun = forcerun,
+            init = init,
+            seed = seed
+        )
+
+    } else {
+
+        cat(paste("Running Stan model ", model_name, "...\n", sep=""))
+
+        # Stan fit
+        result$fit <- stanfunc$load_or_run_stan(
+            data = standata,
+            model_code = model_code,
+            fit_filename = fit_filename,
+            model_name = model_name,
+            save_code_filename = cpp_filename,
+            forcerun = forcerun,
+            chains = chains,
+            iter = iter,
+            init = init,
+            seed = seed,
+            control = control,
+            ...
+        )
+
+        # View the model in ShinyStan
+        cat("Making ShinyStan object...\n")
+        result$shinystan <- shinystan::as.shinystan(result$fit)
+        cat("... made\n")
+        # Use with: shinystan::launch_shinystan(result$shinystan)
+
+        # Bridge sampling
+        result$bridge <- stanfunc$load_or_run_bridge_sampler(
+            stanfit = result$fit,
+            filename = bridge_filename,
+            model_code = model_code,
+            data = standata
+        )
+
+    }
+
+    return(result)
 }
 
 
@@ -552,6 +699,21 @@ stanfunc$nonzero_parameters <- function(fit, annotate=FALSE, ...)
 }
 
 
+stanfunc$code_from_stanfit <- function(fit)
+{
+    # Returns the Stan source code
+    return(fit@stanmodel@model_code)
+}
+
+
+stanfunc$cpp_from_stanfit <- function(fit)
+{
+    # Returns the C++ code
+    return(fit@stanmodel@model_cpp$model_cppcode)
+}
+
+
+
 #==============================================================================
 # Running in parallel
 #==============================================================================
@@ -561,10 +723,10 @@ stanfunc$parallel_stan <- function(
         code = "",
         data,
         cores = parallel:detectCores(),
-        chains = 8,
-        iter = 2000,
+        chains = DEFAULT_CHAINS,
+        iter = DEFAULT_ITER,
         warmup = floor(iter/2),
-        seed = 1234)
+        seed = DEFAULT_SEED)
 {
     warning("stanfunc$parallel_stan: DEPRECATED; superseded by developments to rstan")
     cat("parallel_stan: cores=", cores,
@@ -624,8 +786,9 @@ stanfunc$load_or_run_stan_old <- function(data, code, file, forcerun = FALSE)
 
 stanfunc$parallel_stan_reuse_fit <- function(f1, data,
                                              cores = detectCores(),
-                                             chains = 8,
-                                             iter = 2000, seed = 1234)
+                                             chains = DEFAULT_CHAINS,
+                                             iter = DEFAULT_ITER,
+                                             seed = DEFAULT_SEED)
 {
     warning("stanfunc$parallel_stan_reuse_fit: DEPRECATED; superseded by developments to rstan")
     cat("parallel_stan_reuse_fit: cores=", cores,
