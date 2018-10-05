@@ -1,5 +1,6 @@
 #!/usr/bin/env Rscript
 
+
 requireNamespace("data.table")
 requireNamespace("RODBC")
 
@@ -14,14 +15,20 @@ dbfunc = new.env()
 # Database connections and queries
 # =============================================================================
 
-dbfunc$connectCpft <- function(server = "CPFT-CRATE-P01",
-                               port = 1433,
-                               odbc_driver = "SQL Server")
+dbfunc$connectCpft <- function(
+    server = "CPFT-CRATE-P01",
+    port = 1433,
+    # odbc_driver = "SQL Server",
+    odbc_driver = "ODBC Driver 11 for SQL Server")
 {
     # Uses Trusted_Connection=Yes, i.e. Windows authentication.
-    return(RODBC::odbcDriverConnect(
-        sprintf('driver={%s};server=%s,%d', odbc_driver, server, port)))
-    # Print the resulting dbhandle object to see its connection method.
+    connection_str <- paste0(
+        'driver={', odbc_driver, '}',
+        ';server=', server, ',', port,
+        ';Trusted_Connection=Yes'
+    )
+    cat("Connecting to: ", connection_str, "\n", sep="")
+    return(RODBC::odbcDriverConnect(connection_str))
 }
 
 

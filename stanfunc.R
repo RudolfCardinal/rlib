@@ -345,6 +345,10 @@ stanfunc$compare_model_evidence <- function(bridgesample_list_list,
                                             detail = FALSE,
                                             rhat_warning_threshold = 1.1)
 {
+    # CHECK THE OUTPUT AGAINST, e.g.:
+    # bridgesampling::post_prob(b1, b2, b3, b4, b5, b6, model_names=paste("Model", 1:6))
+    # ... verified.
+
     # bridgesample_list_list
     #   A list of lists. Each item is a list with names:
     #           name: the model name

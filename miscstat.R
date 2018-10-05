@@ -1,22 +1,42 @@
 # miscstat.R
 
 requireNamespace("data.table")
+requireNamespace("ggplot2")
 requireNamespace("lmerTest")
 requireNamespace("lsmeans")
+requireNamespace("MASS")
+requireNamespace("moments")
 requireNamespace("multcomp")
+requireNamespace("plyr")
 
-#==============================================================================
+# =============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
-#==============================================================================
+# =============================================================================
 
 miscstat = new.env()
 
 miscstat$MAX_EXPONENT = log(.Machine$double.xmax)
 miscstat$VERY_SMALL_NUMBER = 1e-323 # .Machine$double.xmin is 2.2e-308, but this seems to manage.
 
-#==============================================================================
+# =============================================================================
+# Cosmetics
+# =============================================================================
+
+heading <- function(x)
+{
+    line <- "==============================================================================="
+    cat(paste("\n", line, "\n", x, "\n", line, "\n", sep=""))
+}
+
+subheading <- function(x)
+{
+    line <- "-------------------------------------------------------------------------------"
+    cat(paste("\n", line, "\n", x, "\n", line, "\n", sep=""))
+}
+
+# =============================================================================
 # Working with machine limits
-#==============================================================================
+# =============================================================================
 
 miscstat$convert_zero_to_very_small_number <- function(x) {
     # for logs: or log(0) will give -Inf and crash the L-BFGS-B optimzer
@@ -27,9 +47,9 @@ miscstat$reset_rng_seed <- function() {
     set.seed(0xbeef)
 }
 
-#==============================================================================
+# =============================================================================
 # Efficient calculation with extremely small numbers
-#==============================================================================
+# =============================================================================
 
 miscstat$log_of_mean_of_numbers_in_log_domain <- function(log_v) {
     # http://stackoverflow.com/questions/7355145/mean-of-very-small-values
@@ -39,38 +59,59 @@ miscstat$log_of_mean_of_numbers_in_log_domain <- function(log_v) {
     return(logmean)
 }
 
-#==============================================================================
+# =============================================================================
 # Summary statistics
-#==============================================================================
+# =============================================================================
 
 miscstat$sem <- function(x) {
     # Calculate the standard error of the mean (SEM).
     # - SEM = SD / sqrt(n) = sqrt(variance / n).
     # - Won't do anything silly with NA values since var() will return NA in
     #   that case... but does fail with NULL == c()
-    if (is.null(x)) return(NA)  # as for mean(NULL)
+    if (is.null(x)) {
+        return(NA)  # as for mean(NULL)
+    }
     sqrt(var(x)/length(x))
 }
 
-miscstat$half_confidence_interval_t <- function(x, ci = 0.95) {
-    n = length(x)
-    df = n - 1
-    sem = miscstat$sem(x)
-    crit_p = 1 - ((1 - ci) / 2) # e.g. 0.975 for ci == 0.95
-    crit_t = qt(crit_p, df = df)
+miscstat$half_confidence_interval_t <- function(x, ci = 0.95, na.rm = FALSE) {
+    if (na.rm) {
+        x <- x[!is.na(x)]
+    }
+    n <- length(x)
+    df <- n - 1
+    sem <- miscstat$sem(x)
+    crit_p <- 1 - ((1 - ci) / 2) # e.g. 0.975 for ci == 0.95
+    crit_t <- qt(crit_p, df = df)
     return(crit_t * sem)
     # confidence interval is mean +/- that
 }
 
-miscstat$confidence_interval_t <- function(x, ci = 0.95) {
-    hci = half_confidence_interval_t(x, ci)
-    m = mean(x)
-    return(c(m - hci, m + hci))
+miscstat$confidence_interval_t <- function(x, ci = 0.95, na.rm = FALSE) {
+    hci <- half_confidence_interval_t(x, ci, na.rm = na.rm)
+    m <- mean(x, na.rm = na.rm)
+    return(c("ci_lower" = m - hci, "ci_upper" = m + hci))
 }
+
+miscstat$logistic_regression_odds_ratios <- function(model,
+                                                     confint_level = 0.95)
+{
+    # The summary() shows log odds in the "Estimate" column.
+    # Confidence intervals:
+    # - https://stats.stackexchange.com/questions/8661/logistic-regression-in-r-odds-ratio
+    require(MASS)
+    result <- exp(cbind(coef(model), confint(model, level = confint_level)))
+    # Could also use confint.default:
+    # https://stats.stackexchange.com/questions/304833/how-to-calculate-odds-ratio-and-95-confidence-interval-for-logistic-regression/304909
+
+    colnames(result)[1] <- "Odds ratio"
+    return(result)
+}
+
 
 miscstat$summarize_by_factors <- function(data, depvarname, factornames,
                                           na.rm = FALSE) {
-    ddply(
+    data.table(plyr::ddply(
         data,
         factornames,
         function(drow) {
@@ -88,7 +129,7 @@ miscstat$summarize_by_factors <- function(data, depvarname, factornames,
                 sem = miscstat$sem(values)
             )
         }
-    )
+    ))
 }
 
 miscstat$summarize_by_factors_datatable <- function(dt, depvarname, factornames) {
@@ -109,9 +150,9 @@ miscstat$summarize_by_factors_datatable <- function(dt, depvarname, factornames)
     # NOTE: doesn't care whether the "by" things are really factors or not.
 }
 
-#==============================================================================
+# =============================================================================
 # Simple comparisons of data
-#==============================================================================
+# =============================================================================
 
 miscstat$pretty_two_group_t_test <- function(values_a, values_b,
                                              familywise_n = 1,
@@ -474,10 +515,10 @@ miscstat$two_group_multiple_regression_table <- function(
     return(DF)
 }
 
-#==============================================================================
+# =============================================================================
 # Sanity checks (e.g. for refereeing), such as t-tests based on mean/SD without
 # access to raw data.
-#==============================================================================
+# =============================================================================
 
 miscstat$t_test_unpaired_eq_var <- function(mean1, mean2, sd1, sd2, n1, n2) {
     df <- n1 + n2 - 2
@@ -498,9 +539,9 @@ miscstat$t_test_unpaired_eq_var <- function(mean1, mean2, sd1, sd2, n1, n2) {
 }
 
 
-#==============================================================================
+# =============================================================================
 # p-values
-#==============================================================================
+# =============================================================================
 
 miscstat$sidak_alpha <- function(familywise_alpha, n_comparisons) {
     # returns corrected alpha, which gets lower with n_comparisons
@@ -526,9 +567,9 @@ miscstat$sidak_corrected_p <- function(uncorrected_p, n_comparisons) {
     1 - (1 - uncorrected_p) ^ (n_comparisons)
 }
 
-#==============================================================================
+# =============================================================================
 # Goodness of fit
-#==============================================================================
+# =============================================================================
 
 miscstat$aic <- function(nLL, k) {
     # Akaike Information Criterion
@@ -597,9 +638,9 @@ miscstat$lr_test <- function(model1_nLL, model1_df, model2_nLL, model2_df) {
     return(p)
 }
 
-#==============================================================================
+# =============================================================================
 # Distributions
-#==============================================================================
+# =============================================================================
 
 # AVOID, use PDF instead for MAP
 miscstat$p_data_or_more_extreme_from_normal <- function(x, means, sds) {
@@ -611,9 +652,9 @@ miscstat$p_data_or_more_extreme_from_normal <- function(x, means, sds) {
 }
 
 
-#==============================================================================
+# =============================================================================
 # softmax function
-#==============================================================================
+# =============================================================================
 
 miscstat$softmax <- function(x, b = 1, debug = TRUE) {
     # x: vector of values
@@ -641,17 +682,17 @@ miscstat$softmax <- function(x, b = 1, debug = TRUE) {
     return(answer)
 }
 
-#==============================================================================
+# =============================================================================
 # proportion
-#==============================================================================
+# =============================================================================
 
 miscstat$proportion_x_from_a_to_b <- function(x, a, b) {
     (1 - x) * a + x * b
 }
 
-#==============================================================================
+# =============================================================================
 # randomness
-#==============================================================================
+# =============================================================================
 
 miscstat$coin <- function(p) {
     n <- length(p)
@@ -669,13 +710,13 @@ miscstat$roulette <- function(p) {
     return(choice)
 }
 
-#==============================================================================
+# =============================================================================
 # ANOVA/linear modelling
-#==============================================================================
+# =============================================================================
 
-#------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Diagnostic plots
-#------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 miscstat$rvfPlot <- function(model, FONTSIZE=10) {
     # https://rpubs.com/therimalaya/43190
@@ -696,9 +737,9 @@ miscstat$rvfPlot <- function(model, FONTSIZE=10) {
     )
 }
 
-#------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Post-hoc analysis; SEDs
-#------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 miscstat$pairwise_contrasts <- function(
         term, model, alternative=c("two.sided", "less", "greater"),
@@ -872,9 +913,9 @@ miscstat$sed_info <- function(
     ))
 }
 
-#------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Effect size
-#------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 # http://stats.stackexchange.com/questions/95054/how-to-get-the-overall-effect-for-linear-mixed-model-in-lme4-in-r
 # http://www.leeds.ac.uk/educol/documents/00002182.htm
@@ -1101,11 +1142,81 @@ miscstat$is_lme4_model_singular <- function(model) {
 }
 
 
-miscstat$IGNOREME_MISCSTAT_EXAMPLE <- "
+# =============================================================================
+# Quick aids to distributional checks
+# =============================================================================
+
+miscstat$check_distribution <- function(model)
+{
+    # Quick check on the distribution for a statistical model.
+    # ... remember, it's the *residuals* that need to be normally distributed;
+    #     e.g. Cardinal & Aitken 2006 p72
+    resid <- residuals(model)
+    # ... better than model$residuals, which doesn't work for lmer models
+
+    if (mode(model) == "S4") {
+        # e.g. lmer()
+        model_call <- model@call
+    } else if (mode(model) == "list") {
+        # e.g. lm()
+        model_call <- model$call
+    } else {
+        stop(paste0("Don't know how to extract information from model of mode ",
+                    mode(model)))
+    }
+
+    function_name <- model_call[1]
+    formula <- model_call[2]
+    data <- model_call[3]
+    model_text <- paste0(function_name, "(", formula, ", data = ", data, ")")
+
+    subheading(paste0("Distribution checks for: ", model_text))
+
+    n_resid <- length(resid)
+    if (n_resid < 3) {
+        cat("Too few residuals for Shapiro-Wilk test\n")
+    } else if (n_resid > 5000) {
+        cat("Too many residuals for Shapiro-Wilk test\n")
+    } else {
+        cat("Shapiro-Wilk test on residuals:\n")
+        print(shapiro.test(resid))
+    }
+
+    cat(paste0("Skewness (0 is none): ", moments::skewness(resid), "\n"))
+
+    cat(paste0("Kurtosis (<3 platykurtic, 3 mesokurtic, >3 leptokurtic): ",
+               moments::kurtosis(resid), "\n"))
+    # ... where 3 is the kurtosis of a normal distribution;
+    #     excess kurtosis = kurtosis - 3
+    # ... https://en.wikipedia.org/wiki/Kurtosis
+
+    if (!exists('stat_qq_line', where='package:ggplot2', mode='function')) {
+        # https://stackoverflow.com/questions/15214411/see-if-a-variable-function-exists-in-a-package
+        cat('No stat_qq_line; install a later version of ggplot2, e.g. with:
+
+    devtools::install_github("r-lib/rlang", build_vignettes = TRUE)
+    devtools::install_github("tidyverse/ggplot2")\n')
+        return()
+    }
+
+    qq_plot <- (
+        ggplot(NULL, aes(sample=resid))
+        + stat_qq()
+        + stat_qq_line()
+        + ggtitle(paste0("Q-Q plot of residuals for: ", model_text))
+    )
+    cat("Displaying Q-Q plot of residuals")
+    print(qq_plot)
+}
+
 
 # =============================================================================
-# WORKING/THINKING
+# Notes / tests
 # =============================================================================
+
+miscstat$IGNOREME_MISCSTAT_EXAMPLE <- "
+
+# WORKING/THINKING
 
 testdata <- expand.grid(
     A=c(1, 2, 3),
@@ -1129,9 +1240,9 @@ print(sed_info(testmodel))
 
 "
 
-#==============================================================================
+# =============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
-#==============================================================================
+# =============================================================================
 
 if ("miscstat" %in% search()) detach("miscstat")
 attach(miscstat)  # subsequent additions not found, so attach at the end
