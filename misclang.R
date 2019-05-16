@@ -7,6 +7,24 @@
 misclang <- new.env()
 
 #==============================================================================
+# Libraries
+#==============================================================================
+
+misclang$library_or_install <- function(required_packages)
+{
+    # https://stackoverflow.com/questions/4090169/elegant-way-to-check-for-missing-packages-and-install-them
+    missing_packages <- required_packages[
+        !(required_packages %in% installed.packages()[,"Package"])]
+    if (length(missing_packages)) {
+        install.packages(missing_packages)
+    }
+    for (pkg in required_packages) {
+       library(pkg, character.only = TRUE)
+    }
+}
+
+
+#==============================================================================
 # String manipulation
 #==============================================================================
 
@@ -16,6 +34,7 @@ misclang$n_char_occurrences <- function(string, char)
     return(nchar(string) - nchar(s2))
 }
 
+
 #==============================================================================
 # Vector manipulation
 #==============================================================================
@@ -24,6 +43,7 @@ misclang$vector_element_by_index_of_last_element <- function(x)
 {
     x[ x[ length(x) ] ]
 }
+
 
 #==============================================================================
 # Caching
