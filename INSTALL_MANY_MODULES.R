@@ -33,6 +33,7 @@ DESIRED_LIBRARIES = c(
     "Cairo",
     "car",
     "coda",
+    "codetools",
     "data.table",
     "diagram",
     "DiagrammeR",
@@ -64,6 +65,7 @@ DESIRED_LIBRARIES = c(
     "MCMCglmm",
     "nlme",
     "nortest",
+    "optimParallel",
     "parallel",
     "plyr",
     "plotrix",
@@ -91,6 +93,7 @@ DESIRED_LIBRARIES = c(
     "sp",  # spatial, for maps
     "sqldf",
     "stringr",
+    "tidyr",
     "TTR",
     "visreg",
     "XLConnect",

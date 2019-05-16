@@ -222,7 +222,7 @@ stanfunc$load_or_run_vb <- function(
 
         cat("Building model...")
         vb_model <- rstan::stan_model(model_name=model_name,
-                                      model_code=code)
+                                      model_code=model_code)
 
         cat("Running VB...")
         vb_fit <- rstan::vb(
