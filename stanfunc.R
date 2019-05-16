@@ -227,9 +227,9 @@ stanfunc$load_or_run_vb <- function(
         cat("Running VB...")
         vb_fit <- rstan::vb(
             object=vb_model,
-            data=standata,
+            data=data,
             seed=SEED,
-            init=initfunc
+            init=init
         )
 
         cat(paste("... Finished Stan VB run at", Sys.time(), "\n"))
