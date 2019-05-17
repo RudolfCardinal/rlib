@@ -101,6 +101,11 @@
         // L: maximum (usually 1)
 
         return L / (1 + exp(-k * (x - x0)));
+        
+        // If you were to transform x so as to be a logit giving the same
+        // result via the standard logistic function, 1 / (1 + exp(-x)), for
+        // L = 1, you want this logit:
+        //      k * (x - x0) 
     }
     
     // For the standard logistic (with x0 = 0, k = 1, L = 1), use Stan's
@@ -177,7 +182,7 @@
          real
          real[]  // one-dimensional array
          real[,]  // two-dimensional array
-         real[,,]  // three-dimensional array
+         real[,,]  // three-dimensional array (... etc.)
          vector  // vector, similar to a one-dimensional array.
          matrix  // matrix, similar to a two-dimensional array.
     See p297 of the 2017 Stan manual, and also p319.
@@ -248,7 +253,8 @@
 
         // NOT another way to iterate through all elements:
         for (i in 1:num_elements(thing)) {
-            do_something(thing[i]);  // A BUG, because b[1] is a real[], not a real
+            do_something(thing[i]);  // thing[i] is a real[], not a real
+            // ... and thing[num_elements(thing)] will be an index overflow
         }
 
     So for some functions we want real[,]... let's give this the one-character
@@ -4170,7 +4176,7 @@
         );
     }
 
-    vector setLastForZeroSum(vector parameters)
+    vector setLastForZeroSum(vector params)
     {
         /*
             Makes a vector of parameters sum to zero, by setting the last
@@ -4186,11 +4192,11 @@
             Returns a vector of the SAME LENGTH as the original.
             (The last element of the incoming vector is ignored.)
         */
-        int length = num_elements(parameters);
+        int length = num_elements(params);
         vector[length] newparams;
         real total = 0.0;
         for (i in 1:length - 1) {
-            real value = parameters[i];
+            real value = params[i];
             newparams[i] = value;
             total = total + value;
         }
@@ -4198,18 +4204,18 @@
         return newparams;
     }
 
-    vector appendElementForZeroSum(vector parameters)
+    vector appendElementForZeroSum(vector params)
     {
         /*
             As for setLastForZeroSum(), but uses all the information in the
             incoming vector, and returns a vector that's one element longer.
         */
-        int initial_length = num_elements(parameters);
+        int initial_length = num_elements(params);
         int new_length = initial_length + 1;
         vector[new_length] newparams;
         real total = 0.0;
         for (i in 1:initial_length) {
-            real value = parameters[i];
+            real value = params[i];
             newparams[i] = value;
             total = total + value;
         }

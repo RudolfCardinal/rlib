@@ -86,6 +86,33 @@ This is probably preferable - a script to make the .stan file.
         DATA <- list(N=N, y=rnorm(n=N, mean=5, sd=2))
         fit <- rstan::stan(model_code=CODE, data=DATA)
 
+2019-05-17:
+
+- renamed some parameters called "parameters" to "params", as in Stan 2.18.2
+  that has become a keyword that you can't use. The error looked like:
+
+  .. code-block:: none
+
+    SYNTAX ERROR, MESSAGE(S) FROM PARSER:
+
+    Unknown variable: enforceLowerBound_R_lp
+    Unknown variable: enforceLowerBound_A_lp
+    ... lots more like that...
+    Unknown variable: sampleUniform_RRR_lp
+
+    Unexpected open block, missing close block "}" before keyword "parameters".
+      error in 'model45cd2c23be_Kanen_M2_param_recovery' at line 4194, column 44
+      -------------------------------------------------
+      4192:             (The last element of the incoming vector is ignored.)
+      4193:         */
+      4194:         int length = num_elements(parameters);
+                                                       ^
+      4195:         vector[length] newparams;
+      -------------------------------------------------
+
+    Error in stanc(file = file, model_code = model_code, model_name = model_name,  :
+      failed to parse Stan model 'Kanen_M2_param_recovery' due to the above error.
+
 """
 
 import argparse
@@ -607,7 +634,7 @@ DUFF_ANOVA_FUNCTIONS = """
         );
     }
 
-    vector setLastForZeroSum(vector parameters)
+    vector setLastForZeroSum(vector params)
     {
         /*
             Makes a vector of parameters sum to zero, by setting the last
@@ -623,11 +650,11 @@ DUFF_ANOVA_FUNCTIONS = """
             Returns a vector of the SAME LENGTH as the original.
             (The last element of the incoming vector is ignored.)
         */
-        int length = num_elements(parameters);
+        int length = num_elements(params);
         vector[length] newparams;
         real total = 0.0;
         for (i in 1:length - 1) {
-            real value = parameters[i];
+            real value = params[i];
             newparams[i] = value;
             total = total + value;
         }
@@ -635,18 +662,18 @@ DUFF_ANOVA_FUNCTIONS = """
         return newparams;
     }
 
-    vector appendElementForZeroSum(vector parameters)
+    vector appendElementForZeroSum(vector params)
     {
         /*
             As for setLastForZeroSum(), but uses all the information in the
             incoming vector, and returns a vector that's one element longer.
         */
-        int initial_length = num_elements(parameters);
+        int initial_length = num_elements(params);
         int new_length = initial_length + 1;
         vector[new_length] newparams;
         real total = 0.0;
         for (i in 1:initial_length) {
-            real value = parameters[i];
+            real value = params[i];
             newparams[i] = value;
             total = total + value;
         }
