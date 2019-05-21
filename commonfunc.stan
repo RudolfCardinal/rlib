@@ -1490,7 +1490,7 @@
     }
     void sampleCategorical_AV_lp(int[] y, vector theta)
     {
-        target += bernoulli_lpmf(y | theta);
+        target += categorical_lpmf(y | theta);
     }
 
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
