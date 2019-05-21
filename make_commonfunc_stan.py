@@ -113,6 +113,10 @@ This is probably preferable - a script to make the .stan file.
     Error in stanc(file = file, model_code = model_code, model_name = model_name,  :
       failed to parse Stan model 'Kanen_M2_param_recovery' due to the above error.
 
+2019-05-21:
+
+- Functions related to ``categorical`` and ``categorical_logit`` distributions.
+
 """
 
 import argparse
@@ -1537,6 +1541,49 @@ SAMPLE_BERNOULLI = """
 
 
 # =============================================================================
+# Categorical and categorical-logit distributions
+# =============================================================================
+# So specialized that we just write the code manually.
+
+SAMPLE_CATEGORICAL = """
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Categorical distribution
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // y is in {1, ..., K} and theta is a K-simplex (of the probabilities of
+    // each of the K outcomes). An N-simplex is a vector (etc.) of non-negative
+    // numbers that sum to 1.
+    // Note that theta must be vector, not "reals".
+    // The logit version is such that categorical_logit_lpmf(beta) is the same
+    // as categorical_logit(softmax(beta)), i.e. theta = softmax(beta).
+
+    void sampleCategorical_IV_lp(int y, vector theta)
+    {
+        target += categorical_lpmf(y | theta);
+    }
+    void sampleCategorical_AV_lp(int[] y, vector theta)
+    {
+        target += categorical_lpmf(y | theta);
+    }
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Categorical logit distribution
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // y is in {1, ..., K} and beta is a K-vector of (log odds) in the range 
+    // [-inf, +inf]; theta = softmax(beta) as above.
+
+    void sampleCategoricalLogit_IV_lp(int y, vector beta)
+    {
+        target += categorical_logit_lpmf(y | beta);
+    }
+    void sampleCategoricalLogit_AV_lp(int[] y, vector beta)
+    {
+        target += categorical_logit_lpmf(y | beta);
+    }
+
+"""
+
+
+# =============================================================================
 # Reparameterized normal distribution
 # =============================================================================
 
@@ -2100,6 +2147,7 @@ def get_code() -> str:
         get_gamma_distribution() +
         get_uniform_distribution() +
         SAMPLE_BERNOULLI +
+        SAMPLE_CATEGORICAL +
         REPARAM_HEADER +
         get_reparamaterized_normal() +
         get_reparamaterized_cauchy() +

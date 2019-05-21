@@ -1474,6 +1474,41 @@
     }
 
 
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Categorical distribution
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // y is in {1, ..., K} and theta is a K-simplex (of the probabilities of
+    // each of the K outcomes). An N-simplex is a vector (etc.) of non-negative
+    // numbers that sum to 1.
+    // Note that theta must be vector, not "reals".
+    // The logit version is such that categorical_logit_lpmf(beta) is the same
+    // as categorical_logit(softmax(beta)), i.e. theta = softmax(beta).
+
+    void sampleCategorical_IV_lp(int y, vector theta)
+    {
+        target += categorical_lpmf(y | theta);
+    }
+    void sampleCategorical_AV_lp(int[] y, vector theta)
+    {
+        target += bernoulli_lpmf(y | theta);
+    }
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Categorical logit distribution
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // y is in {1, ..., K} and beta is a K-vector of (log odds) in the range 
+    // [-inf, +inf]; theta = softmax(beta) as above.
+
+    void sampleCategoricalLogit_IV_lp(int y, vector beta)
+    {
+        target += categorical_logit_lpmf(y | beta);
+    }
+    void sampleCategoricalLogit_AV_lp(int[] y, vector beta)
+    {
+        target += categorical_logit_lpmf(y | beta);
+    }
+
+
     // ------------------------------------------------------------------------
     // LOG PROBABILITY FUNCTIONS FOR BRIDGE SAMPLING WITH NON-CENTERED
     // REPARAMETERIZATION
