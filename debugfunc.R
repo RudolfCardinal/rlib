@@ -130,7 +130,9 @@ debugfunc$wtf_is <- function(x) {
 # =============================================================================
 
 debugfunc$wideScreen <- function(howWide=Sys.getenv("COLUMNS")) {
-  options(width=as.integer(howWide))
+    if (nchar(howWide) > 0) {  # under non-console clusters, envvar can be empty
+        options(width=as.integer(howWide))
+    }
 }
 
 # =============================================================================
