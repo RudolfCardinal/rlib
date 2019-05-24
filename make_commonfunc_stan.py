@@ -571,7 +571,7 @@ SIMPLE_FUNCTIONS = """
         return z;
     }
 
-    vector dot_product_2A()(real[,] x, real[] y)
+    vector dot_product_2A(real[,] x, real[] y)
     {
         // As dot_product_MV, but for arrays.
 
