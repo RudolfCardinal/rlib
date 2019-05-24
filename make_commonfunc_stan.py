@@ -264,72 +264,6 @@ _ = """
     // Simple functions: softmax
     // ------------------------------------------------------------------------
     
-    // REPLACED:
-
-    real softmaxNth(vector softmax_inputs, int index)
-    {
-        /*
-            Returns the nth value (at "index") of the softmax of the inputs.
-            Assumes an inverse temperature of 1.
-
-        NOTES:
-            A softmax function takes several inputs and normalizes them so 
-            that:
-                - the outputs are in the same relative order as the inputs
-                - the outputs sum to 1.
-            
-            For softmax: see my miscstat.R; the important points for
-            optimization are (1) that softmax is invariant to the addition/
-            subtraction of a constant, and subtracting the mean makes the
-            numbers less likely to fall over computationally; (2) we only
-            need the final part of the computation for a single number
-            (preference for the right), so we don't have to waste time
-            vector-calculating the preference for the left as well [that is:
-            we don't have to calculate s_exp_products / sum(s_exp_products)].
-
-            Since Stan 2.0.0, the alternative is to use softmax(); see
-            stan/math/fwd/mat/fun/softmax.hpp; see
-            https://github.com/stan-dev/math/blob/develop/stan/math/prim/mat/fun/softmax.hpp
-            https://github.com/stan-dev/math/blob/develop/stan/math/fwd/mat/fun/softmax.hpp
-            Not sure which is faster, or whether it really matters. Stan's 
-            softmax() function uses an inverse temperature of 1.
-            
-            The exact syntactic equivalence is:
-            
-                real result = softmaxNth(inputs, index);
-                real result = softmax(inputs)[index];
-        */
-        int length = num_elements(softmax_inputs);
-        vector[length] s_exp_products;
-        if (index < 1 || index > length) {
-            reject("softmaxNth(): index is ", index,
-                   " but must be in range 1-", length);
-        }
-        s_exp_products = exp(softmax_inputs - mean(softmax_inputs));
-        return s_exp_products[index] / sum(s_exp_products);
-    }
-
-    real softmaxNthInvTemp(vector softmax_inputs, real inverse_temp, int index)
-    {
-        /*
-            Version of softmaxNth allowing you to specify the inverse temp.
-            
-            The direct Stan equivalent is:
-            
-                real result = softmaxNthInvTemp(inputs, invtemp, index);
-                real result = softmax(inputs * invtemp)[index];
-        */
-
-        int length = num_elements(softmax_inputs);
-        vector[length] s_exp_products;
-        if (index < 1 || index > length) {
-            reject("softmaxNthInvTemp(): index is ", index,
-                   " but must be in range 1-", length);
-        }
-        s_exp_products = exp(softmax_inputs * inverse_temp - mean(softmax_inputs));
-        return s_exp_products[index] / sum(s_exp_products);
-    }
-    
     /*
         What about the logit domain?
         
@@ -593,6 +527,81 @@ SIMPLE_FUNCTIONS = """
             return x;
         }
     }
+
+    // ------------------------------------------------------------------------
+    // Simple functions: matrix calculations
+    // ------------------------------------------------------------------------
+    // Note that Stan only provides the following versions of dot_product():
+    //      dot_product(vector, vector)
+    //      dot_product(row vector, row vector)
+    //      dot_product(vector, row vector)
+    //      dot_product(row vector, vector)
+    //      dot_product(real[], real[])
+    
+    vector dot_product_mv(matrix x, vector y)
+    {
+        // Dot product between a matrix (2 dimensions) and a vector (1
+        // dimension):
+        //
+        //      (p, q) matrix ⋅ (q, 1) vector = (p, 1) vector
+        //
+        // For example:
+        //
+        //              [a, b]   [g]      [ag + bh]
+        //      x ⋅ y = [c, d] ⋅ [h]    = [cg + dh]
+        //              [e, f]            [eg + fh]
+        //
+        //              (3, 2) ⋅ (2, 1) = (3, 1)
+
+        int x_dimensions[2] = dims(x);
+        int p = x_dimensions[1];
+        int q = x_dimensions[2];
+        if (q != num_elements(y)) {
+            reject("Incompatible arguments");
+        }
+        vector[p] z;
+        for (i in 1:p) {  // rows of x
+            real cell = 0.0;
+            for (j in 1:q) {  // columns of x
+                cell += x[i, j] * y[j]
+            }
+            z[i] = cell;
+        }
+        return z;
+    }
+
+    vector dot_product_vm(vector x, matrix y)
+    {
+        // Dot product between a vector (1 dimension) and a matrix (2
+        // dimensions):
+        //
+        //      (1, p) vector ⋅ (p, q) matrix = (1, q) vector
+        //
+        // For example:
+        //
+        //                       [a, c, e]
+        //      x ⋅ y = [g, h] ⋅ [b, d, f] = [ag + bh, cg + dh, eg + fh]
+        //                                 = y' ⋅ x'
+        //
+        //              (1, 2) ⋅ (2, 3)    = (1, 3) 
+
+        int y_dimensions[2] = dims(y);
+        int p = y_dimensions[1];
+        int q = y_dimensions[2];
+        if (p != num_elements(x)) {
+            reject("Incompatible arguments");
+        }
+        vector[q] z;
+        for (j in 1:q) {  // columns of y
+            real cell = 0.0;
+            for (i in 1:p) {  // rows of y
+                cell += x[j] * y[i, j];
+            }
+            z[j] = cell;
+        }
+        return z;
+    }
+
 """
 
 DUFF_ANOVA_FUNCTIONS = """

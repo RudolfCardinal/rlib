@@ -155,6 +155,81 @@
     }
 
     // ------------------------------------------------------------------------
+    // Simple functions: matrix calculations
+    // ------------------------------------------------------------------------
+    // Note that Stan only provides the following versions of dot_product():
+    //      dot_product(vector, vector)
+    //      dot_product(row vector, row vector)
+    //      dot_product(vector, row vector)
+    //      dot_product(row vector, vector)
+    //      dot_product(real[], real[])
+    
+    vector dot_product_mv(matrix x, vector y)
+    {
+        // Dot product between a matrix (2 dimensions) and a vector (1
+        // dimension):
+        //
+        //      (p, q) matrix ⋅ (q, 1) vector = (p, 1) vector
+        //
+        // For example:
+        //
+        //              [a, b]   [g]      [ag + bh]
+        //      x ⋅ y = [c, d] ⋅ [h]    = [cg + dh]
+        //              [e, f]            [eg + fh]
+        //
+        //              (3, 2) ⋅ (2, 1) = (3, 1)
+
+        int x_dimensions[2] = dims(x);
+        int p = x_dimensions[1];
+        int q = x_dimensions[2];
+        if (q != num_elements(y)) {
+            reject("Incompatible arguments");
+        }
+        vector[p] z;
+        for (i in 1:p) {  // rows of x
+            real cell = 0.0;
+            for (j in 1:q) {  // columns of x
+                cell += x[i, j] * y[j]
+            }
+            z[i] = cell;
+        }
+        return z;
+    }
+
+    vector dot_product_vm(vector x, matrix y)
+    {
+        // Dot product between a vector (1 dimension) and a matrix (2
+        // dimensions):
+        //
+        //      (1, p) vector ⋅ (p, q) matrix = (1, q) vector
+        //
+        // For example:
+        //
+        //                       [a, c, e]
+        //      x ⋅ y = [g, h] ⋅ [b, d, f] = [ag + bh, cg + dh, eg + fh]
+        //                                 = y' ⋅ x'
+        //
+        //              (1, 2) ⋅ (2, 3)    = (1, 3) 
+
+        int y_dimensions[2] = dims(y);
+        int p = y_dimensions[1];
+        int q = y_dimensions[2];
+        if (p != num_elements(x)) {
+            reject("Incompatible arguments");
+        }
+        vector[q] z;
+        for (j in 1:q) {  // columns of y
+            real cell = 0.0;
+            for (i in 1:p) {  // rows of y
+                cell += x[j] * y[i, j];
+            }
+            z[j] = cell;
+        }
+        return z;
+    }
+
+
+    // ------------------------------------------------------------------------
     // LOG PROBABILITY FUNCTIONS FOR BRIDGE SAMPLING
     // ------------------------------------------------------------------------
     /*
