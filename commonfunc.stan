@@ -252,7 +252,7 @@
         return z;
     }
 
-    vector dot_product_VM(real[] x, real[,] y)
+    vector dot_product_A2(real[] x, real[,] y)
     {
         // As dot_product_vm(), but for arrays.
 
