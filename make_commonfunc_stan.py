@@ -556,10 +556,11 @@ SIMPLE_FUNCTIONS = """
         int x_dimensions[2] = dims(x);
         int p = x_dimensions[1];
         int q = x_dimensions[2];
+        vector[p] z;
+
         if (q != num_elements(y)) {
             reject("Incompatible arguments");
         }
-        vector[p] z;
         for (i in 1:p) {  // rows of x
             real cell = 0.0;
             for (j in 1:q) {  // columns of x
@@ -588,10 +589,11 @@ SIMPLE_FUNCTIONS = """
         int y_dimensions[2] = dims(y);
         int p = y_dimensions[1];
         int q = y_dimensions[2];
+        vector[q] z;
+
         if (p != num_elements(x)) {
             reject("Incompatible arguments");
         }
-        vector[q] z;
         for (j in 1:q) {  // columns of y
             real cell = 0.0;
             for (i in 1:p) {  // rows of y
