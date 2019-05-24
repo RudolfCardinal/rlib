@@ -564,7 +564,7 @@ SIMPLE_FUNCTIONS = """
         for (i in 1:p) {  // rows of x
             real cell = 0.0;
             for (j in 1:q) {  // columns of x
-                cell += x[i, j] * y[j]
+                cell += x[i, j] * y[j];
             }
             z[i] = cell;
         }
