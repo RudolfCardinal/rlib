@@ -164,7 +164,7 @@
     //      dot_product(row vector, vector)
     //      dot_product(real[], real[])
     
-    vector dot_product_MV(matrix x, vector y)
+    vector dot_product_MV_V(matrix x, vector y)
     {
         // Dot product between a matrix (2 dimensions) and a vector (1
         // dimension):
@@ -197,9 +197,9 @@
         return z;
     }
 
-    vector dot_product_2A(real[,] x, real[] y)
+    vector dot_product_2A_V(real[,] x, real[] y)
     {
-        // As dot_product_MV, but for arrays.
+        // As dot_product_MV_V, but for array inputs.
 
         int x_dimensions[2] = dims(x);
         int p = x_dimensions[1];
@@ -219,7 +219,7 @@
         return z;
     }
 
-    vector dot_product_VM(vector x, matrix y)
+    vector dot_product_VM_V(vector x, matrix y)
     {
         // Dot product between a vector (1 dimension) and a matrix (2
         // dimensions):
@@ -252,9 +252,9 @@
         return z;
     }
 
-    vector dot_product_A2(real[] x, real[,] y)
+    vector dot_product_A2_V(real[] x, real[,] y)
     {
-        // As dot_product_vm(), but for arrays.
+        // As dot_product_VM_V(), but for array inputs.
 
         int y_dimensions[2] = dims(y);
         int p = y_dimensions[1];
@@ -274,7 +274,7 @@
         return z;
     }
     
-    matrix tensordot_A3(real[] x, real[,,] y)
+    matrix tensordot_A3_M(real[] x, real[,,] y)
     {
         // Equivalent to Numpy's tensordot(x, y, axes=1), for:
         //
@@ -297,6 +297,31 @@
         int q = dimensions[2];
         int r = dimensions[3];
         matrix[q, r] z;
+
+        if (p != num_elements(x)) {
+            reject("Incompatible arguments");
+        }
+        for (j in 1:q) {
+            for (k in 1:r) {
+                real cell = 0.0;
+                for (i in 1:p) {
+                    cell += x[i] * y[i, j, k];
+                }
+                z[j, k] = cell;
+            }
+        }
+        return z;
+    }
+
+    real[,] tensordot_A3_2(real[] x, real[,,] y)
+    {
+        // As for tensordot_A3_M(), but returning an array.
+        
+        int dimensions[3] = dims(y);
+        int p = dimensions[1];
+        int q = dimensions[2];
+        int r = dimensions[3];
+        real z[q, r];
 
         if (p != num_elements(x)) {
             reject("Incompatible arguments");
