@@ -164,7 +164,7 @@
     //      dot_product(row vector, vector)
     //      dot_product(real[], real[])
     
-    vector dot_product_mv(matrix x, vector y)
+    vector dot_product_MV(matrix x, vector y)
     {
         // Dot product between a matrix (2 dimensions) and a vector (1
         // dimension):
@@ -197,7 +197,29 @@
         return z;
     }
 
-    vector dot_product_vm(vector x, matrix y)
+    vector dot_product_2A()(real[,] x, real[] y)
+    {
+        // As dot_product_MV, but for arrays.
+
+        int x_dimensions[2] = dims(x);
+        int p = x_dimensions[1];
+        int q = x_dimensions[2];
+        vector[p] z;
+
+        if (q != num_elements(y)) {
+            reject("Incompatible arguments");
+        }
+        for (i in 1:p) {  // rows of x
+            real cell = 0.0;
+            for (j in 1:q) {  // columns of x
+                cell += x[i, j] * y[j];
+            }
+            z[i] = cell;
+        }
+        return z;
+    }
+
+    vector dot_product_VM(vector x, matrix y)
     {
         // Dot product between a vector (1 dimension) and a matrix (2
         // dimensions):
@@ -226,6 +248,67 @@
                 cell += x[j] * y[i, j];
             }
             z[j] = cell;
+        }
+        return z;
+    }
+
+    vector dot_product_VM(real[] x, real[,] y)
+    {
+        // As dot_product_vm(), but for arrays.
+
+        int y_dimensions[2] = dims(y);
+        int p = y_dimensions[1];
+        int q = y_dimensions[2];
+        vector[q] z;
+
+        if (p != num_elements(x)) {
+            reject("Incompatible arguments");
+        }
+        for (j in 1:q) {  // columns of y
+            real cell = 0.0;
+            for (i in 1:p) {  // rows of y
+                cell += x[j] * y[i, j];
+            }
+            z[j] = cell;
+        }
+        return z;
+    }
+    
+    matrix tensordot_A3(real[] x, real[,,] y)
+    {
+        // Equivalent to Numpy's tensordot(x, y, axes=1), for:
+        //
+        //      (1, p) ⋅ (p, q, r) = (q, r)
+        //
+        // For example:
+        //
+        //      [a, b] ⋅ [ [c, d, e, f]       = [ac + bc', ad + bd', ...]
+        //                 [g, h, i, j]         [ag + bg', ag + bg', ...]
+        //                 [k, l, m, n],        [ak + bk', ak + bk', ...]
+        //
+        //                 [c', d', e', f']
+        //                 [g', h', i', j']
+        //                 [k', l', m', n'] ]
+        //         
+        //      (1, 2) ⋅ (2, 3, 4)            = (3, 4)
+        
+        int dimensions[3] = dims(y);
+        int p = dimensions[1];
+        int q = dimensions[2];
+        int r = dimensions[3];
+        matrix[q, r] z;
+
+        if (p != num_elements(x)) {
+            reject("Incompatible arguments");
+        }
+        for (j in 1:q) {
+            for (k in 1:r) {
+                real cell = 0.0;
+                for (i in 1:p) {
+                    cell += x[i] * y[i, j, k];
+                }
+                z[j, k] = cell;
+            }
         }
         return z;
     }
@@ -273,7 +356,8 @@
     - For something with two distribution parameters, like the normal
       distribution and many others, that means that we have 3*3*3 combinations
       for each thing. Urgh. Stan should allow user overloading ;).
-    - Let's do it and define "R", "A", "2", "3", "V" for the parameters
+    - Let's do it and define "R", "A", "2", "3", "V" for the parameters.
+      (Also "M" for matrix.)
     - Except we won't be returning R unless it's RRR!
     - Last thing cycles fastest.
     So:
