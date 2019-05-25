@@ -176,8 +176,8 @@
         int x_dimensions[2] = dims(x);
         int ncols = x_dimensions[2];
         vector[ncols] v;
-        for (col in 1:ncols) {
-            v[i] = x[row, col];
+        for (i in 1:ncols) {
+            v[i] = x[row, i];
         }
         return v;
     }
