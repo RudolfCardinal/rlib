@@ -694,7 +694,7 @@ SIMPLE_FUNCTIONS = """
         return z;
     }
     
-    vector dot_product_AA_R(real[] x, real[] y)
+    real dot_product_AA_R(real[] x, real[] y)
     {
         // Dot product of two arrays.
 
