@@ -163,7 +163,7 @@
     // Simple functions: data manipulation
     // ------------------------------------------------------------------------
     
-    void vector_from_array_row(real[,] x, int row)
+    vector vector_from_array_row(real[,] x, int row)
     {
         // Given an array
         //      real x[nrows, ncols];
