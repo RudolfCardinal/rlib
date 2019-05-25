@@ -13,6 +13,8 @@
         - The addition-assignment (+=) operator generally doesn't work (it
           appears to be reserved for the one variable "target += ...").
           Similarly for all others you might expect.
+          - Aha! By Stan 2.19, this has changed. Can use "x += 1"
+            (p19 of Stan 2.19 Reference Manual).
         - Can't define constants in a functions{} block.
     */
 
@@ -50,6 +52,9 @@
             
                 real result = softmaxNth(inputs, index);
                 real result = softmax(inputs)[index];
+                
+            Stan's version is in stan/math/prim/mat/fun/softmax.hpp; it uses
+            Eigen.
         */
         int length = num_elements(softmax_inputs);
         real constant = max(softmax_inputs);
@@ -152,6 +157,47 @@
         } else {
             return x;
         }
+    }
+
+    // ------------------------------------------------------------------------
+    // Simple functions: data manipulation
+    // ------------------------------------------------------------------------
+    
+    void vector_from_array_row(real[,] x, int row)
+    {
+        // Given an array
+        //      real x[nrows, ncols];
+        // you can slice the array with
+        //      real a[ncols] = x[row];
+        // but not with
+        //      vector[ncols] y = x[row];
+        // so this function does that.
+        
+        int x_dimensions[2] = dims(y);
+        int ncols = x_dimensions[2];
+        vector[ncols] v;
+        for (col in 1:ncols) {
+            v[i] = x[row, col];
+        }
+        return v;
+    }
+    
+    vector except_V_V(vector v, int except)
+    {
+        // Returns a vector that is the original without the element at index 
+        // "except".
+        
+        int n = num_elements(v);
+        vector[n - 1] result;
+        int r = 1;  // indexes result
+        for (i in 1:n) {
+            if (i == except) {
+                continue;
+            }
+            result[r] = v[i];
+            r += 1;
+        }
+        return result;
     }
 
     // ------------------------------------------------------------------------
