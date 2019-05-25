@@ -709,6 +709,19 @@ SIMPLE_FUNCTIONS = """
         return z;
     }
     
+    real dot_product_iAV_R(int[] x, vector y)
+    {
+        int n = num_elements(x);
+        real z = 0.0;
+        if (n != num_elements(y)) {
+            reject("Incompatible arguments");
+        }
+        for (i in 1:n) {
+            z += x[i] * y[i];
+        }
+        return z;
+    }
+    
     matrix tensordot_A3_M(real[] x, real[,,] y)
     {
         // Equivalent to Numpy's tensordot(x, y, axes=1), for:
