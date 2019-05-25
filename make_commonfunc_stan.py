@@ -547,7 +547,7 @@ SIMPLE_FUNCTIONS = """
         //      vector[ncols] y = x[row];
         // so this function does that.
         
-        int x_dimensions[2] = dims(y);
+        int x_dimensions[2] = dims(x);
         int ncols = x_dimensions[2];
         vector[ncols] v;
         for (col in 1:ncols) {
