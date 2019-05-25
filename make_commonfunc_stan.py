@@ -573,6 +573,24 @@ SIMPLE_FUNCTIONS = """
         }
         return result;
     }
+    
+    int except_I_I(int x, int except)
+    {
+        // The argument is an index to a vector v; the result is the equivalent
+        // index to a vector except_V_V(v, except).
+        
+        if (x < 1) {
+            reject("Argument x is a Stan index so must be >= 1");
+        }
+        if (except == x) {
+            reject("Cannot remove 'except' where except == x");
+        }
+        if (except < 1 || except > x) {
+            return x;
+        }
+        return x - 1;
+    }
+    
 
     // ------------------------------------------------------------------------
     // Simple functions: matrix calculations
