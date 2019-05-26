@@ -536,8 +536,8 @@ SIMPLE_FUNCTIONS = """
     // ------------------------------------------------------------------------
     // Simple functions: data manipulation
     // ------------------------------------------------------------------------
-    
-    vector vector_from_array_row(real[,] x, int row)
+
+    vector vector_from_real_array_row(real[,] x, int row)
     {
         // Given an array
         //      real x[nrows, ncols];
@@ -546,6 +546,19 @@ SIMPLE_FUNCTIONS = """
         // but not with
         //      vector[ncols] y = x[row];
         // so this function does that.
+        
+        int x_dimensions[2] = dims(x);
+        int ncols = x_dimensions[2];
+        vector[ncols] v;
+        for (i in 1:ncols) {
+            v[i] = x[row, i];
+        }
+        return v;
+    }
+    
+    vector vector_from_int_array_row(int[,] x, int row)
+    {
+        // As above, but for an int array.
         
         int x_dimensions[2] = dims(x);
         int ncols = x_dimensions[2];
