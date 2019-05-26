@@ -53,6 +53,20 @@ stanfunc$load_or_run_stan <- function(
 
     cache_filetype <- match.arg(cache_filetype)
 
+    if (!is.null(save_code_filename) &&
+            (forcerun || !file.exists(save_code_filename))) {
+        cat("--- Generating C++ code to save...\n")
+        stanc_result <- rstan::stanc(model_code = model_code)
+        cpp_code <- stanc_result$cppcode
+
+        cat("--- Saving C++ code to file: ",
+            save_code_filename, "...\n", sep="")
+        cppfile <- file(save_code_filename)
+        writeLines(cpp_code, cppfile)
+        close(cppfile)
+        cat("... saved\n")
+    }
+
     if (!forcerun && file.exists(fit_filename)) {
         if (cache_filetype == "rds") {
             # .Rds
@@ -116,20 +130,6 @@ stanfunc$load_or_run_stan <- function(
                 fit_filename, "...\n", sep="")
             save(list = c("fit"), file=fit_filename)
         }
-        cat("... saved\n")
-    }
-
-    if (!is.null(save_code_filename) &&
-            (forcerun || !file.exists(save_code_filename))) {
-        cat("--- Generating C++ code to save...\n")
-        stanc_result <- rstan::stanc(model_code = model_code)
-        cpp_code <- stanc_result$cppcode
-
-        cat("--- Saving C++ code to file: ",
-            save_code_filename, "...\n", sep="")
-        cppfile <- file(save_code_filename)
-        writeLines(cpp_code, cppfile)
-        close(cppfile)
         cat("... saved\n")
     }
 
