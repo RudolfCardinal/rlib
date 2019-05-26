@@ -35,7 +35,11 @@ stanfunc$load_or_run_stan <- function(
         model_code,
         fit_filename,
         model_name,
-        save_code_filename = NULL,  # unnecessary; both Stan and C++ code is extractable from the Stan fit
+        save_stancode_filename = NULL,
+        save_cpp_filename = NULL,
+        # ... unnecessary; both Stan and C++ code is extractable from the Stan
+        # fit; but helpful if the code compiles/executes but crashes with a
+        # line number error.
         forcerun = FALSE,
         chains = DEFAULT_CHAINS,
         iter = DEFAULT_ITER,
@@ -53,15 +57,25 @@ stanfunc$load_or_run_stan <- function(
 
     cache_filetype <- match.arg(cache_filetype)
 
-    if (!is.null(save_code_filename) &&
-            (forcerun || !file.exists(save_code_filename))) {
+    if (!is.null(save_stancode_filename) &&
+            (forcerun || !file.exists(save_stancode_filename))) {
+        cat("--- Saving Stan code to file: ",
+            save_stancode_filename, "...\n", sep="")
+        stancodefile <- file(save_cpp_filename)
+        writeLines(model_code, stancodefile)
+        close(stancodefile)
+        cat("... saved\n")
+    }
+
+    if (!is.null(save_cpp_filename) &&
+            (forcerun || !file.exists(save_cpp_filename))) {
         cat("--- Generating C++ code to save...\n")
         stanc_result <- rstan::stanc(model_code = model_code)
         cpp_code <- stanc_result$cppcode
 
         cat("--- Saving C++ code to file: ",
-            save_code_filename, "...\n", sep="")
-        cppfile <- file(save_code_filename)
+            save_cpp_filename, "...\n", sep="")
+        cppfile <- file(save_cpp_filename)
         writeLines(cpp_code, cppfile)
         close(cppfile)
         cat("... saved\n")
