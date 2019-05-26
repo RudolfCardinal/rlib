@@ -37,9 +37,6 @@ stanfunc$load_or_run_stan <- function(
         model_name,
         save_stancode_filename = NULL,
         save_cpp_filename = NULL,
-        # ... unnecessary; both Stan and C++ code is extractable from the Stan
-        # fit; but helpful if the code compiles/executes but crashes with a
-        # line number error.
         forcerun = FALSE,
         chains = DEFAULT_CHAINS,
         iter = DEFAULT_ITER,
@@ -57,6 +54,13 @@ stanfunc$load_or_run_stan <- function(
 
     cache_filetype <- match.arg(cache_filetype)
 
+    # -------------------------------------------------------------------------
+    # Save Stan code file, if requested
+    # -------------------------------------------------------------------------
+    # ... unnecessary; both Stan and C++ code is extractable from the Stan
+    # fit; but helpful if the code compiles/executes but crashes with a
+    # line number error.
+
     if (!is.null(save_stancode_filename) &&
             (forcerun || !file.exists(save_stancode_filename))) {
         cat("--- Saving Stan code to file: ",
@@ -66,6 +70,10 @@ stanfunc$load_or_run_stan <- function(
         close(stancodefile)
         cat("... saved\n")
     }
+
+    # -------------------------------------------------------------------------
+    # Save C++ code file, if requested
+    # -------------------------------------------------------------------------
 
     if (!is.null(save_cpp_filename) &&
             (forcerun || !file.exists(save_cpp_filename))) {
@@ -81,7 +89,14 @@ stanfunc$load_or_run_stan <- function(
         cat("... saved\n")
     }
 
+    # -------------------------------------------------------------------------
+    # Load fit or run Stan
+    # -------------------------------------------------------------------------
+
     if (!forcerun && file.exists(fit_filename)) {
+        # ---------------------------------------------------------------------
+        # Load fit
+        # ---------------------------------------------------------------------
         if (cache_filetype == "rds") {
             # .Rds
             cat("Loading Stan model fit from RDS file: ",
@@ -100,6 +115,9 @@ stanfunc$load_or_run_stan <- function(
         }
         cat("... loaded\n")
     } else {
+        # ---------------------------------------------------------------------
+        # Run Stan
+        # ---------------------------------------------------------------------
         n_cores_stan <- getOption("mc.cores")
         if (is.null(n_cores_stan)) {
             n_cores_stan <- 0
@@ -133,6 +151,10 @@ stanfunc$load_or_run_stan <- function(
             ...
         )
         cat(paste("... Finished Stan run at", Sys.time(), "\n"))
+
+        # ---------------------------------------------------------------------
+        # Save fit
+        # ---------------------------------------------------------------------
         if (cache_filetype == "rds") {
             # .Rds
             cat("--- Saving Stan model fit to RDS file: ",
@@ -162,11 +184,17 @@ stanfunc$load_or_run_bridge_sampler <- function(
     ...)
 {
     if (!forcerun && file.exists(filename)) {
+        # ---------------------------------------------------------------------
+        # Load
+        # ---------------------------------------------------------------------
         cat("Loading bridge_sampler() fit from RDS file: ",
             filename, "...\n", sep="")
         b <- readRDS(filename)
         cat("... loaded\n")
     } else {
+        # ---------------------------------------------------------------------
+        # Run
+        # ---------------------------------------------------------------------
         # POTENTIAL PROBLEM:
         #   Error in .local(object, ...) :
         #   the model object is not created or not valid
@@ -201,8 +229,11 @@ stanfunc$load_or_run_bridge_sampler <- function(
             cores=cores,
             ...
         )
-
         cat(paste("... Finished bridge_sampler run at", Sys.time(), "\n"))
+
+        # ---------------------------------------------------------------------
+        # Save
+        # ---------------------------------------------------------------------
         cat("--- Saving bridge_sampler() fit to RDS file: ",
             filename, "...\n", sep="")
         saveRDS(b, file=filename)  # load with readRDS()
@@ -223,6 +254,9 @@ stanfunc$load_or_run_vb <- function(
         ...)
 {
     if (!forcerun && file.exists(vbfit_filename)) {
+        # ---------------------------------------------------------------------
+        # Load
+        # ---------------------------------------------------------------------
 
         cat("Loading Stan VB fit from RDS file: ",
             vbfit_filename, "...\n", sep="")
@@ -231,6 +265,9 @@ stanfunc$load_or_run_vb <- function(
 
     } else {
 
+        # ---------------------------------------------------------------------
+        # Run
+        # ---------------------------------------------------------------------
         cat(paste("Running variational Bayes approximation to Stan model ",
                   model_name, ", starting at", Sys.time(), "...\n", sep=""))
 
@@ -248,6 +285,9 @@ stanfunc$load_or_run_vb <- function(
 
         cat(paste("... Finished Stan VB run at", Sys.time(), "\n"))
 
+        # ---------------------------------------------------------------------
+        # Save
+        # ---------------------------------------------------------------------
         cat("--- Saving Stan model fit to RDS file: ",
             vbfit_filename, "...\n", sep="")
         saveRDS(vb_fit, file=vbfit_filename)  # load with readRDS()
