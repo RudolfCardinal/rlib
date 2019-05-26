@@ -61,7 +61,7 @@ stanfunc$load_or_run_stan <- function(
             (forcerun || !file.exists(save_stancode_filename))) {
         cat("--- Saving Stan code to file: ",
             save_stancode_filename, "...\n", sep="")
-        stancodefile <- file(save_cpp_filename)
+        stancodefile <- file(save_stancode_filename)
         writeLines(model_code, stancodefile)
         close(stancodefile)
         cat("... saved\n")
