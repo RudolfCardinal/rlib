@@ -37,6 +37,7 @@ stanfunc$load_or_run_stan <- function(
         model_name,
         save_stancode_filename = NULL,
         save_cpp_filename = NULL,
+        save_code_filename = NULL,  # old name for save_cpp_filename
         forcerun = FALSE,
         chains = DEFAULT_CHAINS,
         iter = DEFAULT_ITER,
@@ -53,6 +54,12 @@ stanfunc$load_or_run_stan <- function(
     #   )
 
     cache_filetype <- match.arg(cache_filetype)
+    if (!is.null(save_code_filename)) {
+        if (!is.null(save_cpp_filename)) {
+            stop("Can't specify both save_code_filename (old) and save_cpp_filename (new)")
+        }
+        save_cpp_filename <- save_code_filename
+    }
 
     # -------------------------------------------------------------------------
     # Save Stan code file, if requested
