@@ -36,6 +36,7 @@ stanfunc$load_or_run_stan <- function(
         fit_filename,
         model_name,
         save_stancode_filename = NULL,
+        save_data_filename = NULL,
         save_cpp_filename = NULL,
         save_code_filename = NULL,  # old name for save_cpp_filename
         forcerun = FALSE,
@@ -61,6 +62,8 @@ stanfunc$load_or_run_stan <- function(
         save_cpp_filename <- save_code_filename
     }
 
+    saving <- forcerun || !file.exists(fit_filename)
+
     # -------------------------------------------------------------------------
     # Save Stan code file, if requested
     # -------------------------------------------------------------------------
@@ -68,8 +71,7 @@ stanfunc$load_or_run_stan <- function(
     # fit; but helpful if the code compiles/executes but crashes with a
     # line number error.
 
-    if (!is.null(save_stancode_filename) &&
-            (forcerun || !file.exists(save_stancode_filename))) {
+    if (saving && !is.null(save_stancode_filename)) {
         cat("--- Saving Stan code to file: ",
             save_stancode_filename, "...\n", sep="")
         stancodefile <- file(save_stancode_filename)
@@ -79,11 +81,21 @@ stanfunc$load_or_run_stan <- function(
     }
 
     # -------------------------------------------------------------------------
+    # Save Stan data file, if requested. (RDS only.)
+    # -------------------------------------------------------------------------
+
+    if (saving && !is.null(save_data_filename)) {
+        cat("--- Saving Stan data to file: ",
+            save_data_filename, "...\n", sep="")
+        saveRDS(data, file=save_data_filename)
+        cat("... saved\n")
+    }
+
+    # -------------------------------------------------------------------------
     # Save C++ code file, if requested
     # -------------------------------------------------------------------------
 
-    if (!is.null(save_cpp_filename) &&
-            (forcerun || !file.exists(save_cpp_filename))) {
+    if (saving && !is.null(save_cpp_filename)) {
         cat("--- Generating C++ code to save...\n")
         stanc_result <- rstan::stanc(model_code = model_code)
         cpp_code <- stanc_result$cppcode
@@ -100,7 +112,7 @@ stanfunc$load_or_run_stan <- function(
     # Load fit or run Stan
     # -------------------------------------------------------------------------
 
-    if (!forcerun && file.exists(fit_filename)) {
+    if (!saving) {
         # ---------------------------------------------------------------------
         # Load fit
         # ---------------------------------------------------------------------
@@ -834,6 +846,7 @@ stanfunc$parallel_stan <- function(
     return(sflist2stanfit(sflist))
 }
 
+
 stanfunc$load_or_run_stan_old <- function(data, code, file, forcerun = FALSE)
 {
     warning("stanfunc$load_or_run_stan_old: DEPRECATED; superseded by developments to rstan")
@@ -848,6 +861,7 @@ stanfunc$load_or_run_stan_old <- function(data, code, file, forcerun = FALSE)
     }
     return(fit)
 }
+
 
 stanfunc$parallel_stan_reuse_fit <- function(f1, data,
                                              cores = detectCores(),
