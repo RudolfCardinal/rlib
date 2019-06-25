@@ -288,7 +288,7 @@ stanfunc$load_or_run_vb <- function(
         # Run
         # ---------------------------------------------------------------------
         cat(paste("Running variational Bayes approximation to Stan model ",
-                  model_name, ", starting at", Sys.time(), "...\n", sep=""))
+                  model_name, ", starting at ", Sys.time(), "...\n", sep=""))
 
         cat("Building model...")
         vb_model <- rstan::stan_model(model_name=model_name,
@@ -296,10 +296,10 @@ stanfunc$load_or_run_vb <- function(
 
         cat("Running VB...")
         vb_fit <- rstan::vb(
-            object=vb_model,
-            data=data,
-            seed=SEED,
-            init=init
+            object = vb_model,
+            data = data,
+            seed = seed,
+            init = init
         )
 
         cat(paste("... Finished Stan VB run at", Sys.time(), "\n"))
