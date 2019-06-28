@@ -8,6 +8,7 @@
 
 library(bridgesampling)
 library(coda)
+library(data.table)
 library(ggplot2)
 library(matrixStats)
 library(parallel)
@@ -315,7 +316,6 @@ stanfunc$load_or_run_vb <- function(
 
     return(vb_fit)
 }
-
 
 
 stanfunc$quickrun <- function(
@@ -790,7 +790,6 @@ stanfunc$cpp_from_stanfit <- function(fit)
 }
 
 
-
 #==============================================================================
 # Running in parallel
 #==============================================================================
@@ -916,11 +915,13 @@ stanfunc$save_plots_from_stanfit <- function(
     dev.off()
 }
 
+
 stanfunc$quick_summary_stanfit <- function(
         fit, probs = c(0.025, 0.25, 0.5, 0.75, 0.975))
 {
     print(fit, digits_summary = 5, probs = probs)
 }
+
 
 stanfunc$calculate_mode <- function(sampled_values)
 {
@@ -928,6 +929,7 @@ stanfunc$calculate_mode <- function(sampled_values)
     max_density <- max(my_density$y)
     my_density$x[which(my_density$y == max_density)]
 }
+
 
 stanfunc$density_at_sub <- function(my_density, value)
 {
@@ -951,6 +953,7 @@ stanfunc$density_at_sub <- function(my_density, value)
     return(lower_d + proportion * (upper_d - lower_d))
 }
 
+
 stanfunc$density_at <- function(sampled_values, values)
 {
     my_density <- density(sampled_values)
@@ -960,6 +963,7 @@ stanfunc$density_at <- function(sampled_values, values)
     }
     return(result)
 }
+
 
 stanfunc$cum_density_between_two_values <- function(sampled_values,
                                                     lower, upper)
@@ -987,6 +991,7 @@ stanfunc$find_value_giving_cum_density <- function(sampled_values, cum_density)
     value <- uniroot(find_root, interval = search_range)$root
 }
 
+
 stanfunc$JUNK1 = "
 calculate_hdi_from_sample_interpolating <- function(x, hdi_proportion = 0.95)
 {
@@ -1013,6 +1018,7 @@ calculate_hdi_from_sample_interpolating <- function(x, hdi_proportion = 0.95)
 }
 "
 
+
 stanfunc$calculate_hdi_from_sample_piecewise <- function(x, hdi_proportion = 0.95)
 {
     # WORKS, BUT USE coda::HPDinterval instead
@@ -1035,6 +1041,7 @@ stanfunc$calculate_hdi_from_sample_piecewise <- function(x, hdi_proportion = 0.9
     #       CDF(upper) - CDF(lower) = hdi_proportion
     # and   PDF(upper) = PDF(lower)
 }
+
 
 stanfunc$HDIofMCMC <- function(sampleVec, credMass = 0.95)
 {
@@ -1061,6 +1068,7 @@ stanfunc$HDIofMCMC <- function(sampleVec, credMass = 0.95)
     HDIlim <- c(HDImin, HDImax)
     return(HDIlim)
 }
+
 
 TEST_HDI_OF_MCMC <- '
     # See Kruschke (2011) p41, p628
@@ -1092,12 +1100,14 @@ stanfunc$hdi_via_coda <- function(sampled_values, hdi_proportion = 0.95)
     return(c(hdi_limits_matrix[1, "lower"], hdi_limits_matrix[1, "upper"]))
 }
 
+
 stanfunc$hdi_via_lme4 <- function(sampled_values, hdi_proportion = 0.95)
 {
     hdi_limits_matrix <- lme4::HPDinterval(as.matrix(sampled_values),
                                            prob = hdi_proportion)
     return(c( hdi_limits_matrix[1, "lower"], hdi_limits_matrix[1, "upper"]))
 }
+
 
 stanfunc$compare_hdi_methods <- function(sampled_values, hdi_proportion)
 {
@@ -1110,6 +1120,7 @@ stanfunc$compare_hdi_methods <- function(sampled_values, hdi_proportion)
     cat("lme4:\n")
     print(hdi_via_lme4(sampled_values, hdi_proportion))
 }
+
 
 stanfunc$hdi <- function(sampled_values, hdi_proportion = 0.95,
                          method=c("kruschke_mcmc",
@@ -1132,6 +1143,7 @@ stanfunc$hdi <- function(sampled_values, hdi_proportion = 0.95,
     }
 }
 
+
 stanfunc$interval_includes <- function(interval, testval,
                                        lower_inclusive = TRUE,
                                        upper_inclusive = TRUE)
@@ -1149,6 +1161,7 @@ stanfunc$interval_includes <- function(interval, testval,
     return(lowertest && uppertest)
 }
 
+
 stanfunc$interval_excludes <- function(interval, testval,
                                        lower_inclusive = TRUE,
                                        upper_inclusive = TRUE)
@@ -1157,6 +1170,7 @@ stanfunc$interval_excludes <- function(interval, testval,
                                 lower_inclusive = lower_inclusive,
                                 upper_inclusive = upper_inclusive)
 }
+
 
 stanfunc$hdi_proportion_excluding_test_value <- function(
         x, test_value = 0, largest_such_interval = TRUE, debug = FALSE)
@@ -1198,6 +1212,7 @@ stanfunc$hdi_proportion_excluding_test_value <- function(
     }
     return(endval)
 }
+
 
 stanfunc$plot_density_function <- function(
         sampled_values,
@@ -1353,6 +1368,7 @@ stanfunc$plot_density_function <- function(
     }
 }
 
+
 stanfunc$ggplot_density_function <- function(
         sampled_values,
         parname,
@@ -1499,6 +1515,7 @@ stanfunc$ggplot_density_function <- function(
     return(p)
 }
 
+
 stanfunc$plot_multiple_stanfit_parameters <- function(fit, parnames, ...)
 {
     npar <- length(parnames)
@@ -1509,16 +1526,19 @@ stanfunc$plot_multiple_stanfit_parameters <- function(fit, parnames, ...)
     }
 }
 
+
 stanfunc$plot_all_stanfit_parameters <- function(fit, ...)
 {
     parnames <- stanfunc$get_all_parameters_from_stanfit(fit)
     stanfunc$plot_multiple_stanfit_parameters(fit, parnames, ...)
 }
 
+
 stanfunc$points_to_mm <- function(pts)
 {
     pts * 0.352777778
 }
+
 
 stanfunc$plot_multiple_stanfit_parameters_vstack <- function(
         fit,
@@ -1679,11 +1699,13 @@ stanfunc$plot_multiple_stanfit_parameters_vstack <- function(
     return(p)
 }
 
+
 stanfunc$plot_all_stanfit_parameters_vstack <- function(fit, ...)
 {
     parnames <- stanfunc$get_all_parameters_from_stanfit(fit)
     stanfunc$plot_multiple_stanfit_parameters_vstack(fit, parnames, ...)
 }
+
 
 stanfunc$generate_par_with_indices <- function(pn, pd)
 {
@@ -1714,6 +1736,7 @@ stanfunc$generate_par_with_indices <- function(pn, pd)
     return(parnames)
 }
 
+
 stanfunc$get_all_parameters_from_stanfit <- function(fit)
 {
     parnames_without_indices <- slot(fit, "model_pars")
@@ -1727,11 +1750,13 @@ stanfunc$get_all_parameters_from_stanfit <- function(fit)
     return(parnames)
 }
 
+
 stanfunc$get_parameter_mean_from_stanfit <- function(fit, parname)
 {
     sampled_values <- stanfunc$sampled_values_from_stanfit(fit, parname)
     return(mean(sampled_values))
 }
+
 
 stanfunc$get_parameter_means_from_stanfit <- function(fit, parnames)
 {
@@ -1739,6 +1764,7 @@ stanfunc$get_parameter_means_from_stanfit <- function(fit, parnames)
         stanfunc$get_parameter_mean_from_stanfit(fit, x)
     }))
 }
+
 
 stanfunc$test_specific_parameter_from_stanfit <- function(fit, parname, ...)
 {
@@ -1774,11 +1800,13 @@ stanfunc$test_specific_parameter_from_stanfit <- function(fit, parname, ...)
     stanfunc$plot_density_function(sampled_values, parname, ...)
 }
 
+
 stanfunc$ggplot_specific_parameter_from_stanfit <- function(fit, parname, ...)
 {
     sampled_values <- stanfunc$sampled_values_from_stanfit(fit, parname)
     return( stanfunc$ggplot_density_function(sampled_values, parname, ...) )
 }
+
 
 stanfunc$extract_all_means_from_stanfit <- function(fit)
 {
@@ -1787,6 +1815,53 @@ stanfunc$extract_all_means_from_stanfit <- function(fit)
     names(means) <- parnames
     return(means)
 }
+
+
+stanfunc$scatterplot_params <- function(fit, parnames = NULL, parlabels = NULL,
+                                        ignore_lp = TRUE)
+{
+    # https://stackoverflow.com/questions/3735286/create-a-matrix-of-scatterplots-pairs-equivalent-in-ggplot2
+    if (is.null(parnames)) {
+        parnames <- slot(fit, "sim")$pars_oi  # all parameter names
+        if (ignore_lp) {
+            parnames <- parnames[!(parnames == "lp__")]
+        }
+    }
+    if (is.null(parlabels)) {
+        parlabels <- parnames
+    }
+    values <- rstan::extract(fit, parnames, permuted = TRUE)
+    d <- data.table(matrix(unlist(values), ncol=length(values), byrow=F))
+    colnames(d) <- parnames
+    pairs(d, parlabels)  # doesn't return anything useful, though
+}
+
+
+stanfunc$summarize_fit <- function(fit, par_regex = NULL, vb = FALSE)
+{
+    s <- stanfunc$summary_by_par_regex(fit, par_regex = par_regex)
+    f <- function(x) {
+        y <- sprintf("%.3f", x)
+        y <- gsub("-", "–", y)
+        return(y)
+    }
+    if (vb) {
+        # Variational Bayes approximation; no R-hat
+        maketextcol <- function(m, a, b) {
+            paste0(f(m), " [", f(a), ", ", f(b), "]")
+        }
+        s[, summary := maketextcol(mean, s[["2.5%"]], s[["97.5%"]])]
+    } else{
+        # Full Stan fit
+        maketextcol <- function(m, a, b, r) {
+            paste0(f(m), " [", f(a), ", ", f(b), "] (R=", f(r), ")")
+        }
+        s[, summary := maketextcol(mean, s[["2.5%"]], s[["97.5%"]], s[["Rhat"]])]
+    }
+    s <- s[]  # for data table display bug
+    return(s)
+}
+
 
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
