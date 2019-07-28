@@ -4,11 +4,11 @@
 
 PREFERRED_CRAN_REPOSITORY = c(CRAN="http://cran.ma.imperial.ac.uk")
 
-install_if_absent <- function(
-    libname,
-    repos=PREFERRED_CRAN_REPOSITORY,
-    type=getOption("pkgType")
-) {
+
+install_if_absent <- function(libname,
+                              repos=PREFERRED_CRAN_REPOSITORY,
+                              type=getOption("pkgType"))
+{
     if (require(libname, character.only=TRUE)) {
         cat("Loaded library:", libname, "\n")
     } else {
@@ -22,7 +22,26 @@ install_if_absent <- function(
     }
 }
 
-DESIRED_LIBRARIES = c(
+
+install_github_if_absent <- function(libname, github_name)
+{
+    require(devtools)
+    if (require(libname, character.only=TRUE)) {
+        cat("Loaded library:", libname, "\n")
+    } else {
+        cat("Attempting to install Github package:", libname, "\n")
+        cat("... from: https://github.com/", github_name, "\n", sep="")
+        devtools::install_github(github_name)
+        if (require(libname, character.only=TRUE)) {
+            cat("Loaded library:", libname, "\n")
+        } else {
+            cat("FAILED TO INSTALL GITHUB PACKAGE:", libname, "\n")
+        }
+    }
+}
+
+
+DESIRED_LIBRARIES <- c(
     "arm",
     "afex",
     "arrayhelpers",
@@ -35,6 +54,7 @@ DESIRED_LIBRARIES = c(
     "coda",
     "codetools",
     "data.table",
+    "devtools",
     "diagram",
     "DiagrammeR",
     "doParallel",
@@ -101,6 +121,9 @@ DESIRED_LIBRARIES = c(
     "xtermStyle",
     "zoo"
 )
+DESIRED_GITHUB_LIBRARIES <- c(
+    bbplot = "bbc/bbplot"  # BBC styles for ggplot2
+)
 
 # First, update packages:
 update.packages(checkBuilt=TRUE, ask=FALSE)
@@ -108,6 +131,9 @@ update.packages(checkBuilt=TRUE, ask=FALSE)
 # Now install:
 for (libname in DESIRED_LIBRARIES) {
     install_if_absent(libname)
+}
+for (i in 1:length(DESIRED_GITHUB_LIBRARIES)) {
+    install_github_if_absent(names(DESIRED_GITHUB_LIBRARIES)[i], DESIRED_GITHUB_LIBRARIES[i])
 }
 
 # rstan used to require special procedures, but doesn't any more:
