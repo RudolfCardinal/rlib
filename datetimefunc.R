@@ -30,7 +30,7 @@ datetimefunc$calendar_age_lubridate_1 <- function(dob, now) {
     return(full_years)
 }
 
-datetimefunc$calendarAge <- calendar_age_lubridate_1
+datetimefunc$calendarAge <- datetimefunc$calendar_age_lubridate_1
 
 
 calendar_age <- function(dob, now)
