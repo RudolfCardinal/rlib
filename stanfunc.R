@@ -1818,7 +1818,7 @@ stanfunc$extract_all_means_from_stanfit <- function(fit)
 
 
 stanfunc$scatterplot_params <- function(fit, parnames = NULL, parlabels = NULL,
-                                        ignore_lp = TRUE)
+                                        ignore_lp = TRUE, ...)
 {
     # https://stackoverflow.com/questions/3735286/create-a-matrix-of-scatterplots-pairs-equivalent-in-ggplot2
     if (is.null(parnames)) {
@@ -1833,7 +1833,7 @@ stanfunc$scatterplot_params <- function(fit, parnames = NULL, parlabels = NULL,
     values <- rstan::extract(fit, parnames, permuted = TRUE)
     d <- data.table(matrix(unlist(values), ncol=length(values), byrow=F))
     colnames(d) <- parnames
-    pairs(d, parlabels)  # doesn't return anything useful, though
+    pairs(d, parlabels, ...)  # doesn't return anything useful, though
 }
 
 
