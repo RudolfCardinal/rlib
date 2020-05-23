@@ -79,6 +79,9 @@ miscstat$half_confidence_interval_t <- function(x, ci = 0.95, na.rm = FALSE) {
         x <- x[!is.na(x)]
     }
     n <- length(x)
+    if (n <= 1) {
+        return(NA)
+    }
     df <- n - 1
     sem <- miscstat$sem(x)
     crit_p <- 1 - ((1 - ci) / 2) # e.g. 0.975 for ci == 0.95
