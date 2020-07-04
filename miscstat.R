@@ -9,6 +9,7 @@ requireNamespace("moments")
 requireNamespace("multcomp")
 requireNamespace("plyr")
 
+
 # =============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 # =============================================================================
@@ -17,6 +18,7 @@ miscstat = new.env()
 
 miscstat$MAX_EXPONENT = log(.Machine$double.xmax)
 miscstat$VERY_SMALL_NUMBER = 1e-323 # .Machine$double.xmin is 2.2e-308, but this seems to manage.
+
 
 # =============================================================================
 # Cosmetics
@@ -34,6 +36,7 @@ subheading <- function(x)
     cat(paste("\n", line, "\n", x, "\n", line, "\n", sep=""))
 }
 
+
 # =============================================================================
 # Working with machine limits
 # =============================================================================
@@ -47,6 +50,7 @@ miscstat$reset_rng_seed <- function() {
     set.seed(0xbeef)
 }
 
+
 # =============================================================================
 # Efficient calculation with extremely small numbers
 # =============================================================================
@@ -58,6 +62,7 @@ miscstat$log_of_mean_of_numbers_in_log_domain <- function(log_v) {
     logmean = logsum - log(length(log_v))
     return(logmean)
 }
+
 
 # =============================================================================
 # Summary statistics
@@ -152,6 +157,7 @@ miscstat$summarize_by_factors_datatable <- function(dt, depvarname, factornames)
     ]
     # NOTE: doesn't care whether the "by" things are really factors or not.
 }
+
 
 # =============================================================================
 # Simple comparisons of data
@@ -451,13 +457,13 @@ miscstat$pretty_two_group_paired_regression <- function(
 }
 
 miscstat$IGNORE_ME = '
-DT <- data.table(
-    x = c(1, 2, 3, 10, 11, 12),
-    y = c(4, 5, 6, 20, 19, 18),
-    g = factor(c(1, 1, 1, 2, 2, 2))
-)
+    DT <- data.table(
+        x = c(1, 2, 3, 10, 11, 12),
+        y = c(4, 5, 6, 20, 19, 18),
+        g = factor(c(1, 1, 1, 2, 2, 2))
+    )
 
-miscstat$pretty_two_group_paired_regression(DT, "y", "x", "g", 1, 2)
+    miscstat$pretty_two_group_paired_regression(DT, "y", "x", "g", 1, 2)
 '
 
 miscstat$two_group_multiple_regression_table <- function(
@@ -518,12 +524,14 @@ miscstat$two_group_multiple_regression_table <- function(
     return(DF)
 }
 
+
 # =============================================================================
 # Sanity checks (e.g. for refereeing), such as t-tests based on mean/SD without
 # access to raw data.
 # =============================================================================
 
 miscstat$t_test_unpaired_eq_var <- function(mean1, mean2, sd1, sd2, n1, n2) {
+    # Manual t test, for unpaired data, assuming equal variances.
     df <- n1 + n2 - 2
     var1 <- sd1 ^ 2
     var2 <- sd2 ^ 2
@@ -538,6 +546,61 @@ miscstat$t_test_unpaired_eq_var <- function(mean1, mean2, sd1, sd2, n1, n2) {
     cat("Mean difference (mean2 - mean1) = ", mean2 - mean1, "\n", sep = "")
     cat("t =", t, "\n")
     cat("df =", df, "\n")
+    cat("p =", p, "\n")
+}
+
+
+miscstat$t_test_unpaired_uneq_var <- function(mean1, mean2, sd1, sd2, n1, n2) {
+    # Manual t test, for unpaired data, assuming unequal variances, via the
+    # Welch-Satterthwaite approximation. Also known as Welch's t-test.
+
+    EXAMPLE_CODE <- '
+    # The three examples from Wikipedia:
+    # - https://en.wikipedia.org/wiki/Welch%27s_t-test
+    # - see also https://en.wikipedia.org/wiki/Welch%E2%80%93Satterthwaite_equation
+
+    ex1_a1 = c(27.5, 21.0, 19.0, 23.6, 17.0, 17.9, 16.9, 20.1, 21.9, 22.6, 23.1, 19.6, 19.0, 21.7, 21.4)
+    ex1_a2 = c(27.1, 22.0, 20.8, 23.4, 23.4, 23.5, 25.8, 22.0, 24.8, 20.2, 21.9, 22.1, 22.9, 20.5, 24.4)
+
+    ex2_a1 = c(17.2, 20.9, 22.6, 18.1, 21.7, 21.4, 23.5, 24.2, 14.7, 21.8)
+    ex2_a2 = c(21.5, 22.8, 21.0, 23.0, 21.6, 23.6, 22.5, 20.7, 23.4, 21.8, 20.7, 21.7, 21.5, 22.5, 23.6, 21.5, 22.5, 23.5, 21.5, 21.8)
+
+    ex3_a1 = c(19.8, 20.4, 19.6, 17.8, 18.5, 18.9, 18.3, 18.9, 19.5, 22.0)
+    ex3_a2 = c(28.2, 26.6, 20.1, 23.3, 25.2, 22.1, 17.7, 27.6, 20.6, 13.7, 23.2, 17.5, 20.6, 18.0, 23.9, 21.6, 24.3, 20.4, 24.0, 13.2)
+
+    t_test_unpaired_uneq_var(mean1 = mean(ex1_a1), mean2 = mean(ex1_a2), sd1 = sd(ex1_a1), sd2 = sd(ex1_a2),  n1 = length(ex1_a1), n2 = length(ex1_a2))
+    # Wikipedia: t = -2.46, v = 25.0, p = 0.021
+    # This code: t = -2.46, v = 25.0, p = 0.021
+
+    t_test_unpaired_uneq_var(mean1 = mean(ex2_a1), mean2 = mean(ex2_a2), sd1 = sd(ex2_a1), sd2 = sd(ex2_a2),  n1 = length(ex2_a1), n2 = length(ex2_a2))
+    # Wikipedia: t = -1.57, v = 9.9, p = 0.149
+    # This code: t = -1.57, v = 9.9, p = 0.149
+
+    t_test_unpaired_uneq_var(mean1 = mean(ex3_a1), mean2 = mean(ex3_a2), sd1 = sd(ex3_a1), sd2 = sd(ex3_a2),  n1 = length(ex3_a1), n2 = length(ex3_a2))
+    # Wikipedia: t = -2.22, v = 24.5, p = 0.036
+    # This code: t = -2.22, v = 24.5, p = 0.036
+
+    '
+    var1 <- sd1 ^ 2
+    var2 <- sd2 ^ 2
+    t <- (mean1 - mean2) / sqrt((var1 / n1) + (var2 / n2))
+
+    v1 <- n1 - 1
+    v2 <- n2 - 1
+    v <- (
+        ((var1 / n1) + (var2 / n2)) ^ 2 /
+        ((var1 ^ 2 / (n1 ^ 2 * v1)) + (var2 ^ 2 / (n2 ^ 2 * v2)))
+    )  # degrees of freedom
+
+    p <- 2 * pt(-abs(t), v)
+
+    cat("Group 1: mean = ", mean1, ", sd = ", sd1, ", var = ", var1,
+        ", n = ", n1, "\n", sep = "")
+    cat("Group 2: mean = ", mean2, ", sd = ", sd2, ", var = ", var2,
+        ", n = ", n2, "\n", sep = "")
+    cat("Mean difference (mean2 - mean1) = ", mean2 - mean1, "\n", sep = "")
+    cat("t =", t, "\n")
+    cat("df (Welch-Satterthwaite) =", v, "\n")
     cat("p =", p, "\n")
 }
 
@@ -569,6 +632,7 @@ miscstat$sidak_corrected_p <- function(uncorrected_p, n_comparisons) {
     # http://v8doc.sas.com/sashtml/stat/chap43/sect14.htm
     1 - (1 - uncorrected_p) ^ (n_comparisons)
 }
+
 
 # =============================================================================
 # Goodness of fit
@@ -641,6 +705,7 @@ miscstat$lr_test <- function(model1_nLL, model1_df, model2_nLL, model2_df) {
     return(p)
 }
 
+
 # =============================================================================
 # Distributions
 # =============================================================================
@@ -685,6 +750,7 @@ miscstat$softmax <- function(x, b = 1, debug = TRUE) {
     return(answer)
 }
 
+
 # =============================================================================
 # proportion
 # =============================================================================
@@ -692,6 +758,7 @@ miscstat$softmax <- function(x, b = 1, debug = TRUE) {
 miscstat$proportion_x_from_a_to_b <- function(x, a, b) {
     (1 - x) * a + x * b
 }
+
 
 # =============================================================================
 # randomness
@@ -712,6 +779,7 @@ miscstat$roulette <- function(p) {
     choice[cum_p == min(cum_p[cum_p > r])] = TRUE
     return(choice)
 }
+
 
 # =============================================================================
 # ANOVA/linear modelling
@@ -739,6 +807,7 @@ miscstat$rvfPlot <- function(model, FONTSIZE=10) {
         )
     )
 }
+
 
 # -----------------------------------------------------------------------------
 # Post-hoc analysis; SEDs
@@ -915,6 +984,7 @@ miscstat$sed_info <- function(
         lsmeans = lmerTest::lsmeans(model)
     ))
 }
+
 
 # -----------------------------------------------------------------------------
 # Effect size
@@ -1219,29 +1289,30 @@ miscstat$check_distribution <- function(model)
 
 miscstat$IGNOREME_MISCSTAT_EXAMPLE <- "
 
-# WORKING/THINKING
+    # WORKING/THINKING
 
-testdata <- expand.grid(
-    A=c(1, 2, 3),
-    B=c(10, 11, 12),
-    subj=seq(1,50)
-)
-testdata <- within(testdata, {
-    y <- 13 + 0.5*A + 6*B + rnorm(sd=0.5, n=nrow(testdata))
-    # will give intercept = 13 + 0.5*1 + 6*10 = 73.5 (at A1, B1)
-    #   A2 effect = 0.5 (relative to A1)
-    #   A3 effect = 1   (relative to A1)
-    #   B2 effect = 6   (relative to B1)
-    #   B3 effect = 12  (relative to B1)
-    #   interaction terms = 0
-    A <- as.factor(A)
-    B <- as.factor(B)
-    subj <- as.factor(subj)
-})
-testmodel <- lmer(y ~ A*B + (1 | subj), data=testdata)
-print(sed_info(testmodel))
+    testdata <- expand.grid(
+        A=c(1, 2, 3),
+        B=c(10, 11, 12),
+        subj=seq(1,50)
+    )
+    testdata <- within(testdata, {
+        y <- 13 + 0.5*A + 6*B + rnorm(sd=0.5, n=nrow(testdata))
+        # will give intercept = 13 + 0.5*1 + 6*10 = 73.5 (at A1, B1)
+        #   A2 effect = 0.5 (relative to A1)
+        #   A3 effect = 1   (relative to A1)
+        #   B2 effect = 6   (relative to B1)
+        #   B3 effect = 12  (relative to B1)
+        #   interaction terms = 0
+        A <- as.factor(A)
+        B <- as.factor(B)
+        subj <- as.factor(subj)
+    })
+    testmodel <- lmer(y ~ A*B + (1 | subj), data=testdata)
+    print(sed_info(testmodel))
 
 "
+
 
 # =============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
