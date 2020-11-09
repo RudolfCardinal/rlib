@@ -14,10 +14,10 @@ requireNamespace("plyr")
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 # =============================================================================
 
-miscstat = new.env()
+miscstat <- new.env()
 
-miscstat$MAX_EXPONENT = log(.Machine$double.xmax)
-miscstat$VERY_SMALL_NUMBER = 1e-323 # .Machine$double.xmin is 2.2e-308, but this seems to manage.
+miscstat$MAX_EXPONENT <- log(.Machine$double.xmax)
+miscstat$VERY_SMALL_NUMBER <- 1e-323 # .Machine$double.xmin is 2.2e-308, but this seems to manage.
 
 
 # =============================================================================
@@ -27,13 +27,13 @@ miscstat$VERY_SMALL_NUMBER = 1e-323 # .Machine$double.xmin is 2.2e-308, but this
 heading <- function(x)
 {
     line <- "==============================================================================="
-    cat(paste("\n", line, "\n", x, "\n", line, "\n", sep=""))
+    cat(paste("\n", line, "\n", x, "\n", line, "\n", sep = ""))
 }
 
 subheading <- function(x)
 {
     line <- "-------------------------------------------------------------------------------"
-    cat(paste("\n", line, "\n", x, "\n", line, "\n", sep=""))
+    cat(paste("\n", line, "\n", x, "\n", line, "\n", sep = ""))
 }
 
 
@@ -57,9 +57,9 @@ miscstat$reset_rng_seed <- function() {
 
 miscstat$log_of_mean_of_numbers_in_log_domain <- function(log_v) {
     # http://stackoverflow.com/questions/7355145/mean-of-very-small-values
-    max_log = max(log_v)
-    logsum = max_log + log(sum(exp(log_v - max_log)))
-    logmean = logsum - log(length(log_v))
+    max_log <- max(log_v)
+    logsum <- max_log + log(sum(exp(log_v - max_log)))
+    logmean <- logsum - log(length(log_v))
     return(logmean)
 }
 
@@ -68,11 +68,16 @@ miscstat$log_of_mean_of_numbers_in_log_domain <- function(log_v) {
 # Summary statistics
 # =============================================================================
 
-miscstat$sem <- function(x) {
+miscstat$sem <- function(x, na.rm = FALSE) {
     # Calculate the standard error of the mean (SEM).
     # - SEM = SD / sqrt(n) = sqrt(variance / n).
-    # - Won't do anything silly with NA values since var() will return NA in
-    #   that case... but does fail with NULL == c()
+    # - If na.rm is FALSE: won't do anything silly with NA values since var()
+    #   will return NA in that case... so it will return NA.
+    # - If na.rm is TRUE, all NA values are removed.
+    # - But it does fail with NULL == c() as a parameter.
+    if (na.rm) {
+        x <- x[!is.na(x)]
+    }
     if (is.null(x)) {
         return(NA)  # as for mean(NULL)
     }
@@ -213,7 +218,7 @@ miscstat$pretty_two_group_t_test <- function(values_a, values_b,
     r$df <- t$parameter
     r$uncorrected_p <- t$p.value
     r$corrected_p <- miscstat$sidak_p(r$uncorrected_p, familywise_n)
-    r$pretty_p = miscmath$describe_p_value_with_stars(r$corrected_p)
+    r$pretty_p <- miscmath$describe_p_value_with_stars(r$corrected_p)
     return(r)
 }
 
@@ -281,11 +286,11 @@ miscstat$pretty_two_group_chisq_contingency_test <- function(
         datsum[group == "b", .(count_b = count)]
     )
     chi <- chisq.test(datgrid)
-    r$chisq = chi$statistic
-    r$df = chi$parameter
+    r$chisq <- chi$statistic
+    r$df <- chi$parameter
     r$uncorrected_p <- chi$p.value
     r$corrected_p <- miscstat$sidak_p(r$uncorrected_p, familywise_n)
-    r$pretty_p = miscmath$describe_p_value_with_stars(r$corrected_p)
+    r$pretty_p <- miscmath$describe_p_value_with_stars(r$corrected_p)
 
     return(r)
 }
@@ -456,7 +461,7 @@ miscstat$pretty_two_group_paired_regression <- function(
     return(result)
 }
 
-miscstat$IGNORE_ME = '
+miscstat$IGNORE_ME <- '
     DT <- data.table(
         x = c(1, 2, 3, 10, 11, 12),
         y = c(4, 5, 6, 20, 19, 18),
@@ -681,22 +686,22 @@ miscstat$bic <- function(nLL, k, n) {
 miscstat$lr_test <- function(model1_nLL, model1_df, model2_nLL, model2_df) {
     # Ensure df2 > df1
     if (model2_df > model1_df) {
-        df1 = model1_df
-        df2 = model2_df
-        nLL1 = model1_nLL
-        nLL2 = model2_nLL
+        df1 <- model1_df
+        df2 <- model2_df
+        nLL1 <- model1_nLL
+        nLL2 <- model2_nLL
     }
     else {
-        df1 = model2_df
-        df2 = model1_df
-        nLL1 = model2_nLL
-        nLL2 = model1_nLL
+        df1 <- model2_df
+        df2 <- model1_df
+        nLL1 <- model2_nLL
+        nLL2 <- model1_nLL
     }
     # Don't work with exp(-nLL) -- numbers too small, get rounded to zero (see e.g. "exp(-3000)")
-    D = 2 * nLL1 - 2 * nLL2
+    D <- 2 * nLL1 - 2 * nLL2
     # D = -2 ln(likelihood for null model) + 2 ln(likelihood for alternative model)
-    df = df2 - df1
-    p = 1 - pchisq(D, df)
+    df <- df2 - df1
+    p <- 1 - pchisq(D, df)
     cat("df1 = ", df1, "\n")
     cat("df2 = ", df2, "\n")
     cat("D (= chi-square) = ", D, "\n")
@@ -733,19 +738,19 @@ miscstat$softmax <- function(x, b = 1, debug = TRUE) {
     #   giving an infinity.
     # - input vector may have NA values in
     # - return value: vector of probabilities
-    constant = mean(x, na.rm=TRUE)
-    products = x * b - constant
+    constant <- mean(x, na.rm=TRUE)
+    products <- x * b - constant
     # ... softmax is invariant to addition of a constant: Daw article and
     #     http://www.faqs.org/faqs/ai-faq/neural-nets/part2/section-12.html#b
     if (max(products, na.rm=TRUE) > MAX_EXPONENT) {
         if (debug) cat("OVERFLOW in softmax(): x =", x, ", b =", b, ", constant =", constant, ", products=", products, "\n")
-        answer = rep(0, length(x))
-        answer[which.max(x)] = 1
-        answer[is.na(x)] = NA
+        answer <- rep(0, length(x))
+        answer[which.max(x)] <- 1
+        answer[is.na(x)] <- NA
     }
     else {
-        exponented = exp(products)
-        answer = exponented / sum(exponented, na.rm=TRUE)
+        exponented <- exp(products)
+        answer <- exponented / sum(exponented, na.rm=TRUE)
     }
     return(answer)
 }
@@ -772,11 +777,11 @@ miscstat$coin <- function(p) {
 miscstat$roulette <- function(p) {
     # p is a vector of probabilities that sum to 1
     # return value: vector of truth values: one TRUE, the rest FALSE, selected according to the probabilities
-    n_options = length(p)
-    cum_p = cumsum(p)
-    r = runif(1) # random variable
-    choice = rep(FALSE, n_options)
-    choice[cum_p == min(cum_p[cum_p > r])] = TRUE
+    n_options <- length(p)
+    cum_p <- cumsum(p)
+    r <- runif(1) # random variable
+    choice <- rep(FALSE, n_options)
+    choice[cum_p == min(cum_p[cum_p > r])] <- TRUE
     return(choice)
 }
 
@@ -789,21 +794,21 @@ miscstat$roulette <- function(p) {
 # Diagnostic plots
 # -----------------------------------------------------------------------------
 
-miscstat$rvfPlot <- function(model, FONTSIZE=10) {
+miscstat$rvfPlot <- function(model, FONTSIZE = 10) {
     # https://rpubs.com/therimalaya/43190
     # Note that the other diagnostic plots shown there fail with lme models.
     return (
         ggplot(model, aes(.fitted, .resid))
         + geom_point()
-        + stat_smooth(method="loess")
-        + geom_hline(yintercept=0, col="red", linetype="dashed")
+        + stat_smooth(method = "loess")
+        + geom_hline(yintercept = 0, col = "red", linetype = "dashed")
         + xlab("Fitted values")
         + ylab("Residuals")
         + ggtitle("Residual vs Fitted Plot")
         + theme_classic()
         + theme(
-            text=element_text(size=FONTSIZE),
-            plot.title=element_text(hjust=0, face="bold")  # left title
+            text = element_text(size = FONTSIZE),
+            plot.title = element_text(hjust = 0, face = "bold")  # left title
         )
     )
 }
@@ -814,8 +819,8 @@ miscstat$rvfPlot <- function(model, FONTSIZE=10) {
 # -----------------------------------------------------------------------------
 
 miscstat$pairwise_contrasts <- function(
-        term, model, alternative=c("two.sided", "less", "greater"),
-        DEBUG=FALSE) {
+        term, model, alternative = c("two.sided", "less", "greater"),
+        DEBUG = FALSE) {
     alternative <- match.arg(alternative)
     # We'd normally do:
     #
@@ -845,8 +850,8 @@ miscstat$pairwise_contrasts <- function(
     expr <- paste(
         "multcomp::glht(model, linfct = lsmeans::lsm(pairwise ~ ", term, "), ",
         "alternative=\"", alternative, "\")",
-        sep="")
-    g <- eval(parse(text=expr))
+        sep = "")
+    g <- eval(parse(text = expr))
     summ <- summary(g)
     test <- summ$test
     # test includes:
@@ -903,7 +908,7 @@ miscstat$do_terms_contain_only_factors <- function(model, terms) {
     sapply(
         terms,
         miscstat$are_all_predictors_in_term_factors,
-        model=model
+        model = model
     )
 }
 
@@ -938,7 +943,7 @@ miscstat$sed_info <- function(
         useful_terms,
         miscstat$pairwise_contrasts,
         model,
-        alternative=alternative
+        alternative = alternative
     )
 
     # std_error_fixed_effects_estimates <- sqrt(diag(vcov(model)))
@@ -955,16 +960,16 @@ miscstat$sed_info <- function(
         model
     )
     an <- cbind(an[useful_terms, ], n_by_factor)
-    an <- rename(an, c("Mean Sq"="ms_effect",
-                       "F.value"="F",
-                       "Pr(>F)"="p"))
+    an <- rename(an, c("Mean Sq" = "ms_effect",
+                       "F.value" = "F",
+                       "Pr(>F)" = "p"))
     an <- within(an, {
         ms_error <- ms_effect / F  # since F = ms_effect / ms_error
         iffy_sed <- sqrt(2 * ms_error / harmonic_mean_n)
         # t_eq_sqrt_F_for_2_grps <- sqrt(F)
     })
-    highest_interaction_iffy_sed = an[highest_order_interaction,
-                                        "iffy_sed"]
+    highest_interaction_iffy_sed <- an[highest_order_interaction,
+                                       "iffy_sed"]
 
     # *** Not sure that iffy_sed is always right. OK in simple situations, but
     # not so sure in complex ones...
@@ -1049,7 +1054,7 @@ miscstat$sigstars <- function(p, default = "") {
 miscstat$sum_of_squares <- function(x) {
     # The sum of squared deviations from the mean
     mu <- mean(x)
-    sum((x - mu)^2)
+    sum((x - mu) ^ 2)
 
     # REMEMBER ALSO: var(x) = sum_of_squares(x) / (n - 1) [check: sample variance?]
 }
@@ -1096,7 +1101,7 @@ miscstat$lmer_effect_size_eta_sq <- function(lmer_model) {
         "F",  # was "F.value"
         "p"  # was "Pr(>F)"
     )
-    dt$term = rownames(a)
+    dt$term <- rownames(a)
     dt[, sig := miscstat$sigstars(p)]
     # dt[, wrong_approx_cohen_d := 2 * sqrt(df_num * F / df_den)]
     # ... http://davidileitman.com/wp-content/uploads/2014/04/EffectSizeFormulas.pdf
@@ -1135,7 +1140,7 @@ miscstat$lm_effect_size_eta_sq <- function(lm_model) {
         "F",  # was "F.value"
         "p"  # was "Pr(>F)"
     )
-    dt$term = rownames(a)
+    dt$term <- rownames(a)
     dt[, sig := miscstat$sigstars(p)]
     total_sum_of_squares <- miscstat$ss_total_for_lm_model(lm_model)
     dt[, SS_total := total_sum_of_squares]
@@ -1219,14 +1224,21 @@ miscstat$is_lme4_model_singular <- function(model) {
 # Quick aids to distributional checks
 # =============================================================================
 
-miscstat$check_distribution <- function(model)
+miscstat$check_distribution <- function(model, silent = FALSE)
 {
     # Quick check on the distribution for a statistical model.
     # ... remember, it's the *residuals* that need to be normally distributed;
     #     e.g. Cardinal & Aitken 2006 p72
+
+    # -------------------------------------------------------------------------
+    # Obtain residuals
+    # -------------------------------------------------------------------------
     resid <- residuals(model)
     # ... better than model$residuals, which doesn't work for lmer models
 
+    # -------------------------------------------------------------------------
+    # Describe the model being used
+    # -------------------------------------------------------------------------
     if (mode(model) == "S4") {
         # e.g. lmer()
         model_call <- model@call
@@ -1245,41 +1257,77 @@ miscstat$check_distribution <- function(model)
 
     subheading(paste0("Distribution checks for: ", model_text))
 
+    # -------------------------------------------------------------------------
+    # Shapiro-Wilk test for normality
+    # -------------------------------------------------------------------------
     n_resid <- length(resid)
+    # The "stats::shapiro.test" function has an explicit hard-coded range of
+    # [3, 5000] residuals; it will call stop() if you breach those boundaries.
     if (n_resid < 3) {
-        cat("Too few residuals for Shapiro-Wilk test\n")
+        shapiro_wilk <- "Too few residuals for Shapiro-Wilk test"
+        cat(paste0(shapiro_wilk, "\n"))
     } else if (n_resid > 5000) {
-        cat("Too many residuals for Shapiro-Wilk test\n")
+        shapiro_wilk <- "Too many residuals for Shapiro-Wilk test"
+        cat(paste0(shapiro_wilk, "\n"))
     } else {
-        cat("Shapiro-Wilk test on residuals:\n")
-        print(shapiro.test(resid))
+        shapiro_wilk <- shapiro.test(resid)
+        if (!silent) {
+            cat("Shapiro-Wilk test on residuals:\n")
+            print(shapiro_wilk)
+        }
     }
 
-    cat(paste0("Skewness (0 is none): ", moments::skewness(resid), "\n"))
+    # -------------------------------------------------------------------------
+    # Skewness
+    # -------------------------------------------------------------------------
+    skewness <- moments::skewness(resid)
+    cat(paste0("Skewness (0 is none): ", skewness, "\n"))
 
-    cat(paste0("Kurtosis (<3 platykurtic, 3 mesokurtic, >3 leptokurtic): ",
-               moments::kurtosis(resid), "\n"))
+    # -------------------------------------------------------------------------
+    # Kurtosis
+    # -------------------------------------------------------------------------
+    kurtosis <- moments::kurtosis(resid)
     # ... where 3 is the kurtosis of a normal distribution;
     #     excess kurtosis = kurtosis - 3
     # ... https://en.wikipedia.org/wiki/Kurtosis
+    excess_kurtosis <- kurtosis - 3
+    cat(paste0("Kurtosis (<3 platykurtic, 3 mesokurtic, >3 leptokurtic): ",
+               kurtosis, "\n"))
 
+    # -------------------------------------------------------------------------
+    # Q-Q plot (showing deviation from normality)
+    # -------------------------------------------------------------------------
     if (!exists('stat_qq_line', where='package:ggplot2', mode='function')) {
         # https://stackoverflow.com/questions/15214411/see-if-a-variable-function-exists-in-a-package
         cat('No stat_qq_line; install a later version of ggplot2, e.g. with:
 
     devtools::install_github("r-lib/rlang", build_vignettes = TRUE)
     devtools::install_github("tidyverse/ggplot2")\n')
-        return()
+        qq_plot <- NULL
+    } else {
+        qq_plot <- (
+            ggplot(NULL, aes(sample=resid))
+            + stat_qq()
+            + stat_qq_line()
+            + ggtitle(paste0("Q-Q plot of residuals for: ", model_text))
+        )
+        if (!silent) {
+            cat("Displaying Q-Q plot of residuals")
+            print(qq_plot)
+        }
     }
 
-    qq_plot <- (
-        ggplot(NULL, aes(sample=resid))
-        + stat_qq()
-        + stat_qq_line()
-        + ggtitle(paste0("Q-Q plot of residuals for: ", model_text))
-    )
-    cat("Displaying Q-Q plot of residuals")
-    print(qq_plot)
+    # -------------------------------------------------------------------------
+    # Results
+    # -------------------------------------------------------------------------
+    return(list(
+        model_text = model_text,
+        shapiro_wilk = shapiro_wilk,
+        skewness = skewness,
+        kurtosis = kurtosis,
+        excess_kurtosis = excess_kurtosis,
+        qq_plot = qq_plot
+    ))
 }
 
 

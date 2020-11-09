@@ -6,7 +6,7 @@ requireNamespace("lubridate")
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 #==============================================================================
 
-datetimefunc = new.env()
+datetimefunc <- new.env()
 
 
 #==============================================================================

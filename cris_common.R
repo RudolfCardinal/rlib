@@ -32,16 +32,16 @@ cris <- new.env()
 # CRIS_PASSWORD
 
 cris$connect <- function(
-    user=Sys.getenv("CRIS_USER"),
-    password=Sys.getenv("CRIS_PASSWORD"),
-    server="BRHNSQL009",  # 10.16.32.47
-    port=1433,
-    method=c("ODBC", "JDBC"),
-    odbc_driver="SQL Server",
-    jdbc_driver="sqlserver",
-    jdbc_driverClass="com.microsoft.sqlserver.jdbc.SQLServerDriver",
-    jdbc_classPath="",
-    jdbc_identifier.quote=NA)
+    user = Sys.getenv("CRIS_USER"),
+    password = Sys.getenv("CRIS_PASSWORD"),
+    server = "BRHNSQL009",  # 10.16.32.47
+    port = 1433,
+    method = c("ODBC", "JDBC"),
+    odbc_driver = "SQL Server",
+    jdbc_driver = "sqlserver",
+    jdbc_driverClass = "com.microsoft.sqlserver.jdbc.SQLServerDriver",
+    jdbc_classPath = "",
+    jdbc_identifier.quote = NA)
 {
     # Connect to CRIS database, using (by default) login details from
     # environment variables
@@ -58,9 +58,9 @@ cris$connect <- function(
     } else {
         # JDBC
         library(RJDBC)
-        drv <- JDBC(driverClass=jdbc_driverClass,
-                    classPath=jdbc_classPath,
-                    identifier.quote=jdbc_identifier.quote)
+        drv <- JDBC(driverClass = jdbc_driverClass,
+                    classPath = jdbc_classPath,
+                    identifier.quote = jdbc_identifier.quote)
         url <- paste("jdbc:", jdbc_driver, "://", server, ":", port, ";",
                      "user=", user, ";",
                      "password=", password, ";",
@@ -96,7 +96,7 @@ cris$connect <- function(
 # Email
 #==============================================================================
 
-cris$send_email <- function(recipients, subject, body, filenames=c())
+cris$send_email <- function(recipients, subject, body, filenames = c())
 {
     # DOES NOT WORK - blocked by SLAM firewall.
     EMAIL_SCRIPT <- Sys.getenv("EMAIL_SCRIPT")
@@ -131,19 +131,19 @@ cris$route_email <- function(
     , host
     , user
     , password
-    , subject=""
-    , body=""
-    , filenames=c()
-    , proxy=Sys.getenv("HTTP_PROXY")
-    , proxyuserpwd=Sys.getenv("HTTP_PROXY_USER")
-    , ssl.verifypeer=FALSE # for HTTPS... but avoid HTTPS as it returns an encrypted result!
+    , subject = ""
+    , body = ""
+    , filenames = c()
+    , proxy = Sys.getenv("HTTP_PROXY")
+    , proxyuserpwd = Sys.getenv("HTTP_PROXY_USER")
+    , ssl.verifypeer = FALSE # for HTTPS... but avoid HTTPS as it returns an encrypted result!
 )
 {
     # Uses a routing server, with a custom script, to route e-mails.
     # (This does not represent an open mail gateway; it merely routes it
     # to an appropriate SMTP server.)
     params <- list(
-        sender=sender
+        sender = sender
         , recipient=recipient
         , subject=subject
         , body=body
