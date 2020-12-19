@@ -37,7 +37,7 @@ stanfunc$load_or_run_stan <- function(
         fit_filename,
         model_name,
         file = NULL,  # Filename for Stan code
-        model_code = NULL,  # Text of Stan code
+        model_code = "",  # Text of Stan code
         save_stancode_filename = NULL,
         save_data_filename = NULL,
         save_cpp_filename = NULL,
@@ -57,7 +57,7 @@ stanfunc$load_or_run_stan <- function(
     #           # https://www.rdocumentation.org/packages/rstanarm/versions/2.14.1/topics/adapt_delta
     #   )
 
-    if (is.null(file) == is.null(model_code)) {
+    if (is.null(file) == (model_code == "")) {
         stop("Specify either 'file' or 'model_code' (and not both).")
     }
 
@@ -79,7 +79,7 @@ stanfunc$load_or_run_stan <- function(
     # line number error.
 
     if (saving && !is.null(save_stancode_filename)) {
-        if (is.null(model_code)) {
+        if (model_code == "") {
             stop("Must specify 'model_code' to use 'save_stancode_filename'")
         }
         cat("--- Saving Stan code to file: ",
@@ -208,7 +208,7 @@ stanfunc$load_or_run_bridge_sampler <- function(
     filename,
     assume_stanfit_from_this_R_session = FALSE,
     file = NULL,
-    model_code = NULL,
+    model_code = "",
     data = NULL,
     cores = parallel::detectCores(),
     forcerun = FALSE,
@@ -238,7 +238,7 @@ stanfunc$load_or_run_bridge_sampler <- function(
             stanfit_model <- stanfit
         } else {
             cat("Creating dummy compiled Stan model...\n")
-            if (is.null(file) == is.null(model_code)) {
+            if (is.null(file) == (model_code == "")) {
                 stop("Specify either 'file' or 'model_code' (and not both).")
             }
             if (is.null(data)) {
@@ -277,14 +277,19 @@ stanfunc$load_or_run_bridge_sampler <- function(
 
 stanfunc$load_or_run_vb <- function(
         data,
-        model_code,
         vbfit_filename,
         model_name,
+        file = NULL,
+        model_code = "",
         forcerun = FALSE,
         init = DEFAULT_INIT,
         seed = DEFAULT_SEED,
         ...)
 {
+    if (is.null(file) == (model_code == "")) {
+        stop("Specify either 'file' or 'model_code' (and not both).")
+    }
+
     if (!forcerun && file.exists(vbfit_filename)) {
         # ---------------------------------------------------------------------
         # Load
@@ -304,7 +309,8 @@ stanfunc$load_or_run_vb <- function(
                   model_name, ", starting at ", Sys.time(), "...\n", sep=""))
 
         cat("Building model...")
-        vb_model <- rstan::stan_model(model_name = model_name,
+        vb_model <- rstan::stan_model(file = file,
+                                      model_name = model_name,
                                       model_code = model_code)
 
         cat("Running VB...")
@@ -334,8 +340,9 @@ stanfunc$load_or_run_vb <- function(
 stanfunc$quickrun <- function(
     data,
     model_name,
-    model_code,
     fit_cache_dir,
+    file = NULL,
+    model_code = "",
     forcerun = FALSE,
     chains = DEFAULT_CHAINS,
     iter = DEFAULT_ITER,
@@ -350,6 +357,10 @@ stanfunc$quickrun <- function(
     CPP_SUFFIX = "_code.cpp",
     ...)  # additional parameters to rstan::stan
 {
+    if (is.null(file) == (model_code == "")) {
+        stop("Specify either 'file' or 'model_code' (and not both).")
+    }
+
     # Note that C++ code is extractable from the Stan fit.
     fit_filename <- file.path(fit_cache_dir,
                               paste(model_name, FIT_SUFFIX, sep=""))
@@ -378,6 +389,7 @@ stanfunc$quickrun <- function(
                   model_name, "...\n", sep=""))
         result$vb_fit <- stanfunc$load_or_run_vb(
             data = data,
+            file = file,
             model_code = model_code,
             vbfit_filename = vbfit_filename,
             model_name = model_name,
@@ -392,6 +404,7 @@ stanfunc$quickrun <- function(
 
         # Stan fit
         result$fit <- stanfunc$load_or_run_stan(
+            file = file,
             data = standata,
             model_code = model_code,
             fit_filename = fit_filename,
@@ -416,6 +429,7 @@ stanfunc$quickrun <- function(
         result$bridge <- stanfunc$load_or_run_bridge_sampler(
             stanfit = result$fit,
             filename = bridge_filename,
+            file = file,
             model_code = model_code,
             data = standata
         )
