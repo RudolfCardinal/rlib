@@ -20,12 +20,13 @@ library(stringr)
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 #==============================================================================
 
-stanfunc = new.env()
+stanfunc <- new.env()
 
-DEFAULT_CHAINS = 8
-DEFAULT_ITER = 2000
-DEFAULT_INIT = "0"  # the Stan default, "random", uses the range -2 to +2
-DEFAULT_SEED = 1234  # for consistency across runs
+DEFAULT_CHAINS <- 8
+DEFAULT_ITER <- 2000
+DEFAULT_INIT <- "0"  # the Stan default, "random", uses the range -2 to +2
+DEFAULT_SEED <- 1234  # for consistency across runs
+
 
 #==============================================================================
 # Core functions for e.g. rstan 2.16.2:
@@ -33,9 +34,10 @@ DEFAULT_SEED = 1234  # for consistency across runs
 
 stanfunc$load_or_run_stan <- function(
         data,
-        model_code,
         fit_filename,
         model_name,
+        file = NULL,  # Filename for Stan code
+        model_code = NULL,  # Text of Stan code
         save_stancode_filename = NULL,
         save_data_filename = NULL,
         save_cpp_filename = NULL,
@@ -45,7 +47,7 @@ stanfunc$load_or_run_stan <- function(
         iter = DEFAULT_ITER,
         init = DEFAULT_INIT,  # the default, "random", uses the range -2 to +2
         seed = DEFAULT_SEED,  # for consistency across runs
-        cache_filetype=c("rds", "rda"),
+        cache_filetype = c("rds", "rda"),
         ...)
 {
     # Other potential common parameters:
@@ -55,10 +57,14 @@ stanfunc$load_or_run_stan <- function(
     #           # https://www.rdocumentation.org/packages/rstanarm/versions/2.14.1/topics/adapt_delta
     #   )
 
+    if (is.null(file) == is.null(model_code)) {
+        stop("Specify either 'file' or 'model_code' (and not both).")
+    }
+
     cache_filetype <- match.arg(cache_filetype)
     if (!is.null(save_code_filename)) {
         if (!is.null(save_cpp_filename)) {
-            stop("Can't specify both save_code_filename (old) and save_cpp_filename (new)")
+            stop("Can't specify both 'save_code_filename' (old) and 'save_cpp_filename' (new)")
         }
         save_cpp_filename <- save_code_filename
     }
@@ -73,6 +79,9 @@ stanfunc$load_or_run_stan <- function(
     # line number error.
 
     if (saving && !is.null(save_stancode_filename)) {
+        if (is.null(model_code)) {
+            stop("Must specify 'model_code' to use 'save_stancode_filename'")
+        }
         cat("--- Saving Stan code to file: ",
             save_stancode_filename, "...\n", sep="")
         stancodefile <- file(save_stancode_filename)
@@ -88,7 +97,7 @@ stanfunc$load_or_run_stan <- function(
     if (saving && !is.null(save_data_filename)) {
         cat("--- Saving Stan data to file: ",
             save_data_filename, "...\n", sep="")
-        saveRDS(data, file=save_data_filename)
+        saveRDS(data, file = save_data_filename)
         cat("... saved\n")
     }
 
@@ -98,7 +107,7 @@ stanfunc$load_or_run_stan <- function(
 
     if (saving && !is.null(save_cpp_filename)) {
         cat("--- Generating C++ code to save...\n")
-        stanc_result <- rstan::stanc(model_code = model_code)
+        stanc_result <- rstan::stanc(file = file, model_code = model_code)
         cpp_code <- stanc_result$cppcode
 
         cat("--- Saving C++ code to file: ",
@@ -161,6 +170,7 @@ stanfunc$load_or_run_stan <- function(
 
         # Stan now supports parallel operation directly
         fit <- rstan::stan(
+            file = file,
             model_name = model_name,
             model_code = model_code,
             data = data,
@@ -179,12 +189,12 @@ stanfunc$load_or_run_stan <- function(
             # .Rds
             cat("--- Saving Stan model fit to RDS file: ",
                 fit_filename, "...\n", sep="")
-            saveRDS(fit, file=fit_filename)  # load with readRDS()
+            saveRDS(fit, file = fit_filename)  # load with readRDS()
         } else {
             # .Rda, .Rdata
             cat("--- Saving Stan model fit to RDA file: ",
                 fit_filename, "...\n", sep="")
-            save(list = c("fit"), file=fit_filename)
+            save(list = c("fit"), file = fit_filename)
         }
         cat("... saved\n")
     }
@@ -197,6 +207,7 @@ stanfunc$load_or_run_bridge_sampler <- function(
     stanfit,
     filename,
     assume_stanfit_from_this_R_session = FALSE,
+    file = NULL,
     model_code = NULL,
     data = NULL,
     cores = parallel::detectCores(),
@@ -208,7 +219,7 @@ stanfunc$load_or_run_bridge_sampler <- function(
         # Load
         # ---------------------------------------------------------------------
         cat("Loading bridge_sampler() fit from RDS file: ",
-            filename, "...\n", sep="")
+            filename, "...\n", sep = "")
         b <- readRDS(filename)
         cat("... loaded\n")
     } else {
@@ -227,26 +238,27 @@ stanfunc$load_or_run_bridge_sampler <- function(
             stanfit_model <- stanfit
         } else {
             cat("Creating dummy compiled Stan model...\n")
-            if (is.null(model_code)) {
-                stop("model_code not specified")
+            if (is.null(file) == is.null(model_code)) {
+                stop("Specify either 'file' or 'model_code' (and not both).")
             }
             if (is.null(data)) {
                 stop("data not specified")
             }
             stanfit_model <- rstan::stan(
-                model_code=model_code,
-                data=data,  # if you use data=list(), it segfaults
-                chains=1,
-                iter=1  # despite the bridgesampling help, iter=0 causes an error
+                file = file,
+                model_code = model_code,
+                data = data,  # if you use data = list(), it segfaults
+                chains = 1,
+                iter = 1  # despite the bridgesampling help, iter = 0 causes an error
             )
             cat("... done\n")
         }
         cat(paste("--- Running bridge_sampler, starting at",
                   Sys.time(), "...\n"))
         b <- bridgesampling::bridge_sampler(
-            samples=stanfit,
-            stanfit_model=stanfit_model,
-            cores=cores,
+            samples = stanfit,
+            stanfit_model = stanfit_model,
+            cores = cores,
             ...
         )
         cat(paste("... Finished bridge_sampler run at", Sys.time(), "\n"))
@@ -256,7 +268,7 @@ stanfunc$load_or_run_bridge_sampler <- function(
         # ---------------------------------------------------------------------
         cat("--- Saving bridge_sampler() fit to RDS file: ",
             filename, "...\n", sep="")
-        saveRDS(b, file=filename)  # load with readRDS()
+        saveRDS(b, file = filename)  # load with readRDS()
         cat("... saved\n")
     }
     return(b)
@@ -292,15 +304,16 @@ stanfunc$load_or_run_vb <- function(
                   model_name, ", starting at ", Sys.time(), "...\n", sep=""))
 
         cat("Building model...")
-        vb_model <- rstan::stan_model(model_name=model_name,
-                                      model_code=model_code)
+        vb_model <- rstan::stan_model(model_name = model_name,
+                                      model_code = model_code)
 
         cat("Running VB...")
         vb_fit <- rstan::vb(
             object = vb_model,
             data = data,
             seed = seed,
-            init = init
+            init = init,
+            ...
         )
 
         cat(paste("... Finished Stan VB run at", Sys.time(), "\n"))
@@ -310,7 +323,7 @@ stanfunc$load_or_run_vb <- function(
         # ---------------------------------------------------------------------
         cat("--- Saving Stan model fit to RDS file: ",
             vbfit_filename, "...\n", sep="")
-        saveRDS(vb_fit, file=vbfit_filename)  # load with readRDS()
+        saveRDS(vb_fit, file = vbfit_filename)  # load with readRDS()
         cat("... saved\n")
     }
 
@@ -419,7 +432,7 @@ stanfunc$compare_model_evidence <- function(bridgesample_list_list,
                                             rhat_warning_threshold = 1.1)
 {
     # CHECK THE OUTPUT AGAINST, e.g.:
-    # bridgesampling::post_prob(b1, b2, b3, b4, b5, b6, model_names=paste("Model", 1:6))
+    # bridgesampling::post_prob(b1, b2, b3, b4, b5, b6, model_names = paste("Model", 1:6))
     # ... verified.
 
     # bridgesample_list_list
@@ -452,8 +465,8 @@ stanfunc$compare_model_evidence <- function(bridgesample_list_list,
     d <- data.table(
         t(
             vapply(
-                X=seq_along(bridgesample_list_list),
-                FUN=function(y, i) {
+                X = seq_along(bridgesample_list_list),
+                FUN = function(y, i) {
                     item <- y[[i]]
                     if (is.null(item$stanfit)) {
                         max_rhat <- NA_real_
@@ -468,11 +481,11 @@ stanfunc$compare_model_evidence <- function(bridgesample_list_list,
                         max_rhat  # max_rhat
                     ))
                 },
-                FUN.VALUE=c("index"=NA_integer_,
-                            "model_name"=NA_character_,
-                            "log_marginal_likelihood"=NA_real_,
-                            "max_rhat"=NA_real_),
-                y=bridgesample_list_list
+                FUN.VALUE = c("index" = NA_integer_,
+                              "model_name" = NA_character_,
+                              "log_marginal_likelihood" = NA_real_,
+                              "max_rhat" = NA_real_),
+                y = bridgesample_list_list
             )
         )
     )
@@ -573,14 +586,14 @@ stanfunc$sampled_values_from_stanfit <- function(
     } else if (method == "extract") {
 
         # 2. The way it's meant to be done.
-        ex <- rstan::extract(fit, permuted=TRUE)
+        ex <- rstan::extract(fit, permuted = TRUE)
         # Now, slightly tricky. For a plain-text parameter like "xyz", this
         # is simple. For something like "subject_k[1]", it isn't so simple,
         # because rstan::extract gives us proper structure.
         # Can also be e.g. parname[1,1], etc.
         # Grep with capture: https://stackoverflow.com/questions/952275/regex-group-capture-in-r-with-multiple-capture-groups
 
-        PARAM_WITH_INDEX_REGEX = "^(\\w+)\\[((?:\\d+,)*\\d+)\\]$"  # e.g. "somevar[3]", "blah[1,2]"
+        PARAM_WITH_INDEX_REGEX <- "^(\\w+)\\[((?:\\d+,)*\\d+)\\]$"  # e.g. "somevar[3]", "blah[1,2]"
         # matches <- stringr::str_match("blah", PARAM_WITH_INDEX_REGEX)
         # matches <- stringr::str_match("blah[1]", PARAM_WITH_INDEX_REGEX)
         # matches <- stringr::str_match("blah[2,3]", PARAM_WITH_INDEX_REGEX)
@@ -666,12 +679,13 @@ stanfunc$max_rhat <- function(fit)
 }
 
 
-stanfunc$summary_by_par_regex <- function(fit, pars=NULL, par_regex=NULL, ...)
+stanfunc$summary_by_par_regex <- function(fit, pars = NULL,
+                                          par_regex = NULL, ...)
 {
     if (is.null(pars)) {
         s <- stanfunc$summary_data_table(fit, ...)
     } else {
-        s <- stanfunc$summary_data_table(fit, pars=pars, ...)
+        s <- stanfunc$summary_data_table(fit, pars = pars, ...)
     }
     # Optionally, filter on a regex
     if (!is.null(par_regex)) {
@@ -690,8 +704,7 @@ stanfunc$annotated_parameters <- function(
         annotate = TRUE,
         nonzero_as_hdi = TRUE,
         hdi_proportion = 0.95,
-        hdi_method = "kruschke_mcmc",
-        ...
+        hdi_method = "kruschke_mcmc"
     )
 {
     if (length(ci) != 2) {
@@ -710,8 +723,8 @@ stanfunc$annotated_parameters <- function(
         probs <- initial_probs
     }
     probs <- sort(unique(probs))
-    s <- stanfunc$summary_by_par_regex(fit, pars=pars, probs=probs,
-                                       par_regex=par_regex)
+    s <- stanfunc$summary_by_par_regex(fit, pars = pars, probs = probs,
+                                       par_regex = par_regex)
     # Find nonzero parameters (credible interval excludes zero)
 
     get_colname <- function(prob) {
@@ -719,10 +732,11 @@ stanfunc$annotated_parameters <- function(
     }
 
     nonzero_at <- function(lower, upper) {
-        lower_name = get_colname(lower)
-        upper_name = get_colname(upper)
+        lower_name <- get_colname(lower)
+        upper_name <- get_colname(upper)
         return(
-            0 < s[, lower_name, with=FALSE] | s[, upper_name, with=FALSE] < 0
+            0 < s[, lower_name, with = FALSE] |
+            s[, upper_name, with = FALSE] < 0
         )
     }
 
@@ -746,8 +760,9 @@ stanfunc$annotated_parameters <- function(
         for (rownum in 1:nrow(s)) {
             parname <- s[rownum, parameter]
             values <- stanfunc$sampled_values_from_stanfit(fit, parname)
-            hdi_pair <- hdi(values, hdi_proportion=hdi_proportion,
-                            method=hdi_method)
+            hdi_pair <- hdi(values,
+                            hdi_proportion = hdi_proportion,
+                            method = hdi_method)
             s[rownum, hdi_lower := hdi_pair[1]]
             s[rownum, hdi_upper := hdi_pair[2]]
         }
@@ -768,9 +783,9 @@ stanfunc$annotated_parameters <- function(
 }
 
 
-stanfunc$nonzero_parameters <- function(fit, annotate=FALSE, ...)
+stanfunc$nonzero_parameters <- function(fit, annotate = FALSE, ...)
 {
-    s <- stanfunc$annotated_parameters(fit=fit, annotate=annotate, ...)
+    s <- stanfunc$annotated_parameters(fit = fit, annotate = annotate, ...)
     s <- s[nonzero == TRUE][]  # restrict
     return(s)
 }
@@ -854,9 +869,9 @@ stanfunc$load_or_run_stan_old <- function(data, code, file, forcerun = FALSE)
         load(file)
     } else {
         cat("Running Stan model\n")
-        fit = stanfunc$parallel_stan(code, data)
+        fit <- stanfunc$parallel_stan(code, data)
         cat("--- Saving Stan model to file:", file, "\n")
-        save(fit, file=file)
+        save(fit, file = file)
     }
     return(fit)
 }
@@ -992,7 +1007,7 @@ stanfunc$find_value_giving_cum_density <- function(sampled_values, cum_density)
 }
 
 
-stanfunc$JUNK1 = "
+stanfunc$JUNK1 <- "
 calculate_hdi_from_sample_interpolating <- function(x, hdi_proportion = 0.95)
 {
     # INCOMPLETE
@@ -1009,7 +1024,7 @@ calculate_hdi_from_sample_interpolating <- function(x, hdi_proportion = 0.95)
         density_at_upper - density_at_lower
     }
     # https://stat.ethz.ch/pipermail/r-help/2007-November/146688.html
-    density_diff <- function(lower, level=0.95) {
+    density_diff <- function(lower, level = 0.95) {
         plower = density_at_sub(dens, lower)
         pupper = plower + level
         # ...
@@ -1074,18 +1089,18 @@ TEST_HDI_OF_MCMC <- '
     # See Kruschke (2011) p41, p628
     set.seed(1234)
     n = 20000
-    symmetric_y <- rnorm(n, mean=0, sd=1)
+    symmetric_y <- rnorm(n, mean = 0, sd = 1)
     symmetric_d <- density(symmetric_y)
     symmetric_hdi <- stanfunc$HDIofMCMC(symmetric_y)  # -1.975671  1.904936
     plot(symmetric_d)
-    abline(v=symmetric_hdi[1])
-    abline(v=symmetric_hdi[2])
-    asymmetric_y <- rgamma(n, shape=2, scale=2)
+    abline(v = symmetric_hdi[1])
+    abline(v = symmetric_hdi[2])
+    asymmetric_y <- rgamma(n, shape = 2, scale = 2)
     asymmetric_d <- density(asymmetric_y)
     asymmetric_hdi <- stanfunc$HDIofMCMC(asymmetric_y)  #
     plot(asymmetric_d)
-    abline(v=asymmetric_hdi[1])
-    abline(v=asymmetric_hdi[2])
+    abline(v = asymmetric_hdi[1])
+    abline(v = asymmetric_hdi[2])
 '
 
 
@@ -1123,10 +1138,10 @@ stanfunc$compare_hdi_methods <- function(sampled_values, hdi_proportion)
 
 
 stanfunc$hdi <- function(sampled_values, hdi_proportion = 0.95,
-                         method=c("kruschke_mcmc",
-                                  "coda",
-                                  "baath",
-                                  "lme4"))
+                         method = c("kruschke_mcmc",
+                                    "coda",
+                                    "baath",
+                                    "lme4"))
 {
     # Method chooser!
     method <- match.arg(method)
@@ -1220,7 +1235,6 @@ stanfunc$plot_density_function <- function(
         test_value = 0,
         quantile_probs = c(0.025, 0.5, 0.975),
         hdi_proportion = 0.95,
-        histogram_breaks = 50,
         digits = 3,
         colour_quantiles = "gray",
         colour_mean = "black",
@@ -1242,7 +1256,7 @@ stanfunc$plot_density_function <- function(
 {
     my_density <- density(sampled_values)
     max_density <- max(my_density$y)
-    q <- quantile(sampled_values, probs=quantile_probs)
+    q <- quantile(sampled_values, probs = quantile_probs)
     my_mean <- mean(sampled_values)
     my_mode <- calculate_mode(sampled_values)
     my_ecdf <- ecdf(sampled_values)
@@ -1304,7 +1318,7 @@ stanfunc$plot_density_function <- function(
                 col = colour_quantiles,
                 lty = lty_quantiles)
             text(q[i], ypos_quantiles_upper,
-                 prettyNum(q[i], digits=digits), col = colour_quantiles)
+                 prettyNum(q[i], digits = digits), col = colour_quantiles)
             text(q[i], ypos_quantiles_lower,
                  paste(quantile_probs[i] * 100, "%", sep=""),
                  col = colour_quantiles)
@@ -1318,7 +1332,7 @@ stanfunc$plot_density_function <- function(
             col = colour_mean,
             lty = lty_mean)
         text(my_mean, ypos_mean_upper,
-             prettyNum(my_mean, digits=digits), col = colour_mean)
+             prettyNum(my_mean, digits = digits), col = colour_mean)
         text(my_mean, ypos_mean_lower,
              "(mean)", col = colour_mean)
     }
@@ -1330,7 +1344,7 @@ stanfunc$plot_density_function <- function(
             col = colour_mode,
             lty = lty_mode)
         text(my_mode, ypos_mode_upper,
-             prettyNum(my_mode, digits=digits), col = colour_mode)
+             prettyNum(my_mode, digits = digits), col = colour_mode)
         text(my_mode, ypos_mode_lower, "(mode)", col = colour_mode)
     }
     # HDI
@@ -1362,9 +1376,9 @@ stanfunc$plot_density_function <- function(
         text(mean(hdi_limits), ypos_hdi_text,
              paste(hdi_percent, "% HDI", sep=""), col = colour_hdi)
         text(hdi_limits[1], ypos_hdi_nums,
-             prettyNum(hdi_limits[1], digits=digits), col = colour_hdi)
+             prettyNum(hdi_limits[1], digits = digits), col = colour_hdi)
         text(hdi_limits[2], ypos_hdi_nums,
-             prettyNum(hdi_limits[2], digits=digits), col = colour_hdi)
+             prettyNum(hdi_limits[2], digits = digits), col = colour_hdi)
     }
 }
 
@@ -1375,7 +1389,6 @@ stanfunc$ggplot_density_function <- function(
         test_value = 0,
         quantile_probs = c(0.025, 0.5, 0.975),
         hdi_proportion = 0.95,
-        histogram_breaks = 50,
         digits = 3,
         colour_quantiles = "gray",
         colour_mean = "black",
@@ -1386,7 +1399,7 @@ stanfunc$ggplot_density_function <- function(
         lty_mode = "dashed",
         lty_hdi = "solid",
         colour_density = "blue",
-        show_hdi_proportion_excluding_test_value = FALSE,
+        # show_hdi_proportion_excluding_test_value = FALSE,
         show_quantiles = TRUE,
         show_mean = TRUE,
         show_mode = TRUE,
@@ -1403,7 +1416,7 @@ stanfunc$ggplot_density_function <- function(
 {
     my_density <- density(sampled_values)
     max_density <- max(my_density$y)
-    q <- quantile(sampled_values, probs=quantile_probs)
+    q <- quantile(sampled_values, probs = quantile_probs)
     my_mean <- mean(sampled_values)
     my_mode <- calculate_mode(sampled_values)
     my_ecdf <- ecdf(sampled_values)
@@ -1413,11 +1426,11 @@ stanfunc$ggplot_density_function <- function(
 
     central_proportion_excluding_test_value <- 1 - 2 * my_ecdf(test_value)
 
-    df <- data.frame(x = my_density$x, y=my_density$y)
+    df <- data.frame(x = my_density$x, y = my_density$y)
     p <- (
         ggplot(df, aes(x, y))
         + theme
-        + geom_line(colour=colour_density)
+        + geom_line(colour = colour_density)
         + xlab(parname)
         + ylab("Density")
         + ggtitle(paste("Posterior distribution of ", parname, sep=""))
@@ -1469,7 +1482,7 @@ stanfunc$ggplot_density_function <- function(
             + geom_vline(xintercept = my_mode, colour = colour_mode,
                          linetype = lty_mode)
             + annotate("text", x = my_mode, y = ypos_mode_upper,
-                       label = prettyNum(my_mode, digits=digits),
+                       label = prettyNum(my_mode, digits = digits),
                        colour = colour_mode)
             + annotate("text", x = my_mode, y = ypos_mode_lower,
                        label = "(mode)", colour = colour_mode)
@@ -1496,7 +1509,8 @@ stanfunc$ggplot_density_function <- function(
             + geom_line(
                 data = hdidf,
                 # aes = aes(x = x, y = y),
-                colour = colour_hdi
+                colour = colour_hdi,
+                linetype = lty_hdi,
             )
             + annotate("text", x = mean(hdi_limits), y = ypos_hdi_text,
                        label = paste(hdi_percent, "% HDI", sep=""),
@@ -1542,7 +1556,7 @@ stanfunc$points_to_mm <- function(pts)
 
 stanfunc$plot_multiple_stanfit_parameters_vstack <- function(
         fit,
-        params,  # list( list(name=name1, desc=desc1), list(name=name2, desc=desc2)...)
+        params,  # list(list(name = name1, desc = desc1), list(name = name2, desc = desc2)...)
             # ... inner bit being a list because c() can't hold expressions properly
         inner_hdi_proportion = 0.90,
         outer_hdi_proportion = 0.95,
@@ -1788,7 +1802,7 @@ stanfunc$test_specific_parameter_from_stanfit <- function(fit, parname, ...)
     # ...  [1] "samples" "chains" "iter" "thin" "warmup" "n_save" "warmup2" "permutation" "pars_oi" "dims_oi" "fnames_oi" "n_flatnames"
     # for chain 1:
     # slot(fit, "sim")$samples[[1]]$"group_mean_reinf_rate[1]"
-    # quantile(slot(fit, "sim")$samples[[1]]$"group_mean_reinf_rate[1]", probs=c(0.025, 0.25, 0.5, 0.75, 0.975))
+    # quantile(slot(fit, "sim")$samples[[1]]$"group_mean_reinf_rate[1]", probs = c(0.025, 0.25, 0.5, 0.75, 0.975))
 
     # the opposite of quantile is ecdf:
     # x = slot(fit, "sim")$samples[[1]]$"gmd_side_stickiness_max"
@@ -1831,7 +1845,7 @@ stanfunc$scatterplot_params <- function(fit, parnames = NULL, parlabels = NULL,
         parlabels <- parnames
     }
     values <- rstan::extract(fit, parnames, permuted = TRUE)
-    d <- data.table(matrix(unlist(values), ncol=length(values), byrow=F))
+    d <- data.table(matrix(unlist(values), ncol = length(values), byrow = FALSE))
     colnames(d) <- parnames
     pairs(d, parlabels, ...)  # doesn't return anything useful, though
 }
