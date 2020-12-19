@@ -169,17 +169,31 @@ stanfunc$load_or_run_stan <- function(
                   ", starting at ", Sys.time(), "...\n", sep=""))
 
         # Stan now supports parallel operation directly
-        fit <- rstan::stan(
-            file = file,
-            model_name = model_name,
-            model_code = model_code,
-            data = data,
-            chains = chains,
-            iter = iter,
-            init = init,
-            seed = seed,
-            ...
-        )
+        # Note that it distinguishes between 'file' being NULL (OK) or
+        # missing (not).
+        if (!is.null(file)) {
+            fit <- rstan::stan(
+                file = file,
+                model_name = model_name,
+                data = data,
+                chains = chains,
+                iter = iter,
+                init = init,
+                seed = seed,
+                ...
+            )
+        } else {
+            fit <- rstan::stan(
+                model_code = model_code,
+                model_name = model_name,
+                data = data,
+                chains = chains,
+                iter = iter,
+                init = init,
+                seed = seed,
+                ...
+            )
+        }
         cat(paste("... Finished Stan run at", Sys.time(), "\n"))
 
         # ---------------------------------------------------------------------
@@ -244,13 +258,21 @@ stanfunc$load_or_run_bridge_sampler <- function(
             if (is.null(data)) {
                 stop("data not specified")
             }
-            stanfit_model <- rstan::stan(
-                file = file,
-                model_code = model_code,
-                data = data,  # if you use data = list(), it segfaults
-                chains = 1,
-                iter = 1  # despite the bridgesampling help, iter = 0 causes an error
-            )
+            if (!is.null(file)) {
+                stanfit_model <- rstan::stan(
+                    file = file,
+                    data = data,  # if you use data = list(), it segfaults
+                    chains = 1,
+                    iter = 1  # despite the bridgesampling help, iter = 0 causes an error
+                )
+            } else {
+                stanfit_model <- rstan::stan(
+                    model_code = model_code,
+                    data = data,
+                    chains = 1,
+                    iter = 1
+                )
+            }
             cat("... done\n")
         }
         cat(paste("--- Running bridge_sampler, starting at",
@@ -309,9 +331,13 @@ stanfunc$load_or_run_vb <- function(
                   model_name, ", starting at ", Sys.time(), "...\n", sep=""))
 
         cat("Building model...")
-        vb_model <- rstan::stan_model(file = file,
-                                      model_name = model_name,
-                                      model_code = model_code)
+        if (!is.null(file)) {
+            vb_model <- rstan::stan_model(file = file,
+                                          model_name = model_name)
+        } else {
+            vb_model <- rstan::stan_model(model_code = model_code,
+                                          model_name = model_name)
+        }
 
         cat("Running VB...")
         vb_fit <- rstan::vb(
