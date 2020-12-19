@@ -107,7 +107,13 @@ stanfunc$load_or_run_stan <- function(
 
     if (saving && !is.null(save_cpp_filename)) {
         cat("--- Generating C++ code to save...\n")
-        stanc_result <- rstan::stanc(file = file, model_code = model_code)
+        # Note that it distinguishes between 'file' being NULL (OK) or
+        # missing (not).
+        if (!is.null(file)) {
+            stanc_result <- rstan::stanc(file = file)
+        } else {
+            stanc_result <- rstan::stanc(model_code = model_code)
+        }
         cpp_code <- stanc_result$cppcode
 
         cat("--- Saving C++ code to file: ",
