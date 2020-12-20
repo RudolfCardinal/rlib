@@ -2,6 +2,7 @@
 
 requireNamespace("gsubfn")
 
+
 # =============================================================================
 # Top-level namespace: %format%
 # =============================================================================
@@ -20,19 +21,20 @@ requireNamespace("gsubfn")
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 # =============================================================================
 
-stringfunc = new.env()
+stringfunc <- new.env()
 
 
 stringfunc$formatString <- function(fmt, list) {
     return(with(list, gsubfn::fn$identity(fmt)))
 }
 
+
 stringfunc$TESTS <- '
 
 stringfunc$formatString("some $text $to $replace", list(
-    text="day",
-    to="in",
-    replace="June"
+    text = "day",
+    to = "in",
+    replace = "June"
 ))
 
 '

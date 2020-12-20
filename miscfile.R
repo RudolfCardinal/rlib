@@ -6,7 +6,7 @@ requireNamespace("data.table")
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 #==============================================================================
 
-miscfile = new.env()
+miscfile <- new.env()
 
 
 #==============================================================================
@@ -24,14 +24,14 @@ miscfile$current_script_file <- function()
 {
     # https://stackoverflow.com/questions/1815606/rscript-determine-path-of-the-executing-script
     # http://stackoverflow.com/a/32016824/2292993
-    cmdArgs = commandArgs(trailingOnly = FALSE)
-    needle = "--file="
-    match = grep(needle, cmdArgs)
+    cmdArgs <- commandArgs(trailingOnly = FALSE)
+    needle <- "--file="
+    match <- grep(needle, cmdArgs)
     if (length(match) > 0) {
         # Rscript via command line
         return(normalizePath(sub(needle, "", cmdArgs[match])))
     } else {
-        ls_vars = ls(sys.frames()[[1]])
+        ls_vars <- ls(sys.frames()[[1]])
         if ("fileName" %in% ls_vars) {
             # Source'd via RStudio
             return(normalizePath(sys.frames()[[1]]$fileName))
@@ -66,10 +66,10 @@ miscfile$current_script_directory <- function()
 # File functions
 #==============================================================================
 
-miscfile$write_tsv <- function(DT, filename, quote=TRUE)
+miscfile$write_tsv <- function(DT, filename, quote = TRUE)
 {
-    write.table(DT, file=filename, quote=quote, sep='\t', col.names=TRUE,
-                row.names=FALSE)
+    write.table(DT, file = filename, quote = quote, sep = '\t', col.names = TRUE,
+                row.names = FALSE)
 }
 
 
@@ -95,7 +95,7 @@ miscfile$read_rds <- function(filename)
 
 miscfile$write_text <- function(filename, text)
 {
-    cat("Writing to ", filename, "...\n", sep="")
+    cat("Writing to ", filename, "...\n", sep = "")
     f <- file(filename)
     writeLines(text, f)
     close(f)

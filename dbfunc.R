@@ -8,7 +8,7 @@ requireNamespace("RODBC")
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 # =============================================================================
 
-dbfunc = new.env()
+dbfunc <- new.env()
 
 
 # =============================================================================
@@ -27,16 +27,16 @@ dbfunc$connectCpft <- function(
         ';server=', server, ',', port,
         ';Trusted_Connection=Yes'
     )
-    cat("Connecting to: ", connection_str, "\n", sep="")
+    cat("Connecting to: ", connection_str, "\n", sep = "")
     return(RODBC::odbcDriverConnect(connection_str))
 }
 
 
 dbfunc$sqlQuery <- function(dbhandle, sql, debug = TRUE, errors = TRUE) {
     if (debug) {
-        cat("Executing: ", sql, "\n", sep="")
+        cat("Executing: ", sql, "\n", sep = "")
     }
-    result <- RODBC::sqlQuery(dbhandle, sql, errors=errors)
+    result <- RODBC::sqlQuery(dbhandle, sql, errors = errors)
     if (is.data.frame(result)) {
         # success
         return(data.table(result))

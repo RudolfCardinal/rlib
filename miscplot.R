@@ -8,11 +8,13 @@ library(gridExtra)
 library(Cairo)
 library(ggplot2)
 
+
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 #==============================================================================
 
-miscplot = new.env()
+miscplot <- new.env()
+
 
 #==============================================================================
 # ggplot extensions
@@ -50,10 +52,13 @@ miscplot = new.env()
 #------------------------------------------------------------------------------
 
 .pt <- 1 / 0.352777778
+
+
 len0_null <- function(x) {
     if (length(x) == 0)  NULL
     else                 x
 }
+
 
 #------------------------------------------------------------------------------
 # Generic panel border (can set any combination of left/right/top/bottom)
@@ -62,19 +67,21 @@ len0_null <- function(x) {
 theme_border <- function(
         type = c("left", "right", "bottom", "top", "none"),
         colour = "black", size = 1, linetype = 1) {
-    # use with e.g.: ggplot(...) + opts( panel.border=theme_border(type=c("bottom","left")) ) + ...
-    type <- match.arg(type, several.ok=TRUE)
+    # use with e.g.: ggplot(...) + opts( panel.border = theme_border(type = c("bottom","left")) ) + ...
+    type <- match.arg(type, several.ok = TRUE)
     structure(
         list(type = type, colour = colour, size = size, linetype = linetype),
         class = c("theme_border", "element_blank", "element")
     )
 }
+
+
 element_grob.theme_border <- function(
         element, x = 0, y = 0, width = 1, height = 1,
         type = NULL,
         colour = NULL, size = NULL, linetype = NULL,
         ...) {
-    if (is.null(type)) type = element$type
+    if (is.null(type)) type <- element$type
     xlist <- c()
     ylist <- c()
     idlist <- c()
@@ -116,17 +123,20 @@ element_grob.theme_border <- function(
     )
 }
 
+
 #------------------------------------------------------------------------------
 # For convenience: "L" (left + bottom) border
 #------------------------------------------------------------------------------
 
 theme_L_border <- function(colour = "black", size = 1, linetype = 1) {
-    # use with e.g.: ggplot(...) + theme( panel.border=theme_L_border() ) + ...
+    # use with e.g.: ggplot(...) + theme( panel.border = theme_L_border() ) + ...
     structure(
         list(colour = colour, size = size, linetype = linetype),
         class = c("theme_L_border", "element_blank", "element")
     )
 }
+
+
 element_grob.theme_L_border <- function(
         element, x = 0, y = 0, width = 1, height = 1,
         colour = NULL, size = NULL, linetype = NULL,
@@ -143,17 +153,20 @@ element_grob.theme_L_border <- function(
     )
 }
 
+
 #------------------------------------------------------------------------------
 # For convenience: bottom border only
 #------------------------------------------------------------------------------
 
 theme_bottom_border <- function(colour = "black", size = 1, linetype = 1) {
-    # use with e.g.: ggplot(...) + theme( panel.border=theme_bottom_border() ) + ...
+    # use with e.g.: ggplot(...) + theme( panel.border = theme_bottom_border() ) + ...
     structure(
         list(colour = colour, size = size, linetype = linetype),
         class = c("theme_bottom_border", "element_blank", "element")
     )
 }
+
+
 element_grob.theme_bottom_border <- function(
         element, x = 0, y = 0, width = 1, height = 1,
         colour = NULL, size = NULL, linetype = NULL,
@@ -165,22 +178,25 @@ element_grob.theme_bottom_border <- function(
                              col = element$colour,
                              lty = element$linetype)
     grid::polylineGrob(
-        x = c(x, x+width), y = c(y,y), ..., default.units = "npc",
+        x = c(x, x + width), y = c(y, y), ..., default.units = "npc",
         gp = modifyList(element_gp, gp),
     )
 }
+
 
 #------------------------------------------------------------------------------
 # For convenience: left border only
 #------------------------------------------------------------------------------
 
 theme_left_border <- function(colour = "black", size = 1, linetype = 1) {
-    # use with e.g.: ggplot(...) + theme( panel.border=theme_left_border() ) + ...
+    # use with e.g.: ggplot(...) + theme( panel.border = theme_left_border() ) + ...
     structure(
         list(colour = colour, size = size, linetype = linetype),
         class = c("theme_left_border", "element_blank", "element")
     )
 }
+
+
 element_grob.theme_left_border <- function(
         element, x = 0, y = 0, width = 1, height = 1,
         colour = NULL, size = NULL, linetype = NULL,
@@ -204,20 +220,22 @@ element_grob.theme_left_border <- function(
 #------------------------------------------------------------------------------
 
 theme_border_numerictype <- function(type, colour = "black", size = 1, linetype = 1) {
-    # use with e.g.: ggplot(...) + theme( panel.border=theme_border(type=9) ) + ...
+    # use with e.g.: ggplot(...) + theme( panel.border = theme_border(type = 9) ) + ...
     structure(
         list(type = type, colour = colour, size = size, linetype = linetype),
         class = c("theme_border_numerictype", "element_blank", "element")
     )
 }
+
+
 element_grob.theme_border_numerictype <- function(
         element, x = 0, y = 0, width = 1, height = 1,
         type = NULL,
         colour = NULL, size = NULL, linetype = NULL,
         ...) {
-    if (is.null(type)) type = element$type
+    if (is.null(type)) type <- element$type
     # numerical types from: library(gridExtra); example(borderGrob)
-    # 1=none, 2=bottom, 3=right, 4=top, 5=left, 6=B+R, 7=T+R, 8=T+L, 9=B+L, 10=T+B, 11=L+R, 12=T+B+R, 13=T+L+R, 14=T+B+L, 15=B+L+R, 16=T+B+L+R
+    # 1 = none, 2 = bottom, 3 = right, 4 = top, 5 = left, 6 = B+R, 7 = T+R, 8 = T+L, 9 = B+L, 10 = T+B, 11 = L+R, 12 = T+B+R, 13 = T+L+R, 14 = T+B+L, 15 = B+L+R, 16 = T+B+L+R
     xlist <- c()
     ylist <- c()
     idlist <- c()
@@ -259,20 +277,22 @@ element_grob.theme_border_numerictype <- function(
     )
 }
 
+
 #------------------------------------------------------------------------------
 # Examples
 #------------------------------------------------------------------------------
 
-rnc_ggplot2_border_themes_example_script = '
+miscplot$rnc_ggplot2_border_themes_example_script <- '
     library(ggplot2)
-    df = data.frame( x=c(1,2,3), y=c(4,5,6) )
+    df = data.frame( x = c(1,2,3), y = c(4,5,6) )
     source("http://egret.psychol.cam.ac.uk/statistics/R/extensions/rnc_ggplot2_border_themes_2013_01.r")
-    ggplot(data=df, aes(x=x, y=y)) + geom_point() + theme_bw() + theme( panel.border = theme_border( c("bottom","left") ) )
-    ggplot(data=df, aes(x=x, y=y)) + geom_point() + theme_bw() + theme( panel.border = theme_left_border() )
-    ggplot(data=df, aes(x=x, y=y)) + geom_point() + theme_bw() + theme( panel.border = theme_bottom_border() )
-    ggplot(data=df, aes(x=x, y=y)) + geom_point() + theme_bw() + theme( panel.border = theme_L_border() )
-    ggplot(data=df, aes(x=x, y=y)) + geom_point() + theme_bw() + theme( panel.border = theme_border_numerictype(12) ) # use 1:16 as possible values
+    ggplot(data = df, aes(x = x, y = y)) + geom_point() + theme_bw() + theme( panel.border = theme_border( c("bottom","left") ) )
+    ggplot(data = df, aes(x = x, y = y)) + geom_point() + theme_bw() + theme( panel.border = theme_left_border() )
+    ggplot(data = df, aes(x = x, y = y)) + geom_point() + theme_bw() + theme( panel.border = theme_bottom_border() )
+    ggplot(data = df, aes(x = x, y = y)) + geom_point() + theme_bw() + theme( panel.border = theme_L_border() )
+    ggplot(data = df, aes(x = x, y = y)) + geom_point() + theme_bw() + theme( panel.border = theme_border_numerictype(12) ) # use 1:16 as possible values
 '
+
 
 #==============================================================================
 # multiplot
@@ -284,11 +304,11 @@ rnc_ggplot2_border_themes_example_script = '
 # - cols:   Number of columns in layout
 # - layout: A matrix specifying the layout. If present, 'cols' is ignored.
 #
-# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
+# If the layout is something like matrix(c(1,2,3,3), nrow = 2, byrow = TRUE),
 # then plot 1 will go in the upper left, 2 will go in the upper right, and
 # 3 will go all the way across the bottom.
 #
-miscplot$multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+miscplot$multiplot <- function(..., plotlist = NULL, cols = 1, layout = NULL) {
     require(grid)
 
     # Make a list from the ... arguments and plotlist
@@ -302,7 +322,7 @@ miscplot$multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
         # ncol: Number of columns of plots
         # nrow: Number of rows needed, calculated from # of cols
         layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
-                         ncol=cols, nrow=ceiling(numPlots/cols))
+                         ncol = cols, nrow = ceiling(numPlots/cols))
     }
 
     if (numPlots==1) {
@@ -310,17 +330,18 @@ miscplot$multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
     } else {
         # Set up the page
         grid.newpage()
-        pushViewport(viewport(layout=grid.layout(nrow(layout), ncol(layout))))
+        pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
 
         # Make each plot, in the correct location
         for (i in 1:numPlots) {
             # Get the i,j matrix positions of the regions that contain this subplot
-            matchidx <- as.data.frame(which(layout == i, arr.ind=TRUE))
-            print(plots[[i]], vp=viewport(layout.pos.row = matchidx$row,
+            matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+            print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
                                           layout.pos.col = matchidx$col))
         }
     }
 }
+
 
 #==============================================================================
 # Multi-way figures done properly with ggplot
@@ -333,55 +354,58 @@ miscplot$multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
 # http://cairographics.org/manual/cairo-FreeType-Fonts.html
 
 miscplot$which_cairo_fonts_available <- function() {
-    CairoFontMatch(":", sort=TRUE)
+    CairoFontMatch(":", sort = TRUE)
 }
+
 
 miscplot$cairo_select_font_myriad <- function() {
     os <- Sys.info()['sysname']
     if (os == "Windows") {
-        windowsFonts(Myriad=windowsFont("Myriad"))
-        par(family="Myriad")
+        windowsFonts(Myriad = windowsFont("Myriad"))
+        par(family = "Myriad")
     } else {
         CairoFonts(
-            regular="Myriad Pro:style=Regular",
-            bold="Myriad Pro:style=Bold",
-            italic="Myriad Pro:style=Italic",
-            bolditalic="Myriad Pro:style=Bold Italic",
-            # symbol="Symbol:style=Regular"
-            symbol="Myriad Pro:style=Regular"
+            regular = "Myriad Pro:style=Regular",
+            bold = "Myriad Pro:style=Bold",
+            italic = "Myriad Pro:style=Italic",
+            bolditalic = "Myriad Pro:style=Bold Italic",
+            # symbol = "Symbol:style=Regular"
+            symbol = "Myriad Pro:style=Regular"
         )
     }
 }
+
 
 miscplot$cairo_select_font_arial <- function() {
     os <- Sys.info()['sysname']
     if (os == "Windows") {
-        windowsFonts(Arial=windowsFont("Arial"))
-        par(family="Arial")
+        windowsFonts(Arial = windowsFont("Arial"))
+        par(family = "Arial")
     } else {
         CairoFonts(
-            regular="Arial:style=Regular",
-            bold="Arial:style=Bold",
-            italic="Arial:style=Italic",
-            bolditalic="Arial:style=Bold Italic",
-            symbol="Symbol:style=Regular"
+            regular = "Arial:style=Regular",
+            bold = "Arial:style=Bold",
+            italic = "Arial:style=Italic",
+            bolditalic = "Arial:style=Bold Italic",
+            symbol = "Symbol:style=Regular"
         )
     }
 }
 
+
 miscplot$save_grob_to_pdf <- function(g, filename, width_mm, height_mm,
-                             title=filename, use_ggsave=FALSE,
-                             embed_fonts_from_ggsave=FALSE) {
+                             title = filename, use_ggsave = FALSE,
+                             embed_fonts_from_ggsave = FALSE) {
     cat("Saving grob to PDF:", filename, "\n")
     if (use_ggsave) {
         # AVOID.
-        ggsave(filename, g, width=width_mm, height=height_mm, units="mm")
+        ggsave(filename, g, width = width_mm, height = height_mm, units = "mm")
         if (embed_fonts_from_ggsave) {
             embed_fonts(filename)
         }
     } else {
-        Cairo(filename, type="pdf", width=width_mm, height=height_mm, units="mm",
-              title=title)
+        Cairo(filename, type = "pdf", width = width_mm, height = height_mm, units = "mm",
+              title = title)
         # Cairo automatically embeds fonts:
         # http://cran.r-project.org/web/packages/Cairo/Cairo.pdf
         grid::grid.draw(g)  # not: print(g)
@@ -389,44 +413,47 @@ miscplot$save_grob_to_pdf <- function(g, filename, width_mm, height_mm,
     }
 }
 
+
 miscplot$INCHES_PER_MM <- 1/25.4
 miscplot$A4_SMALL_MM <- 210
 miscplot$A4_LARGE_MM <- 297
 miscplot$POINTS_PER_INCH <- 72
 miscplot$POINTS_PER_MM <- miscplot$POINTS_PER_INCH * miscplot$INCHES_PER_MM
 
-miscplot$BLANK_GROB <- grid::rectGrob(gp=grid::gpar(fill="white", alpha=0))
-# ... alpha=0 makes it invisible
-miscplot$NOLEGEND <- theme(legend.position="none")
-miscplot$MOVELEGEND_BOTTOMLEFT <- theme(legend.justification=c(0,0),
-                               legend.position=c(0,0))
-miscplot$MOVELEGEND_BOTTOMRIGHT <- theme(legend.justification=c(1,0),
-                                legend.position=c(1,0))
-miscplot$MOVELEGEND_TOPRIGHT <- theme(legend.justification=c(1,1),
-                             legend.position=c(1,1))
-miscplot$MOVELEGEND_TOPLEFT <- theme(legend.justification=c(0,1),
-                            legend.position=c(0,1))
-miscplot$LEFTTITLE <- theme(plot.title=element_text(hjust=0, face="bold"))
+miscplot$BLANK_GROB <- grid::rectGrob(gp = grid::gpar(fill = "white", alpha = 0))
+# ... alpha = 0 makes it invisible
+miscplot$NOLEGEND <- theme(legend.position = "none")
+miscplot$MOVELEGEND_BOTTOMLEFT <- theme(legend.justification = c(0,0),
+                               legend.position = c(0,0))
+miscplot$MOVELEGEND_BOTTOMRIGHT <- theme(legend.justification = c(1,0),
+                                legend.position = c(1,0))
+miscplot$MOVELEGEND_TOPRIGHT <- theme(legend.justification = c(1,1),
+                             legend.position = c(1,1))
+miscplot$MOVELEGEND_TOPLEFT <- theme(legend.justification = c(0,1),
+                            legend.position = c(0,1))
+miscplot$LEFTTITLE <- theme(plot.title = element_text(hjust = 0, face = "bold"))
 
-miscplot$BORDER_BOTTOM_AND_LEFT <- theme(panel.border=theme_border(c("left","bottom"))) # RNC hack, see above
+miscplot$BORDER_BOTTOM_AND_LEFT <- theme(panel.border = theme_border(c("left","bottom"))) # RNC hack, see above
 # theme_blank() replaced by element_blank()
-miscplot$NO_LEGEND_BOX <- theme(legend.key=element_blank())
-miscplot$NO_GRID <- theme(panel.grid.major=element_blank(),
-                 panel.grid.minor=element_blank())
+miscplot$NO_LEGEND_BOX <- theme(legend.key = element_blank())
+miscplot$NO_GRID <- theme(panel.grid.major = element_blank(),
+                 panel.grid.minor = element_blank())
+
 
 miscplot$ggplot_rnc_theme <- function(fontsize) {
     theme_bw() +
-        theme(text=element_text(size=fontsize))
+        theme(text = element_text(size = fontsize))
 }
+
 
 #==============================================================================
 # Error bars
 #==============================================================================
 
-miscplot$free_floating_error_bar <- function(x, length, width=0.2,
-                                             y_centre=NULL, y_bottom=NULL,
-                                             constraints=NULL,
-                                             inherit.aes=FALSE) {
+miscplot$free_floating_error_bar <- function(x, length, width = 0.2,
+                                             y_centre = NULL, y_bottom = NULL,
+                                             constraints = NULL,
+                                             inherit.aes = FALSE) {
     if ((is.null(y_centre) && is.null(y_bottom))
             || (!is.null(y_centre) && !is.null(y_bottom))) {
         stop("Specify either y_centre or y_bottom")
@@ -443,30 +470,32 @@ miscplot$free_floating_error_bar <- function(x, length, width=0.2,
         errbar_df[, names(constraints)] <- constraints
     }
     ggplot2::geom_errorbar(
-        data=errbar_df,
-        aes(x=x, ymin=bottom, ymax=top),
-        width=width,
-        inherit.aes=inherit.aes
+        data = errbar_df,
+        aes(x = x, ymin = bottom, ymax = top),
+        width = width,
+        inherit.aes = inherit.aes
     )
 }
 
-miscplot$free_floating_label <- function(x, y, text, constraints=NULL,
-                                         inherit.aes=FALSE, size=rel(2.5)) {
+
+miscplot$free_floating_label <- function(x, y, text, constraints = NULL,
+                                         inherit.aes = FALSE, size = rel(2.5)) {
     label_df <- data.frame(
-        x=x,
-        y=y,
-        text=text
+        x = x,
+        y = y,
+        text = text
     )
     if (!is.null(constraints)) {
         label_df[, names(constraints)] <- constraints
     }
     ggplot2::geom_text(
-        data=label_df,
-        aes(x=x, y=y, label=text),
-        size=size,
-        inherit.aes=inherit.aes
+        data = label_df,
+        aes(x = x, y = y, label = text),
+        size = size,
+        inherit.aes = inherit.aes
     )
 }
+
 
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786

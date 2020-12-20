@@ -51,7 +51,7 @@ misclang$vector_element_by_index_of_last_element <- function(x)
 
 misclang$load_rds_or_run_function <- function(
         filename, fn, ...,
-        forcerun=FALSE)
+        forcerun = FALSE)
 {
     # Simplified version of load_or_run_function() that only uses RDS files,
     # so doesn't need varname.
@@ -64,7 +64,7 @@ misclang$load_rds_or_run_function <- function(
         cat("Running function:", deparse(substitute(fn)), "\n")
         result <- fn(...)
         cat("--- Saving to file:", filename, "\n")
-        saveRDS(result, file=filename)
+        saveRDS(result, file = filename)
     }
     return(result)
 }
@@ -72,8 +72,8 @@ misclang$load_rds_or_run_function <- function(
 
 misclang$load_or_run_function <- function(
         varname, filename, fn, ...,
-        forcerun=FALSE,
-        cache_filetype=c("rds", "rda"))
+        forcerun = FALSE,
+        cache_filetype = c("rds", "rda"))
 {
 
     # e.g. load_or_run_function("blibble", "mydata.Rda", mean, c(1,2,3))
@@ -90,7 +90,7 @@ misclang$load_or_run_function <- function(
             cat("Running function:", deparse(substitute(fn)), "\n")
             assign(varname, fn(...))
             cat("--- Saving", varname, "to file:", filename, "\n")
-            save(list = c(varname), file=filename)
+            save(list = c(varname), file = filename)
         }
         return(get(varname))
 
@@ -104,7 +104,7 @@ misclang$load_or_run_function <- function(
             cat("Running function:", deparse(substitute(fn)), "\n")
             result <- fn(...)
             cat("--- Saving to file:", filename, "\n")
-            saveRDS(result, file=filename)
+            saveRDS(result, file = filename)
         }
         return(result)
 

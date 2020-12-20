@@ -17,7 +17,7 @@ requireNamespace("sp")
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 #==============================================================================
 
-mapfunc = new.env()
+mapfunc <- new.env()
 
 
 #==============================================================================
@@ -61,7 +61,7 @@ mapfunc$get_lsoa_map_shapes <- function(
     }
 
     filestem <- paste(geography_shape_file_dir, geography_shape_file_stem,
-                      sep=.Platform$file.sep)
+                      sep = .Platform$file.sep)
     if (verbose) {
         cat(sprintf("Using filestem %s [to which extensions are expected by maptools::readShapeSpatial, specifically .shp, .shx, and .dbf]...\n",
                     filestem))
@@ -70,8 +70,8 @@ mapfunc$get_lsoa_map_shapes <- function(
     # Read in shape files
     lsoa_shp_bng <- maptools::readShapeSpatial(
         filestem,
-        IDvar="lsoa11cd",
-        proj4string=mapfunc$CRS_PROJ4STRING_BNG_OSGB36)
+        IDvar = "lsoa11cd",
+        proj4string = mapfunc$CRS_PROJ4STRING_BNG_OSGB36)
 
     # class(lsoa_shp_bng)  # should be SpatialPolygonsDataFrame
     # ... standard coordinate systm has x ~ 544000, y ~ 184000
@@ -88,11 +88,11 @@ mapfunc$get_lsoa_map_shapes <- function(
     cambridgeshire_bng <- raster::extent(edge_west_bng, edge_east_bng,
                                          edge_south_bng, edge_north_bng)
     cambs_shp_bng <- raster::crop(lsoa_shp_bng, cambridgeshire_bng)
-    # plot(cambs_shp_bng, axes=TRUE)
+    # plot(cambs_shp_bng, axes = TRUE)
 
     # Convert to latitude/longitude:
     cambs_shp_latlon <- sp::spTransform(cambs_shp_bng, CRS_LAT_LON_WGS84)
-    # plot(cambs_shp_latlon, axes=TRUE)
+    # plot(cambs_shp_latlon, axes = TRUE)
 
     # https://rpubs.com/ajlyons/rspatialdata
 
@@ -121,7 +121,7 @@ mapfunc$get_lsoa_map_shapes <- function(
 mapfunc$get_cambs_lsoa_map_shapes <- function(
         cache_filename = paste(path.expand("~"), "tmp",
                                "cambridgeshire_geography_lsoa.rds",
-                               sep=.Platform$file.sep),
+                               sep = .Platform$file.sep),
         # geography_shape_file_dir = "/srv/ons_postcode_database/shapes",
         geography_shape_file_dir = "/home/rudolf/dev/onspd",
         geography_shape_file_stem = "Lower_Layer_Super_Output_Areas_December_2011_Full_Extent__Boundaries_in_England_and_Wales",
@@ -146,23 +146,23 @@ mapfunc$test_plot_cambridgeshire_map <- function()
 {
     cambs_shp_df <- mapfunc$get_cambs_lsoa_map_shapes()
     test_locations_of_interest <- data.frame(
-        long=c(-0.5, 0, 0.5),  # x
-        lat=c(52.6, 52.4, 52.2)  # y
+        long = c(-0.5, 0, 0.5),  # x
+        lat = c(52.6, 52.4, 52.2)  # y
     )
     testplot <- (
         ggplot() +
-        coord_fixed(ratio=1) +
+        coord_fixed(ratio = 1) +
         geom_polygon(
-            data=cambs_shp_df,
-            aes(x=long, y=lat, group=group),
-            colour='blue',
-            fill='white'
+            data = cambs_shp_df,
+            aes(x = long, y = lat, group = group),
+            colour = 'blue',
+            fill = 'white'
         ) +
         geom_point(
-            data=test_locations_of_interest,
-            aes(x=long, y=lat),
-            colour='red',
-            size=10,
+            data = test_locations_of_interest,
+            aes(x = long, y = lat),
+            colour = 'red',
+            size = 10,
         )
     )
     return(testplot)
@@ -182,7 +182,7 @@ mapfunc$CAMBRIDGESHIRE_CITIES <- data.table(read.table(textConnection("
     Peterborough    52.5695     -0.2405
     Ely             52.3995     0.2624
     Huntingdon      52.3315     -0.1826
-"), header=TRUE))
+"), header = TRUE))
 
 
 mapfunc$geography_heatmap <- function(

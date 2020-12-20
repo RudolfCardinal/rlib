@@ -51,7 +51,7 @@ cris$connect <- function(
         return(odbcDriverConnect(paste('driver={', odbc_driver, '};',
                                        'server=', server, ',', port,
                                        ';UID=', user,
-                                       ';PWD=', password, sep="")))
+                                       ';PWD=', password, sep = "")))
         # WILL SILENTLY USE Trusted_Connection=Yes unless you get this exactly right.
         # In which case, access to the GATE database will fail.
         # Print the dbhandle object to see its connection method.
@@ -66,7 +66,7 @@ cris$connect <- function(
                      "password=", password, ";",
                      "responseBuffering=adaptive;",
                      "selectMethod=cursor;",
-                     sep="")
+                     sep = "")
         return(dbConnect(drv, url))
     }
 
@@ -111,7 +111,7 @@ cris$send_email <- function(recipients, subject, body, filenames = c())
         , SMTP_HOST
         , SMTP_USER
         , SMTP_PASSWORD
-        , cat(recipients, sep=",")
+        , cat(recipients, sep = ",")
         , subject
         , body
         , "--tls"
@@ -144,33 +144,33 @@ cris$route_email <- function(
     # to an appropriate SMTP server.)
     params <- list(
         sender = sender
-        , recipient=recipient
-        , subject=subject
-        , body=body
-        , host=host
-        , user=user
-        , password=password
+        , recipient = recipient
+        , subject = subject
+        , body = body
+        , host = host
+        , user = user
+        , password = password
     )
     for (i in 1:length(filenames)) {
-        params[paste("file_", i, sep="")] <- list(
-            fileUpload(filename=filenames[i])
+        params[paste("file_", i, sep = "")] <- list(
+            fileUpload(filename = filenames[i])
         )
         # fileUpload is from RCurl
     }
     style <- "httppost" # for multipart/form-data (required for proper file transmission)
     opts <- list(
-        proxy=proxy
-        , proxyuserpwd=proxyuserpwd
-        , ssl.verifypeer=ssl.verifypeer
-        , http.version=HTTP_VERSION_1_0 # or style="httppost" fails
+        proxy = proxy
+        , proxyuserpwd = proxyuserpwd
+        , ssl.verifypeer = ssl.verifypeer
+        , http.version = HTTP_VERSION_1_0 # or style = "httppost" fails
     )
     encoding <- "utf8"
     result <- postForm(
-        uri=url
-        , .params=params
-        , .opts=opts
-        , style=style
-        , .encoding=encoding
+        uri = url
+        , .params = params
+        , .opts = opts
+        , style = style
+        , .encoding = encoding
     )
     return(result)
 }
@@ -187,20 +187,20 @@ cris$posixct_from_unix_datetime_in_seconds <- function(x)
 {
     # When sqldf mangles a DATETIME or POSIXct field to an integer,
     # unmangle it with this
-    as.POSIXct(as.integer(x), origin=cris$UNIX_EPOCH)
+    as.POSIXct(as.integer(x), origin = cris$UNIX_EPOCH)
 }
 
 cris$date_from_unix_date_in_days <- function(x)
 {
     # When sqldf mangles a DATE or Date field to an integer,
     # unmangle it with this
-    as.Date(as.integer(x), origin=cris$UNIX_EPOCH)
+    as.Date(as.integer(x), origin = cris$UNIX_EPOCH)
 }
 
 cris$days_between <- function(start, end)
 {
     # Works for POSIXct and Date
-    as.numeric(difftime(end, start, units="days"))
+    as.numeric(difftime(end, start, units = "days"))
 }
 
 cris$years_between <- function(start, end)
@@ -227,7 +227,7 @@ cris$year_from_date <- function(d)
 
 cris$date_range_inclusive <- function(start_date, end_date)
 {
-    seq(start_date, end_date, by=1)
+    seq(start_date, end_date, by = 1)
 }
 
 #==============================================================================
@@ -437,14 +437,14 @@ cris$get_any_of_several_drugs_sql <- function(druglist)
     return(
         paste(
             "( ",
-            paste(individualdrugs, collapse=" OR "),
+            paste(individualdrugs, collapse = " OR "),
             " )",
-            sep=""
+            sep = ""
         )
     )
 }
 
-cris$get_drug_sql <- function(drug, fieldname="drug")
+cris$get_drug_sql <- function(drug, fieldname = "drug")
 {
     # Takes drug details as a specific drug or a drug class.
     # Returns an SQL fragment, such as "(drug = 'chlorpromazine' OR drug = 'Largactil')",
@@ -957,7 +957,7 @@ cris$get_drug_sql <- function(drug, fieldname="drug")
             , "drug LIKE '%Lantus%'"
             , "drug LIKE '%Insulatard%'"
             , "drug LIKE '%NovoMix%'"
-            , sep=" OR "
+            , sep = " OR "
         )
     }
 
@@ -1134,8 +1134,8 @@ cris$get_drug_sql <- function(drug, fieldname="drug")
     }
 
     return(paste("(",
-                 gsub("drug ", paste(fieldname, " ", sep=""), sql),
-                 ")", sep=""))
+                 gsub("drug ", paste(fieldname, " ", sep = ""), sql),
+                 ")", sep = ""))
 }
 
 cris$map_drugs_to_uniform_names_sql <- function(fieldname, druglist)
@@ -1143,20 +1143,20 @@ cris$map_drugs_to_uniform_names_sql <- function(fieldname, druglist)
     sql <- paste("
             CASE
         ",
-        sep=""
+        sep = ""
     )
     for (drug in druglist) {
         sql <- paste(sql, "
                 WHEN ", cris$get_drug_sql(drug, fieldname), " THEN '", drug, "'
             ",
-            sep=""
+            sep = ""
         )
     }
     sql <- paste(sql, "
                 ELSE NULL
             END
         ",
-        sep=""
+        sep = ""
     )
     return(sql)
 }
@@ -1165,7 +1165,7 @@ cris$map_drugs_to_uniform_names_sql <- function(fieldname, druglist)
 # Diagnoses by ICD-10 code
 #==============================================================================
 
-cris$get_icd10code_sql <- function(condition, fieldname="code")
+cris$get_icd10code_sql <- function(condition, fieldname = "code")
 {
     # Returns an SQL fragment, such as "(code LIKE 'F20%')"
     if (condition == "schizophrenia") {
@@ -1188,8 +1188,8 @@ cris$get_icd10code_sql <- function(condition, fieldname="code")
     }
 
     return(paste("(",
-                 gsub("code ", paste(fieldname, " ", sep=""), sql),
-                 ")", sep=""))
+                 gsub("code ", paste(fieldname, " ", sep = ""), sql),
+                 ")", sep = ""))
 }
 
 cris$cpft.most_popular_icd10_diagnoses <- function(dbhandle)
@@ -1227,7 +1227,7 @@ cris$cpft.n_patients_with_any_diagnosis_from_list <- function(dbhandle, idlist)
         SELECT COUNT(DISTINCT brcid)
         FROM cpft_endsql.dbo.diagnosis
         WHERE ", cris$sql_id_in_list(idlist, "BrcId"), "
-    ", sep=""))
+    ", sep = ""))
     return(r[1,1])
 }
 
@@ -1246,7 +1246,7 @@ cris$cpft.n_patients_with_any_diagnosis_alive_on_or_after <- function(
                 M.truncated_dttm = 0 /* not dead */
                 OR CAST(M.truncated_dttm AS DATE) >= '", start_date_as_text, "' /* alive at the start */
         )
-    ", sep=""))
+    ", sep = ""))
     return(r[1,1])
 }
 
@@ -1259,7 +1259,7 @@ cris$cpft.n_patients_alive_on_or_after <- function(dbhandle, startdate)
         WHERE
             M.truncated_dttm = 0 /* not dead */
             OR CAST(M.truncated_dttm AS DATE) >= '", start_date_as_text, "' /* alive at the start */
-    ", sep=""))
+    ", sep = ""))
     return(r[1,1])
 }
 
@@ -1273,7 +1273,7 @@ cris$cpft.diagnosis_frequency_for_specified_patients <- function(dbhandle,
         WHERE ", cris$sql_id_in_list(idlist, "BrcId"), "
         GROUP BY code, description
         ORDER BY COUNT(DISTINCT brcid) DESC
-    ", sep=""))
+    ", sep = ""))
     return(r)
 }
 
@@ -1286,9 +1286,9 @@ cris$sql_id_in_list <- function(idlist, fieldname)
     paste(
         fieldname
         , " IN ("
-        , paste(idlist, collapse=", ")
+        , paste(idlist, collapse = ", ")
         , ")"
-        , sep=""
+        , sep = ""
     )
 }
 
@@ -1297,9 +1297,9 @@ cris$sql_id_not_in_list <- function(idlist, fieldname)
     paste(
         fieldname
         , " NOT IN ("
-        , paste(idlist, collapse=", ")
+        , paste(idlist, collapse = ", ")
         , ")"
-        , sep=""
+        , sep = ""
     )
 }
 
@@ -1348,8 +1348,8 @@ cris$cpft.get_patients <- function(
     dbhandle,
     startdate,
     enddate,
-    diagnosis=NULL,
-    exclude_id_list=NULL)
+    diagnosis = NULL,
+    exclude_id_list = NULL)
 {
     if (is.null(diagnosis) && is.null(exclude_id_list)){
         stop("specify diagnosis or exclude_id_list")
@@ -1359,7 +1359,7 @@ cris$cpft.get_patients <- function(
     }
     start_date_as_text <- as.character(startdate)
     end_date_as_text <- as.character(enddate)
-    query = paste("
+    query <- paste("
         SELECT
             M.BrcId AS id
             , M.gender AS sex
@@ -1411,9 +1411,9 @@ cris$cpft.get_patients <- function(
                 AND W.start_dttm >= '", start_date_as_text, "'
                 AND W.end_dttm <= '", end_date_as_text, "'
             ) AS end_of_last_completed_admission_in_time_range
-    ", sep="")
+    ", sep = "")
     if (!is.null(diagnosis)) {
-        icd10where <- cris$get_icd10code_sql(diagnosis, fieldname="D.CODE")
+        icd10where <- cris$get_icd10code_sql(diagnosis, fieldname = "D.CODE")
         query <- paste(query, "
             , (
                 /* Date of first ICD-10 diagnosis matching diagnosis criterion (regardless of time) */
@@ -1423,13 +1423,13 @@ cris$cpft.get_patients <- function(
                 AND D.dgpro_dttm <> 0 /* eliminate quasi-NULL values */
                 AND (", icd10where, ")
             ) AS first_diagnosis_date
-        ", sep="")
+        ", sep = "")
     }
     query <- paste(query, "
         FROM
             cpft_endsql.dbo.MPI M
         WHERE
-    ", sep="")
+    ", sep = "")
     if (!is.null(diagnosis)) {
         query <- paste(query, "
             /* Our patients should have the specified diagnosis -- at any time in the clinical record */
@@ -1439,12 +1439,12 @@ cris$cpft.get_patients <- function(
                 WHERE D.BrcId = M.BrcId
                 AND (", icd10where, ")
             )
-        ", sep="")
+        ", sep = "")
     } else {
         query <- paste(query, "
             /* the ID is NOT in a specified list */
             ", cris$sql_id_not_in_list(exclude_id_list, "M.BrcId"), "
-        ", sep="")
+        ", sep = "")
     }
     query <- paste(query, "
             /* We don't want people who died before our period of interest: */
@@ -1454,7 +1454,7 @@ cris$cpft.get_patients <- function(
                     /* alive at the start */
             )
         ORDER BY brcid
-    ", sep="")
+    ", sep = "")
 
     x <- sqlQuery(dbhandle, query)
 
@@ -1485,10 +1485,10 @@ cris$cpft.duration_of_follow_up <- function(patientdf) {
     cris$years_between(
         pmin(patientdf$first_letter_date_in_time_range,
              patientdf$first_admission_date_in_time_range,
-             na.rm=TRUE),
+             na.rm = TRUE),
         pmax(patientdf$last_letter_date_in_time_range,
              patientdf$end_of_last_completed_admission_in_time_range,
-             na.rm=TRUE)
+             na.rm = TRUE)
     )
 }
 
@@ -1516,7 +1516,7 @@ cris$cpft.all_admissions_between <- function(dbhandle, idlist,
         ORDER BY
             brcid,
             start_dttm
-    ", sep=""))
+    ", sep = ""))
 
     within(x, {
         admission_date <- as.Date(admission_date)
@@ -1531,7 +1531,7 @@ cris$cpft.admissions_between_inclusive <- function(admissions_df, patient_id,
     # An admission from 1-2 Jan counts as 1 day, not 2
     # Do not use "id" as the function argument -- treat as a reserved word
     # (esp. in the next statement)
-    # Passing patient_id=NA means calculate the average for all patients
+    # Passing patient_id = NA means calculate the average for all patients
     # represented
     if (is.na(patient_id)) {
         admission_date <- admissions_df$admission_date
@@ -1607,10 +1607,10 @@ cris$cpft.admissions_by_patient_year <- function(
     admissions_df
     , patient_df
     , years
-    , EXCLUDE_YEARS_NOT_WITHIN_EACH_PATIENT_DATE_RANGE=TRUE)
+    , EXCLUDE_YEARS_NOT_WITHIN_EACH_PATIENT_DATE_RANGE = TRUE)
 {
     years_df <- data.frame(
-        year=years
+        year = years
     )
     d <- sqldf("
         SELECT
@@ -1629,8 +1629,8 @@ cris$cpft.admissions_by_patient_year <- function(
     d <- within(d, {
         first_diagnosis_date <- as.Date(first_diagnosis_date)
         final_date <- as.Date(final_date)
-        year_starts <- as.Date(paste(year, "-01-01", sep=""))
-        year_ends <- as.Date(paste(year, "-12-31", sep=""))
+        year_starts <- as.Date(paste(year, "-01-01", sep = ""))
+        year_ends <- as.Date(paste(year, "-12-31", sep = ""))
     })
     # Here's the date exclusion:
     if (EXCLUDE_YEARS_NOT_WITHIN_EACH_PATIENT_DATE_RANGE) {
@@ -1665,8 +1665,8 @@ cris$cpft.get_gate_medication_current <- function(
     , druglist
     , startdate
     , enddate
-    , excludepast=FALSE
-    , excludenulldose=FALSE)
+    , excludepast = FALSE
+    , excludenulldose = FALSE)
 {
     start_date_as_text <- as.character(startdate)
     end_date_as_text <- as.character(enddate)
@@ -1716,7 +1716,7 @@ cris$cpft.get_gate_medication_current <- function(
             AND CAST(date AS DATE) <= '", end_date_as_text, "'
             ", excludepastclause, "
             ", excludenulldoseclause, "
-    ", sep=""))
+    ", sep = ""))
 
     within(d, {
         date <- as.Date(date)
@@ -1767,7 +1767,7 @@ cris$cpft.get_gate_medication_current_by_exclusion_id <- function(
             AND CAST(date AS DATE) >= '", drug_start_date_as_text, "'
             AND CAST(date AS DATE) <= '", drug_end_date_as_text, "'
             AND tense IS NULL /* or we might include 'in 1972 they were on blah drug'; tense is 'past' or NULL */
-    ", sep=""))
+    ", sep = ""))
     d <- subset(d, drugname %in% druglist)
     within(d, {
         date <- as.Date(date)
@@ -1778,7 +1778,7 @@ cris$patients_which_drugs_taken <- function(druglist, druginfo_df, patient_df)
 {
     # Start: id, date, drug, ...
     # End: id, drug1, drug2, drug3, ... (each cell: boolean was-it-taken)
-    result <- data.frame(id=patient_df$id)
+    result <- data.frame(id = patient_df$id)
     for (drugname in druglist) {
         cat("cris$patients_which_drugs_taken processing:", drugname, "\n")
         tmp <- sqldf(paste("
@@ -1794,7 +1794,7 @@ cris$patients_which_drugs_taken <- function(druglist, druginfo_df, patient_df)
                     END AS ", drugname, "
             FROM
                 patient_df P
-        ", sep=""))
+        ", sep = ""))
         result <- merge(result, tmp)
     }
     return(result)
@@ -1834,7 +1834,7 @@ cris$cpft.per_patient_drug_stats <- function(drugname, druginfo_df, patient_df)
             ) AS last_use
         FROM
             patient_df P
-    ", sep=""))
+    ", sep = ""))
     within(x, {
         first_use <- cris$date_from_unix_date_in_days(first_use)
         last_use <- cris$date_from_unix_date_in_days(last_use)
@@ -1853,7 +1853,7 @@ cris$cpft.used_drug_between <- function(druginfo_df, patient_id,
             & druginfo_df$drugname == drugname_string
             & startdate <= druginfo_df$date
             & druginfo_df$date <= enddate
-        , na.rm=TRUE
+        , na.rm = TRUE
     )
 }
 
@@ -1923,17 +1923,17 @@ cris$cpft.summarize_daily_doses <- function(druginfo_df)
     d <- subset(druginfo_df, !is.na(daily_dose_mg) & !is.na(drugname))
     # Down to per-patient level
     d <- ddply(d, .(id, drugname), summarize
-        , patient_median_mg_day=median(daily_dose_mg)
-        , patient_mean_mg_day=mean(daily_dose_mg)
-        , .parallel=TRUE
+        , patient_median_mg_day = median(daily_dose_mg)
+        , patient_mean_mg_day = mean(daily_dose_mg)
+        , .parallel = TRUE
     )
     # Down to group level
     d <- ddply(d, .(drugname), summarize
-        , median_of_median_doses_mg_day=median(patient_median_mg_day)
-        , mean_of_mean_doses_mg_day=mean(patient_mean_mg_day)
-        , mean_of_median_doses_mg_day=mean(patient_median_mg_day)
-        , median_of_mean_doses_mg_day=median(patient_mean_mg_day)
-        , .parallel=TRUE
+        , median_of_median_doses_mg_day = median(patient_median_mg_day)
+        , mean_of_mean_doses_mg_day = mean(patient_mean_mg_day)
+        , mean_of_median_doses_mg_day = mean(patient_median_mg_day)
+        , median_of_mean_doses_mg_day = median(patient_mean_mg_day)
+        , .parallel = TRUE
     )
     return(d)
 }
@@ -1944,11 +1944,11 @@ cris$cpft.summarize_daily_doses <- function(druginfo_df)
 
 cris$fixed_effects_from_lmer <- function(
     lmer_result
-    , exclude_factors=c()
-    , sort_by_effect_size=TRUE
-    , strip_true=TRUE
-    , alpha=0.05
-    , method=c("lmerTest", "z", "pvals.fnc")
+    , exclude_factors = c()
+    , sort_by_effect_size = TRUE
+    , strip_true = TRUE
+    , alpha = 0.05
+    , method = c("lmerTest", "z", "pvals.fnc")
 )
 {
     method <- match.arg(method)
@@ -1972,25 +1972,25 @@ cris$fixed_effects_from_lmer <- function(
             rownames(mcmcdata) <- gsub("TRUE", "", rownames(mcmcdata))
         }
         d <- data.frame(
-            effect=as.factor(rownames(mcmcdata))
-            # , estimate=as.numeric(mcmcdata$Estimate) # no, that's the non-MCMC estimate
-            , estimate=as.numeric(mcmcdata$MCMCmean)
-            , lower=as.numeric(mcmcdata$HPD95lower)
-            , upper=as.numeric(mcmcdata$HPD95upper)
+            effect = as.factor(rownames(mcmcdata))
+            # , estimate = as.numeric(mcmcdata$Estimate) # no, that's the non-MCMC estimate
+            , estimate = as.numeric(mcmcdata$MCMCmean)
+            , lower = as.numeric(mcmcdata$HPD95lower)
+            , upper = as.numeric(mcmcdata$HPD95upper)
         )
 
     } else if (method == "z" || method == "lmerTest") {
 
         if (method == "z") {
             # Assumes lmer_result is the output from lmer (an lmer model).
-            require(lme4, quietly=TRUE)
+            require(lme4, quietly = TRUE)
             if (!is(lmer_result, "mer")) {
                 stop("the input model is not a mer object")
             }
             coefs <- summary(lmer_result)@coefs
         } else {
             # Assumes lmer_result is the output from lmer (an lmer model).
-            require(lmerTest, quietly=TRUE)
+            require(lmerTest, quietly = TRUE)
             if (!is(lmer_result, "merMod")) {
                 stop("the input model is not a merMod object")
             }
@@ -2003,21 +2003,21 @@ cris$fixed_effects_from_lmer <- function(
         }
         if (colnames(coefs)[3] == "z value") {
             d <- data.frame(
-                effect=as.factor(rownames(coefs))
-                , estimate=coefs[, "Estimate"]
-                , se=coefs[, "Std. Error"]
-                , z=coefs[, "z value"]
-                    # ... which is mean/se (confirmed empirically), since df=1
-                , p=coefs[, "Pr(>|z|)"]
+                effect = as.factor(rownames(coefs))
+                , estimate = coefs[, "Estimate"]
+                , se = coefs[, "Std. Error"]
+                , z = coefs[, "z value"]
+                    # ... which is mean/se (confirmed empirically), since df = 1
+                , p = coefs[, "Pr(>|z|)"]
             )
         } else if (colnames(coefs)[4] == "t value") {
             d <- data.frame(
-                effect=as.factor(rownames(coefs))
-                , estimate=coefs[, "Estimate"]
-                , se=coefs[, "Std. Error"]
-                , df=coefs[, "df"]
-                , t=coefs[, "t value"]
-                , p=coefs[, "Pr(>|t|)"]
+                effect = as.factor(rownames(coefs))
+                , estimate = coefs[, "Estimate"]
+                , se = coefs[, "Std. Error"]
+                , df = coefs[, "df"]
+                , t = coefs[, "t value"]
+                , p = coefs[, "Pr(>|t|)"]
             )
         } else {
             print(coefs)
@@ -2048,48 +2048,48 @@ cris$fixed_effects_from_lmer <- function(
 
 cris$visualize_fixed_effects_from_preprocessed_lmer <- function(
     d
-    , sort_by_effect_size=TRUE
-    , title=""
-    , xlab="Estimate"
-    , limits=c(-Inf, +Inf)
-    , visual_style=c("bw", "colour")
+    , sort_by_effect_size = TRUE
+    , title = ""
+    , xlab = "Estimate"
+    , limits = c(-Inf, +Inf)
+    , visual_style = c("bw", "colour")
 )
 {
     visual_style <- match.arg(visual_style)
     if (sort_by_effect_size) {
-        d$effect <- reorder(d$effect, d$estimate, FUN=mean)
-        # without FUN=mean it sometimes does nothing. Try:
+        d$effect <- reorder(d$effect, d$estimate, FUN = mean)
+        # without FUN = mean it sometimes does nothing. Try:
         #       a = as.factor(c("a","b","c"))
         #       reorder(a, c(3,2,1))
-        #       reorder(a, c(3,2,1), FUN=mean)
+        #       reorder(a, c(3,2,1), FUN = mean)
         # ... changes level order, but not order of factor values
     }
     # Reverse order (so Y axis reads top-down, not bottom-up)
-    d$effect <- factor(d$effect, levels=rev(levels(d$effect)))
+    d$effect <- factor(d$effect, levels = rev(levels(d$effect)))
     # ... reverses the level order, not the factor value order
     # ... http://stackoverflow.com/questions/2375587/reorder-levels-of-a-data-frame-without-changing-order-of-values
 
     if (visual_style == "colour") {
         p <- (
-            ggplot(data=d,
-                   aes(y=effect, x=estimate, colour=factor(ci_excludes_zero)))
-            + scale_colour_manual(values=c("black", "red"), guide=FALSE)
+            ggplot(data = d,
+                   aes(y = effect, x = estimate, colour = factor(ci_excludes_zero)))
+            + scale_colour_manual(values = c("black", "red"), guide = FALSE)
         )
     } else {
         p <- (
-            ggplot(data=d, aes(y=effect, x=estimate))
-            + scale_fill_manual(values=c("white", "black"), guide=FALSE)
+            ggplot(data = d, aes(y = effect, x = estimate))
+            + scale_fill_manual(values = c("white", "black"), guide = FALSE)
         )
     }
     p <- (
         p
-        + geom_vline(xintercept=0, colour="grey50")
-        + geom_errorbarh(aes(xmin=lower, xmax=upper))
-        + geom_point(size=5, shape=21,
-                     mapping=aes(fill=factor(ci_excludes_zero)))
+        + geom_vline(xintercept = 0, colour = "grey50")
+        + geom_errorbarh(aes(xmin = lower, xmax = upper))
+        + geom_point(size = 5, shape = 21,
+                     mapping = aes(fill = factor(ci_excludes_zero)))
     )
     if (limits[1] != -Inf || limits[2] != +Inf) {
-        p <- p + coord_cartesian(xlim=limits)
+        p <- p + coord_cartesian(xlim = limits)
     }
     p <- (
         p
@@ -2103,31 +2103,31 @@ cris$visualize_fixed_effects_from_preprocessed_lmer <- function(
 
 cris$visualize_fixed_effects_from_lmer <- function(
     lmer_result
-    , exclude_factors=c()
-    , sort_by_effect_size=TRUE
-    , strip_true=TRUE
-    , alpha=0.05
-    , method=c("lmerTest", "z", "pvals.fnc")
-    , title=""
-    , xlab="Estimate"
-    , limits=c(-Inf, +Inf)
-    , visual_style=c("bw", "colour")
+    , exclude_factors = c()
+    , sort_by_effect_size = TRUE
+    , strip_true = TRUE
+    , alpha = 0.05
+    , method = c("lmerTest", "z", "pvals.fnc")
+    , title = ""
+    , xlab = "Estimate"
+    , limits = c(-Inf, +Inf)
+    , visual_style = c("bw", "colour")
 )
 {
     d <- cris$fixed_effects_from_lmer(
         lmer_result
-        , exclude_factors=exclude_factors
-        , strip_true=strip_true
-        , alpha=alpha
-        , method=method
+        , exclude_factors = exclude_factors
+        , strip_true = strip_true
+        , alpha = alpha
+        , method = method
     )
     return(cris$visualize_fixed_effects_from_preprocessed_lmer(
         d
-        , sort_by_effect_size=sort_by_effect_size
-        , title=title
-        , xlab=xlab
-        , limits=limits
-        , visual_style=visual_style
+        , sort_by_effect_size = sort_by_effect_size
+        , title = title
+        , xlab = xlab
+        , limits = limits
+        , visual_style = visual_style
     ))
 }
 #==============================================================================
@@ -2151,7 +2151,7 @@ cris$cpft.print_simple_patient_summary <- function(patient_df)
     chisq_sex <- chisq.test(c(n_male, n_female))
     patient_df_sex_mf <- subset(patient_df, sex=="Male" | sex=="Female")
     # ... could also be not known/not specified/X...
-    ttest_age_at_death <- t.test(age_at_death ~ sex, data=patient_df_sex_mf)
+    ttest_age_at_death <- t.test(age_at_death ~ sex, data = patient_df_sex_mf)
 
     cat(BIGSEP)
     cat("Number of patients in this group:", n, "\n")
@@ -2177,22 +2177,22 @@ cris$cpft.admissions_by_year_plot_by_patient <- function(
         admissions_by_patient_year_df
         , ~ sex * year
         , summarize
-        , mean_admission_days_per_pt=mean(admission_days)
-        , total_admission_days=sum(admission_days)
-        , .parallel=TRUE
+        , mean_admission_days_per_pt = mean(admission_days)
+        , total_admission_days = sum(admission_days)
+        , .parallel = TRUE
     )
     return(
         ggplot(
-            data=SUMMARY_ADMDAYS_BY_YEAR
-            , aes(x=year, y=mean_admission_days_per_pt, linetype=sex)
+            data = SUMMARY_ADMDAYS_BY_YEAR
+            , aes(x = year, y = mean_admission_days_per_pt, linetype = sex)
         )
         + geom_line()
         + scale_y_continuous(
             "Mean admission days per patient per year",
-            limits=c(0,max(SUMMARY_ADMDAYS_BY_YEAR$mean_admission_days_per_pt)))
-        + scale_x_continuous("Year", limits=c(firstyear, lastyear))
+            limits = c(0,max(SUMMARY_ADMDAYS_BY_YEAR$mean_admission_days_per_pt)))
+        + scale_x_continuous("Year", limits = c(firstyear, lastyear))
         + theme_bw()
-        + theme(legend.position=c(0.75, 0.75))
+        + theme(legend.position = c(0.75, 0.75))
     )
 }
 
@@ -2208,8 +2208,8 @@ cris$cpft.admissions_by_year_plot_as_institution_proportion <- function(
         admissions_by_patient_year_df
         , ~ year
         , summarize
-        , total_admission_days=sum(admission_days)
-        , .parallel=TRUE
+        , total_admission_days = sum(admission_days)
+        , .parallel = TRUE
     )
     SUMMARY_ADMDAYS_TOTAL_BY_YEAR <- merge(SUMMARY_ADMDAYS_TOTAL_BY_YEAR,
                                            available_beds_by_year_df)
@@ -2219,13 +2219,13 @@ cris$cpft.admissions_by_year_plot_as_institution_proportion <- function(
     })
     return(
         ggplot(
-            data=SUMMARY_ADMDAYS_TOTAL_BY_YEAR
-            , aes(x=year, y=proportion_bed_days_used)
+            data = SUMMARY_ADMDAYS_TOTAL_BY_YEAR
+            , aes(x = year, y = proportion_bed_days_used)
         )
         + geom_line()
         + scale_y_continuous("Proportion of available bed-days used",
-                             limits=c(0,1))
-        + scale_x_continuous("Year", limits=c(firstyear, lastyear))
+                             limits = c(0,1))
+        + scale_x_continuous("Year", limits = c(firstyear, lastyear))
         + theme_bw()
     )
 }
@@ -2259,7 +2259,7 @@ cris$cpft.simple_drug_stats <- function(drugname, druginfo, patient_df)
         , n_pts
         , n_used
         , proportion_used=(n_used / n_pts)
-        , percentage_used=round(100 * n_used / n_pts, 1)
+        , percentage_used = round(100 * n_used / n_pts, 1)
         , n_did_not_use
         , n_used_male
         , n_used_female
@@ -2279,7 +2279,7 @@ cris$cpft.simple_drug_stats <- function(drugname, druginfo, patient_df)
         , p_died_given_drug=(n_used_died / n_used)
         , p_died_given_no_drug=(n_did_not_use_died / n_did_not_use)
 
-        , mean_age_at_first_use=mean(P$age_at_first_use, na.rm=TRUE)
+        , mean_age_at_first_use = mean(P$age_at_first_use, na.rm = TRUE)
     ))
 }
 
@@ -2313,10 +2313,10 @@ cris$cpft.drug_use_by_diagnosis <- function(drugname,
     )
     return(data.frame(
         drugname
-        , n_diagnosis=n_diagnosis
-        , n_no_diagnosis=n_no_diagnosis
-        , n_used_diagnosis=n_used_diagnosis
-        , n_used_no_diagnosis=n_used_no_diagnosis
+        , n_diagnosis = n_diagnosis
+        , n_no_diagnosis = n_no_diagnosis
+        , n_used_diagnosis = n_used_diagnosis
+        , n_used_no_diagnosis = n_used_no_diagnosis
         , p_used_given_diagnosis=(n_used_diagnosis / n_diagnosis)
         , p_used_given_no_diagnosis=(n_used_no_diagnosis / n_no_diagnosis)
         , pval_use_by_diagnosis
@@ -2329,12 +2329,12 @@ cris$cpft.admissions_by_drug_onset_mirror <- function(
     , mirroryears_before
     , mirroryears_after
     , CRIS_EXPORT_DATE_AS_DATE
-    , central_gap_days_before=1
-    , central_gap_days_after=1
-    , min_component_length_days=NA)
+    , central_gap_days_before = 1
+    , central_gap_days_after = 1
+    , min_component_length_days = NA)
 {
     # Returns data frame for a single drug
-    # Use mirroryears=NA for "as far back/forward as possible" -- in which case specify min_component_length_days (or a single day that's an admission before drug will give a measure of about 365 days/year beforehand)
+    # Use mirroryears = NA for "as far back/forward as possible" -- in which case specify min_component_length_days (or a single day that's an admission before drug will give a measure of about 365 days/year beforehand)
     cat("cris$cpft.admissions_by_drug_onset_mirror:", drugname, "\n")
     mirrordays_before <- mirroryears_before * cris$DAYS_PER_YEAR
     mirrordays_after <- mirroryears_after * cris$DAYS_PER_YEAR
@@ -2467,7 +2467,7 @@ cris$cpft.admissions_by_drug_onset_mirror <- function(
     })
 }
 
-cris$summarize_drug_mirror <- function(MIRROR, ci=0.95, only_if_adm_before=FALSE, stringent=FALSE, patient_idlist=NA)
+cris$summarize_drug_mirror <- function(MIRROR, ci = 0.95, only_if_adm_before = FALSE, stringent = FALSE, patient_idlist = NA)
 {
     cat("cris$summarize_drug_mirror:", MIRROR$drugname[1], "\n")
     if (only_if_adm_before) {
@@ -2480,32 +2480,32 @@ cris$summarize_drug_mirror <- function(MIRROR, ci=0.95, only_if_adm_before=FALSE
         MIRROR <- subset(MIRROR, used_in_stringent_period)
     }
     data.frame(
-        drugname=MIRROR$drugname[1] # same for all rows
-        , mirroryears_before=MIRROR$planned_mirroryears_before[1] # same for all rows
-        , mirroryears_after=MIRROR$planned_mirroryears_after[1] # same for all rows
-        , n_pts=nrow(MIRROR)
-        , mean_age=mean(MIRROR$age_at_first_use)
-        , n_male=nrow(subset(MIRROR, sex == "Male"))
+        drugname = MIRROR$drugname[1] # same for all rows
+        , mirroryears_before = MIRROR$planned_mirroryears_before[1] # same for all rows
+        , mirroryears_after = MIRROR$planned_mirroryears_after[1] # same for all rows
+        , n_pts = nrow(MIRROR)
+        , mean_age = mean(MIRROR$age_at_first_use)
+        , n_male = nrow(subset(MIRROR, sex == "Male"))
 
-        , mean_adm_per_year_before=mean(MIRROR$adm_per_year_before)
-        , mean_adm_per_year_after=mean(MIRROR$adm_per_year_after)
-        , pvalue_adms=t.test(MIRROR$adm_per_year_before, MIRROR$adm_per_year_after, paired=TRUE)$p.value
+        , mean_adm_per_year_before = mean(MIRROR$adm_per_year_before)
+        , mean_adm_per_year_after = mean(MIRROR$adm_per_year_after)
+        , pvalue_adms = t.test(MIRROR$adm_per_year_before, MIRROR$adm_per_year_after, paired = TRUE)$p.value
 
-        , mean_adm_days_per_year_before=mean(MIRROR$adm_days_per_year_before)
-        , mean_adm_days_per_year_after=mean(MIRROR$adm_days_per_year_after)
-        , mean_adm_days_per_year_change=mean(MIRROR$change_adm_days_per_year)
-        , sem_adm_days_change=sem(MIRROR$change_adm_days_per_year)
-        , hci95_adm_days_change=half_confidence_interval_t(MIRROR$change_adm_days_per_year, ci=ci)
-        , pvalue_adm_days=t.test(MIRROR$adm_days_per_year_before, MIRROR$adm_days_per_year_after, paired=TRUE)$p.value
+        , mean_adm_days_per_year_before = mean(MIRROR$adm_days_per_year_before)
+        , mean_adm_days_per_year_after = mean(MIRROR$adm_days_per_year_after)
+        , mean_adm_days_per_year_change = mean(MIRROR$change_adm_days_per_year)
+        , sem_adm_days_change = sem(MIRROR$change_adm_days_per_year)
+        , hci95_adm_days_change = half_confidence_interval_t(MIRROR$change_adm_days_per_year, ci = ci)
+        , pvalue_adm_days = t.test(MIRROR$adm_days_per_year_before, MIRROR$adm_days_per_year_after, paired = TRUE)$p.value
 
-        , mean_corrected_adm_days_per_year_change=mean(MIRROR$corrected_for_allpts_change_adm_days_per_year)
-        , sem_corrected_adm_days_change=sem(MIRROR$corrected_for_allpts_change_adm_days_per_year)
-        , hci95_corrected_adm_days_change=half_confidence_interval_t(MIRROR$corrected_for_allpts_change_adm_days_per_year, ci=ci)
-        , pvalue_corrected_adm_days=t.test(MIRROR$corrected_for_allpts_change_adm_days_per_year)$p.value
+        , mean_corrected_adm_days_per_year_change = mean(MIRROR$corrected_for_allpts_change_adm_days_per_year)
+        , sem_corrected_adm_days_change = sem(MIRROR$corrected_for_allpts_change_adm_days_per_year)
+        , hci95_corrected_adm_days_change = half_confidence_interval_t(MIRROR$corrected_for_allpts_change_adm_days_per_year, ci = ci)
+        , pvalue_corrected_adm_days = t.test(MIRROR$corrected_for_allpts_change_adm_days_per_year)$p.value
     )
 }
 
-cris$drug_mirror_plot <- function(MIRROR_SUMMARY, DRUGLIST=NA, corrected=FALSE, sort_by_effect_size=TRUE, title="", visual_style=1)
+cris$drug_mirror_plot <- function(MIRROR_SUMMARY, DRUGLIST = NA, corrected = FALSE, sort_by_effect_size = TRUE, title = "", visual_style = 1)
 {
     # second y axis tricky: http://rpubs.com/kohske/dual_axis_in_ggplot2
     if (!is.na(DRUGLIST[1])) { # pass NA for all drugs, or specify a list
@@ -2519,8 +2519,8 @@ cris$drug_mirror_plot <- function(MIRROR_SUMMARY, DRUGLIST=NA, corrected=FALSE, 
     MIRROR_SUMMARY <- within(MIRROR_SUMMARY, {
         # Append n
         drugname <- paste(drugname, " (n=", n_pts, ", ",
-                          round(mean_age, digits=1), "y, ",
-                          n_male, " M)", sep="")
+                          round(mean_age, digits = 1), "y, ",
+                          n_male, " M)", sep = "")
         # Which sort of analysis?
         if (corrected) {
             depvar <- mean_corrected_adm_days_per_year_change
@@ -2528,7 +2528,7 @@ cris$drug_mirror_plot <- function(MIRROR_SUMMARY, DRUGLIST=NA, corrected=FALSE, 
             if (sort_by_effect_size) {
                 drugname <- reorder(drugname,
                                     mean_corrected_adm_days_per_year_change,
-                                    FUN=mean) # Sort drug factor order
+                                    FUN = mean) # Sort drug factor order
             }
         }
         else {
@@ -2537,11 +2537,11 @@ cris$drug_mirror_plot <- function(MIRROR_SUMMARY, DRUGLIST=NA, corrected=FALSE, 
             if (sort_by_effect_size) {
                 drugname <- reorder(drugname,
                                     mean_adm_days_per_year_change,
-                                    FUN=mean) # Sort drug factor order
+                                    FUN = mean) # Sort drug factor order
             }
         }
         # Reverse order (so Y axis reads top-down, not bottom-up)
-        drugname <- factor(drugname, levels=rev(levels(drugname)))
+        drugname <- factor(drugname, levels = rev(levels(drugname)))
         # Flag "significant" effects
         ci_excludes_zero <- sign(depvar + hci) == sign(depvar - hci)
     })
@@ -2549,38 +2549,38 @@ cris$drug_mirror_plot <- function(MIRROR_SUMMARY, DRUGLIST=NA, corrected=FALSE, 
     if (visual_style == 1) {
         return(
             ggplot(
-                data=MIRROR_SUMMARY
-                , aes(y=drugname, x=depvar, colour=factor(ci_excludes_zero))
+                data = MIRROR_SUMMARY
+                , aes(y = drugname, x = depvar, colour = factor(ci_excludes_zero))
             )
-            + geom_vline(xintercept=0, colour="grey50")
-            + geom_errorbarh(aes(xmin=depvar - hci, xmax=depvar + hci))
-            + geom_point(size=5)
+            + geom_vline(xintercept = 0, colour = "grey50")
+            + geom_errorbarh(aes(xmin = depvar - hci, xmax = depvar + hci))
+            + geom_point(size = 5)
             + xlab("Change in admission days per year")
             + ylab("")
-            + scale_colour_manual(values=c("black", "red"), guide=FALSE)
+            + scale_colour_manual(values = c("black", "red"), guide = FALSE)
             + theme_bw()
-            # + theme(axis.text.x=element_text(angle=90, hjust=1))
+            # + theme(axis.text.x = element_text(angle = 90, hjust = 1))
             + ggtitle(title)
         )
     } else {
         return(
-            ggplot(data=MIRROR_SUMMARY, aes(y=drugname, x=depvar))
-            + geom_vline(xintercept=0, colour="grey50")
-            + geom_errorbarh(aes(xmin=depvar - hci, xmax=depvar + hci))
-            + geom_point(size=5, shape=21,
-                         mapping=aes(fill=factor(ci_excludes_zero)))
+            ggplot(data = MIRROR_SUMMARY, aes(y = drugname, x = depvar))
+            + geom_vline(xintercept = 0, colour = "grey50")
+            + geom_errorbarh(aes(xmin = depvar - hci, xmax = depvar + hci))
+            + geom_point(size = 5, shape = 21,
+                         mapping = aes(fill = factor(ci_excludes_zero)))
             + xlab("Change in admission days per year")
             + ylab("")
-            + scale_fill_manual(values=c("white", "black"), guide=FALSE)
+            + scale_fill_manual(values = c("white", "black"), guide = FALSE)
             + theme_bw()
-            # + theme(axis.text.x=element_text(angle=90, hjust=1))
+            # + theme(axis.text.x = element_text(angle = 90, hjust = 1))
             + ggtitle(title)
         )
     }
 }
 
 cris$drug_mirror_stringent_comparison <- function(MIRROR,
-                                                  only_if_adm_before=TRUE)
+                                                  only_if_adm_before = TRUE)
 {
     # Asks the question: for those that used a drug, is the impact on admission days
     # affected by whether they clearly used the drug in the second half of the post-drug phase
@@ -2589,19 +2589,19 @@ cris$drug_mirror_stringent_comparison <- function(MIRROR,
         MIRROR <- subset(MIRROR, adm_days_before > 0)
     }
     data <- melt(
-        data=MIRROR
-        , id.vars=c("id", "used_in_stringent_period") # subject ID and between-subject variables
-        , measure.vars=c("adm_days_before", "adm_days_after") # "wide" variables to be made "long"
-        , variable.name="phase" # equivalent "long" variable
-        , value.name="adm_days" # dependent variable
+        data = MIRROR
+        , id.vars = c("id", "used_in_stringent_period") # subject ID and between-subject variables
+        , measure.vars = c("adm_days_before", "adm_days_after") # "wide" variables to be made "long"
+        , variable.name = "phase" # equivalent "long" variable
+        , value.name = "adm_days" # dependent variable
     )
     ezANOVA(
-        data=data
-        , dv=adm_days
-        , wid=id
-        , within=.(phase)
-        , between=.(used_in_stringent_period)
-        , type=3
+        data = data
+        , dv = adm_days
+        , wid = id
+        , within = .(phase)
+        , between = .(used_in_stringent_period)
+        , type = 3
     )
 }
 
@@ -2613,8 +2613,8 @@ cris$admissions_and_drug_use_by_calendar_periods <- function(
     , startdate
     , enddate
     , n_chunks
-    , drug_in_preceding_period=TRUE
-    , drug_in_preceding_or_same_period=FALSE
+    , drug_in_preceding_period = TRUE
+    , drug_in_preceding_or_same_period = FALSE
     )
 {
     # Optimizing: http://stackoverflow.com/questions/2908822/speed-up-the-loop-operation-in-r
@@ -2631,45 +2631,45 @@ cris$admissions_and_drug_use_by_calendar_periods <- function(
     if (drug_in_preceding_or_same_period) {
         # drug use in the SAME OR THE IMMEDIATELY PRECEDING PERIOD
         calendar_periods_df <- data.frame(
-            period_num=2 : n_periods
-            , period_start=period_start[2 : n_periods]
-            , period_end=period_end[2 : n_periods]
-            , period_length_days=as.numeric(
+            period_num = 2 : n_periods
+            , period_start = period_start[2 : n_periods]
+            , period_end = period_end[2 : n_periods]
+            , period_length_days = as.numeric(
                 period_end[2 : n_periods]
                 - period_start[2 : n_periods]
                 + 1
             )
-            , relevant_drug_period_start=period_start[1 : (n_periods - 1)]
-            , relevant_drug_period_end=period_end[2 : n_periods] # NB. Each drug period covers two measurement periods.
+            , relevant_drug_period_start = period_start[1 : (n_periods - 1)]
+            , relevant_drug_period_end = period_end[2 : n_periods] # NB. Each drug period covers two measurement periods.
         )
     } else {
         if (drug_in_preceding_period) {
             # Default -- Drug use is: drug use in the immediately PRECEDING period
             calendar_periods_df <- data.frame(
-                period_num=2 : n_periods
-                , period_start=period_start[2 : n_periods]
-                , period_end=period_end[2 : n_periods]
-                , period_length_days=as.numeric(
+                period_num = 2 : n_periods
+                , period_start = period_start[2 : n_periods]
+                , period_end = period_end[2 : n_periods]
+                , period_length_days = as.numeric(
                     period_end[2 : n_periods]
                     - period_start[2 : n_periods]
                     + 1
                 )
-                , relevant_drug_period_start=period_start[1 : (n_periods - 1)]
-                , relevant_drug_period_end=period_end[1 : (n_periods - 1)]
+                , relevant_drug_period_start = period_start[1 : (n_periods - 1)]
+                , relevant_drug_period_end = period_end[1 : (n_periods - 1)]
             )
         } else {
             # drug use in SAME period (so: gain one extra period of measurement, the first, which we had to ignore when looking at drug use in the preceding period)
             calendar_periods_df <- data.frame(
-                period_num=1 : n_periods
-                , period_start=period_start[1 : n_periods]
-                , period_end=period_end[1 : n_periods]
-                , period_length_days=as.numeric(
+                period_num = 1 : n_periods
+                , period_start = period_start[1 : n_periods]
+                , period_end = period_end[1 : n_periods]
+                , period_length_days = as.numeric(
                     period_end[1 : n_periods]
                     - period_start[1 : n_periods]
                     + 1
                 )
-                , relevant_drug_period_start=period_start[1 : n_periods]
-                , relevant_drug_period_end=period_end[1 : n_periods]
+                , relevant_drug_period_start = period_start[1 : n_periods]
+                , relevant_drug_period_end = period_end[1 : n_periods]
             )
         }
     }
@@ -2734,7 +2734,7 @@ cris$admissions_and_drug_use_by_calendar_periods <- function(
     })
 
     # Parallel from 2015-07-09
-    resultlist <- foreach(i=1:length(druglist)) %dopar% {
+    resultlist <- foreach(i = 1:length(druglist)) %dopar% {
         drugname <- druglist[i]
         cat("cris$admissions_and_drug_use_by_calendar_periods... processing",
             drugname, "\n")
@@ -2759,7 +2759,7 @@ cris$admissions_and_drug_use_by_calendar_periods <- function(
             ORDER BY
                 data.id
                 , data.period_start
-        ", sep=""))
+        ", sep = ""))
         return(drugresult$used > 0)
     }
     # Now reassemble...
@@ -2784,10 +2784,10 @@ cris$admissions_and_drug_use_by_day <- function(patient_df, druginfo_df,
     first_diagnosis_dates <- patient_df$first_diagnosis_date
     cat("cris$admissions_and_drug_use_by_day.. building big data frame\n")
     big_df <- data.frame(
-        patient_id=rep(patient_ids, each=n_dates)
-        , sex=rep(sexes, each=n_dates)
-        , date=rep(alldates, times=n_patients)
-        , admitted=numeric(n_everything) # zeros
+        patient_id = rep(patient_ids, each = n_dates)
+        , sex = rep(sexes, each = n_dates)
+        , date = rep(alldates, times = n_patients)
+        , admitted = numeric(n_everything) # zeros
     )
     for (drugname in DRUGLIST) {
         big_df[drugname] <- numeric(n_everything) # zeros
@@ -2822,7 +2822,7 @@ cris$admissions_and_drug_use_by_day <- function(patient_df, druginfo_df,
     return(big_df)
 }
 
-cris$age_at_death_by_year_diagnosis <- function(dead_patient_df, ci=0.95)
+cris$age_at_death_by_year_diagnosis <- function(dead_patient_df, ci = 0.95)
 {
     cat("cris$age_at_death_by_year_diagnosis\n")
     data <- ddply(
@@ -2830,22 +2830,22 @@ cris$age_at_death_by_year_diagnosis <- function(dead_patient_df, ci=0.95)
         , ~ sex * yod * diagnosis
         , function(chunkdf) { # if we use summarize, variables like ci are hidden
             data.frame(
-                mean_age_at_death=mean(chunkdf$age_at_death),
-                hci=half_confidence_interval_t(chunkdf$age_at_death, ci=ci)
+                mean_age_at_death = mean(chunkdf$age_at_death),
+                hci = half_confidence_interval_t(chunkdf$age_at_death, ci = ci)
             )
         }
-        , .parallel=TRUE
+        , .parallel = TRUE
     )
     cat("cris$age_at_death_by_year_diagnosis -- ddply done\n")
     return(
         ggplot(
-            data=data
-            , aes(x=yod, y=mean_age_at_death, linetype=diagnosis, colour=sex)
+            data = data
+            , aes(x = yod, y = mean_age_at_death, linetype = diagnosis, colour = sex)
         )
-        + geom_ribbon(aes(ymin=mean_age_at_death - hci,
-                          ymax=mean_age_at_death + hci, fill=sex),
-                      alpha=0.1)
-        + geom_line(size=2)
+        + geom_ribbon(aes(ymin = mean_age_at_death - hci,
+                          ymax = mean_age_at_death + hci, fill = sex),
+                      alpha = 0.1)
+        + geom_line(size = 2)
         + scale_x_continuous("Year of death")
         + scale_y_continuous("Age at death")
         + theme_bw()
@@ -2876,11 +2876,11 @@ cris$p_ever_took_drug_B_if_ever_took_drug_A <- function(druginfo_df, drug_A,
 }
 
 cris$concurrent_drug_use <- function(druginfo_df, druglist,
-                                     timescale=cris$TIMESCALE_OPTIONS)
+                                     timescale = cris$TIMESCALE_OPTIONS)
 {
     cat("cris$concurrent_drug_use...\n")
     n_drugs <- length(druglist)
-    m <- matrix(NA, nrow=n_drugs, ncol=n_drugs)
+    m <- matrix(NA, nrow = n_drugs, ncol = n_drugs)
     rownames(m) <- paste("IF_TOOK", druglist)
     colnames(m) <- paste("P_TOOK", druglist)
     for (r in 1:n_drugs) {
@@ -2902,7 +2902,7 @@ cris$concurrent_drug_use <- function(druginfo_df, druglist,
 #==============================================================================
 
 cris$drug_use_prior_to_admission <- function(admission_df, druginfo_df,
-                                             druglist, time_before_days=90)
+                                             druglist, time_before_days = 90)
 {
     # admission_df should be corrected for back-to-back admissions ***
 
@@ -2910,7 +2910,7 @@ cris$drug_use_prior_to_admission <- function(admission_df, druginfo_df,
     d$drug_window_start_date <- d$admission_date - time_before_days
     d$drug_window_end_date <- d$admission_date - 1
     # Parallel from 2015-07-09
-    resultlist <- foreach(i=1:length(druglist)) %dopar% {
+    resultlist <- foreach(i = 1:length(druglist)) %dopar% {
         drugname <- druglist[i]
         cat("processing", drugname, "...\n")
         result <- sqldf(paste("
@@ -2926,7 +2926,7 @@ cris$drug_use_prior_to_admission <- function(admission_df, druginfo_df,
                 ) AS used_drug
             FROM
                 d
-        ", sep=""))
+        ", sep = ""))
 
         return(result$used_drug)
     }
@@ -2974,7 +2974,7 @@ cris$death_and_ever_used_drug <- function(patient_df, druginfo_df, druglist,
                 data
             ORDER BY
                 data.id
-        ", sep=""))
+        ", sep = ""))
         data[drugname] <- (drugresult$used > 0)
     }
     return(data)
@@ -2995,16 +2995,16 @@ cris$drug_use_death_by_calendar_periods <- function(patient_df, druginfo_df,
           enddate))
     n_periods <- length(period_start)
     calendar_periods_df <- data.frame(
-        period_num=2 : n_periods
-        , period_start=period_start[2 : n_periods]
-        , period_end=period_end[2 : n_periods]
-        , period_length_days=as.numeric(
+        period_num = 2 : n_periods
+        , period_start = period_start[2 : n_periods]
+        , period_end = period_end[2 : n_periods]
+        , period_length_days = as.numeric(
             period_end[2 : n_periods]
             - period_start[2 : n_periods]
             + 1
         )
-        , preceding_period_start=period_start[1 : (n_periods - 1)]
-        , preceding_period_end=period_end[1 : (n_periods - 1)]
+        , preceding_period_start = period_start[1 : (n_periods - 1)]
+        , preceding_period_end = period_end[1 : (n_periods - 1)]
     )
     data <- sqldf("
         SELECT
@@ -3050,7 +3050,7 @@ cris$drug_use_death_by_calendar_periods <- function(patient_df, druginfo_df,
     })
 
     # Parallel from 2015-07-09
-    resultlist <- foreach(i=1:length(druglist)) %dopar% {
+    resultlist <- foreach(i = 1:length(druglist)) %dopar% {
         drugname <- druglist[i]
         cat("cris$drug_use_death_by_calendar_periods... processing",
             drugname, "\n")
@@ -3075,7 +3075,7 @@ cris$drug_use_death_by_calendar_periods <- function(patient_df, druginfo_df,
             ORDER BY
                 data.id
                 , data.period_start
-        ", sep=""))
+        ", sep = ""))
         return(drugresult$used > 0)
     }
     # Now reassemble...
@@ -3098,7 +3098,7 @@ cris$patient_ids_who_took <- function(patient_df, druginfo_df, drugname)
         FROM patient_df, druginfo_df
         WHERE druginfo_df.id = patient_df.id
         AND druginfo_df.drugname = '", drugname, "'
-    ", sep=""))
+    ", sep = ""))
     return(df$took_id)
 
     #    AND druginfo_df.date >= patient_df.first_diagnosis_date
@@ -3109,7 +3109,7 @@ cris$drug_coprescription <- function(patient_df, druginfo_df, druglist)
 {
     cat("cris$drug_coprescription...\n")
     n_drugs <- length(druglist)
-    data <- matrix(NA, nrow=n_drugs, ncol=n_drugs)
+    data <- matrix(NA, nrow = n_drugs, ncol = n_drugs)
     rownames(data) <- druglist
     colnames(data) <- druglist
     for (r in 1:n_drugs) {
@@ -3150,7 +3150,7 @@ cris$add_multidrug_column_count <- function(df, multidrug_column_name,
             names(result) <- multidrug_column_name
             return(result)
         }
-        , .parallel=TRUE
+        , .parallel = TRUE
     )
 }
 
@@ -3166,7 +3166,7 @@ cris$add_multidrug_column_any <- function(df, multidrug_column_name,
 }
 
 cris$polydrug_details <- function(drugs_by_patient_period, drugnames,
-                                  MONOTHERAPY_NAME="-") {
+                                  MONOTHERAPY_NAME = "-") {
     # PARAMETERS
     #   drugs_by_patient_period
     #       which comes from: admissions_and_drug_use_by_calendar_periods
@@ -3214,8 +3214,8 @@ cris$polydrug_details <- function(drugs_by_patient_period, drugnames,
                         all_drugs_except_1 <- drugnames[drugnames != d1]
                         on_any_except_1 <- apply(
                             drugs_by_patient_period[, all_drugs_except_1],
-                            MARGIN=1,
-                            FUN=function(x) { any(x) }
+                            MARGIN = 1,
+                            FUN = function(x) { any(x) }
                         )
                         # Monotherapy at some point?
                         monotherapy <- on1 & !on_any_except_1
@@ -3246,23 +3246,23 @@ cris$polydrug_details <- function(drugs_by_patient_period, drugnames,
                         ))
                     }
                     data.frame(
-                        drug1=drug1,
-                        drug2=drug2,
-                        simultaneous=simultaneous,
-                        ever=ever
+                        drug1 = drug1,
+                        drug2 = drug2,
+                        simultaneous = simultaneous,
+                        ever = ever
                     )
                 }
             )
         },
-        .parallel=TRUE
+        .parallel = TRUE
     )
 }
 
-cris$format_polydrug_tables <- function(results, limit_to=NULL,
-                                        drug_shortnames=NULL,
-                                        drop_lower_triangle=FALSE,
-                                        MONOTHERAPY_NAME="-",
-                                        n_digits_pad=3)
+cris$format_polydrug_tables <- function(results, limit_to = NULL,
+                                        drug_shortnames = NULL,
+                                        drop_lower_triangle = FALSE,
+                                        MONOTHERAPY_NAME = "-",
+                                        n_digits_pad = 3)
 {
     # PARAMETER
     #   results of cris$polydrug_details
@@ -3282,43 +3282,43 @@ cris$format_polydrug_tables <- function(results, limit_to=NULL,
         cat("... limiting \n")
         limit_to <- c(limit_to, MONOTHERAPY_NAME)
         results <- subset(results, drug1 %in% limit_to & drug2 %in% limit_to)
-        results$drug1 <- factor(results$drug1, levels=limit_to)
-        results$drug2 <- factor(results$drug2, levels=limit_to)
+        results$drug1 <- factor(results$drug1, levels = limit_to)
+        results$drug2 <- factor(results$drug2, levels = limit_to)
         # ... if you don't alter the levels, the dropped ones hang around
     }
 
     if (!is.null(drug_shortnames)) {
         cat("... renaming \n")
         results$drug1 <- revalue(results$drug1, drug_shortnames,
-                                 warn_missing=FALSE)
+                                 warn_missing = FALSE)
         results$drug2 <- revalue(results$drug2, drug_shortnames,
-                                 warn_missing=FALSE)
+                                 warn_missing = FALSE)
     }
 
     cat("... simultaneous\n")
     simultaneous <- process(daply(
         results, .(drug1, drug2),
-        function(x) str_pad(x$simultaneous, n_digits_pad, pad=" "),
-        .parallel=TRUE))
+        function(x) str_pad(x$simultaneous, n_digits_pad, pad = " "),
+        .parallel = TRUE))
     cat("... ever\n")
     ever <- process(daply(
         results, .(drug1, drug2),
-        function(x) str_pad(x$ever, n_digits_pad, pad=" "),
-        .parallel=TRUE))
+        function(x) str_pad(x$ever, n_digits_pad, pad = " "),
+        .parallel = TRUE))
     cat("... combined\n")
     combined <- process(daply(
         results, .(drug1, drug2),
         function(x) {
-            paste(str_pad(x$simultaneous, n_digits_pad, pad=" "),
+            paste(str_pad(x$simultaneous, n_digits_pad, pad = " "),
                   ":",
-                  str_pad(x$ever, n_digits_pad, pad=" ", side="right"),
-                  sep="")
+                  str_pad(x$ever, n_digits_pad, pad = " ", side = "right"),
+                  sep = "")
         },
-        .parallel=TRUE))
+        .parallel = TRUE))
 
-    return(list(simultaneous=simultaneous,
-                ever=ever,
-                combined=combined))
+    return(list(simultaneous = simultaneous,
+                ever = ever,
+                combined = combined))
 }
 
 #==============================================================================
@@ -3366,7 +3366,7 @@ cris$cpft.get_honos <- function(dbhandle, idlist)
             , brcid
         FROM cpft_endsql.dbo.honos
         WHERE ", cris$sql_id_in_list(idlist, "BrcId"), "
-    ", sep=""))
+    ", sep = ""))
     r <- within(r, {
         assessmentdate <- as.Date(assessmentdate)
         core_complete <- (
@@ -3409,7 +3409,7 @@ cris$cpft.clozapine_clinic_attendance_letters_subset <- function(dbhandle,
         FROM cpft_endsql.dbo.DocumentLibrary
         WHERE ", cris$sql_id_in_list(idlist, "BrcId"), "
             AND CONTAINS(DocumentImage, ' \"clozapine review & monitoring sheet\" ')
-    ", sep="")
+    ", sep = "")
 
     # double quotation marks within single quotes for phrases with CONTAINS:
     # http://support.microsoft.com/kb/246800
@@ -3427,7 +3427,7 @@ cris$cpft.clozapine_clinic_attendance_letters_subset <- function(dbhandle,
 
 cris$fetch_gate_source_row <- function(cn_doc_id, src_table, src_col,
                                        annotation_start, annotation_end,
-                                       extrachars=200)
+                                       extrachars = 200)
 {
     # Works for single rows only
 
@@ -3449,7 +3449,7 @@ cris$fetch_gate_source_row <- function(cn_doc_id, src_table, src_col,
             cpft_endsql.dbo.", src_table, "
         WHERE
             document_id = '", cn_doc_id, "'
-    ", sep="")
+    ", sep = "")
     # cat(query)
     r <- sqlQuery(dbhandle, query)
     r <- within(r, {
@@ -3460,7 +3460,7 @@ cris$fetch_gate_source_row <- function(cn_doc_id, src_table, src_col,
     return(r)
 }
 
-cris$add_drug_context <- function(dbhandle, drughistorydf, extrachars=200)
+cris$add_drug_context <- function(dbhandle, drughistorydf, extrachars = 200)
 {
     # drughistorydf: from get_gate_medication_current
     drughistorydf <- within(drughistorydf, { # columns get added in reverse order
@@ -3488,7 +3488,7 @@ cris$add_drug_context <- function(dbhandle, drughistorydf, extrachars=200)
 }
 
 cris$drug_context_for_drug <- function(dbhandle, drughistorydf, drug_name,
-                                       extrachars=200)
+                                       extrachars = 200)
 {
     return(
         cris$add_drug_context(
@@ -3504,7 +3504,7 @@ cris$patients_who_took <- function(drughistorydf, drug_name)
     unique(subset(drughistorydf, drugname == drug_name)$id )
 }
 
-cris$manually_verify_drug_context <- function(contextdf, current=TRUE)
+cris$manually_verify_drug_context <- function(contextdf, current = TRUE)
 {
     if (current) {
         prompt <- "Enter 1 if drug was current, or 0 if wrong drug or wrong time, or NA to leave unchanged, or 99 to abort, or 55 to go back:"
@@ -3533,7 +3533,7 @@ cris$manually_verify_drug_context <- function(contextdf, current=TRUE)
         cat("\n")
         cat(r$afterphrase, "\n")
         cat("\n\n\n", prompt)
-        c <- scan(what=integer(), n=1)
+        c <- scan(what = integer(), n = 1)
         if (!is.na(c)) {
             if (c == 1) {
                 cat("TRUE\n")

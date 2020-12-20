@@ -7,7 +7,8 @@ library("ggplot2")
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 #==============================================================================
 
-miscvisualize = new.env()
+miscvisualize <- new.env()
+
 
 #==============================================================================
 # Visualize regression output from an lme4 logistic regression
@@ -29,12 +30,12 @@ miscvisualize$visualize_regression_predictions_1cov_1factor <- function(
     fulldata <- model@frame
 
     # ?predict.merMod
-    # methods(class="merMod")
+    # methods(class = "merMod")
 
     # We're going to make a grid of values for the prediction, using
     # expand.grid. That works like:
-    #       expand.grid(a=c(1, 2), b=c(3, 4))
-    #       expand.grid(list(a=c(1, 2), b=c(3, 4)))
+    #       expand.grid(a = c(1, 2), b = c(3, 4))
+    #       expand.grid(list(a = c(1, 2), b = c(3, 4)))
     # We'll use the latter form.
     # But to make a named list, arbitrarily...
 

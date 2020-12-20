@@ -24,13 +24,14 @@ miscstat$VERY_SMALL_NUMBER <- 1e-323 # .Machine$double.xmin is 2.2e-308, but thi
 # Cosmetics
 # =============================================================================
 
-heading <- function(x)
+miscstat$heading <- function(x)
 {
     line <- "==============================================================================="
     cat(paste("\n", line, "\n", x, "\n", line, "\n", sep = ""))
 }
 
-subheading <- function(x)
+
+miscstat$subheading <- function(x)
 {
     line <- "-------------------------------------------------------------------------------"
     cat(paste("\n", line, "\n", x, "\n", line, "\n", sep = ""))
@@ -45,6 +46,7 @@ miscstat$convert_zero_to_very_small_number <- function(x) {
     # for logs: or log(0) will give -Inf and crash the L-BFGS-B optimzer
     ifelse(x == 0, miscstat$VERY_SMALL_NUMBER, x)
 }
+
 
 miscstat$reset_rng_seed <- function() {
     set.seed(0xbeef)
@@ -84,6 +86,7 @@ miscstat$sem <- function(x, na.rm = FALSE) {
     sqrt(var(x)/length(x))
 }
 
+
 miscstat$half_confidence_interval_t <- function(x, ci = 0.95, na.rm = FALSE) {
     if (na.rm) {
         x <- x[!is.na(x)]
@@ -100,11 +103,13 @@ miscstat$half_confidence_interval_t <- function(x, ci = 0.95, na.rm = FALSE) {
     # confidence interval is mean +/- that
 }
 
+
 miscstat$confidence_interval_t <- function(x, ci = 0.95, na.rm = FALSE) {
     hci <- half_confidence_interval_t(x, ci, na.rm = na.rm)
     m <- mean(x, na.rm = na.rm)
     return(c("ci_lower" = m - hci, "ci_upper" = m + hci))
 }
+
 
 miscstat$logistic_regression_odds_ratios <- function(model,
                                                      confint_level = 0.95)
@@ -144,6 +149,7 @@ miscstat$summarize_by_factors <- function(data, depvarname, factornames,
         }
     ))
 }
+
 
 miscstat$summarize_by_factors_datatable <- function(dt, depvarname, factornames) {
     # http://stackoverflow.com/questions/12391950/variably-selecting-assigning-to-fields-in-a-data-table
@@ -222,6 +228,7 @@ miscstat$pretty_two_group_t_test <- function(values_a, values_b,
     return(r)
 }
 
+
 miscstat$pretty_two_group_chisq_contingency_test <- function(
         values_a, values_b, familywise_n = 1, factor_levels = NULL,
         count_sep = ":",  # can also use ":n="
@@ -270,13 +277,13 @@ miscstat$pretty_two_group_chisq_contingency_test <- function(
     }
     r$pretty_counts_a <- paste(
         datsum[group == "a",
-               .(pretty = paste(value, count, sep=count_sep))]$pretty,
-        collapse=", "
+               .(pretty = paste(value, count, sep = count_sep))]$pretty,
+        collapse = ", "
     )
     r$pretty_counts_b <- paste(
         datsum[group == "b",
-               .(pretty = paste(value, count, sep=count_sep))]$pretty,
-        collapse=", "
+               .(pretty = paste(value, count, sep = count_sep))]$pretty,
+        collapse = ", "
     )
     if (n_a == 0 || n_b == 0) {
         return(r)
@@ -294,6 +301,7 @@ miscstat$pretty_two_group_chisq_contingency_test <- function(
 
     return(r)
 }
+
 
 miscstat$pretty_two_group_paired_regression <- function(
         DT, ycolname, xcolname, groupcolname, grouplevel_a, grouplevel_b,
@@ -461,6 +469,7 @@ miscstat$pretty_two_group_paired_regression <- function(
     return(result)
 }
 
+
 miscstat$IGNORE_ME <- '
     DT <- data.table(
         x = c(1, 2, 3, 10, 11, 12),
@@ -470,6 +479,7 @@ miscstat$IGNORE_ME <- '
 
     miscstat$pretty_two_group_paired_regression(DT, "y", "x", "g", 1, 2)
 '
+
 
 miscstat$two_group_multiple_regression_table <- function(
     DT, groupcolname, varcolnames,
@@ -619,6 +629,7 @@ miscstat$sidak_alpha <- function(familywise_alpha, n_comparisons) {
     1 - (1 - familywise_alpha) ^ (1 / n_comparisons)
 }
 
+
 miscstat$sidak_p <- function(uncorrected_p, n_comparisons) {
     # returns corrected p, which gets higher with n_comparisons
     # ... the problem here is equivalent to taking a corrected alpha
@@ -628,9 +639,11 @@ miscstat$sidak_p <- function(uncorrected_p, n_comparisons) {
     1 - ((1 - uncorrected_p) ^ n_comparisons)
 }
 
+
 miscstat$sidak_familywise_alpha <- function(alpha_per_test, n_comparisons) {
     1 - (1 - alpha_per_test) ^ (n_comparisons)
 }
+
 
 miscstat$sidak_corrected_p <- function(uncorrected_p, n_comparisons) {
     # returns corrected p value
@@ -649,9 +662,11 @@ miscstat$aic <- function(nLL, k) {
     # = 2k - 2ln(L)
 }
 
+
 miscstat$nll_from_aic <- function(aic, k) {
     (aic - 2 * k ) / 2
 }
+
 
 # Strong argument to prefer AICc over AIC:
 # http://en.wikipedia.org/wiki/Akaike_information_criterion
@@ -665,6 +680,7 @@ miscstat$aicc <- function(nLL, k, n) {
 
     aic(nLL, k) + 2 * k * (k + 1) / (n - k - 1)
 }
+
 
 miscstat$bic <- function(nLL, k, n) {
     # Bayesian Information Criterion
@@ -682,6 +698,7 @@ miscstat$bic <- function(nLL, k, n) {
     2 * nLL + k * log(n)
     # ... = -2 ln(L) + k ln(n)
 }
+
 
 miscstat$lr_test <- function(model1_nLL, model1_df, model2_nLL, model2_df) {
     # Ensure df2 > df1
@@ -719,8 +736,8 @@ miscstat$lr_test <- function(model1_nLL, model1_df, model2_nLL, model2_df) {
 miscstat$p_data_or_more_extreme_from_normal <- function(x, means, sds) {
     ifelse(
         x > means,
-        2 * (1 - pnorm(x, means, sds, lower.tail=TRUE) ),
-        2 * (1 - pnorm(x, means, sds, lower.tail=FALSE) )
+        2 * (1 - pnorm(x, means, sds, lower.tail = TRUE) ),
+        2 * (1 - pnorm(x, means, sds, lower.tail = FALSE) )
     )
 }
 
@@ -738,19 +755,19 @@ miscstat$softmax <- function(x, b = 1, debug = TRUE) {
     #   giving an infinity.
     # - input vector may have NA values in
     # - return value: vector of probabilities
-    constant <- mean(x, na.rm=TRUE)
+    constant <- mean(x, na.rm = TRUE)
     products <- x * b - constant
     # ... softmax is invariant to addition of a constant: Daw article and
     #     http://www.faqs.org/faqs/ai-faq/neural-nets/part2/section-12.html#b
-    if (max(products, na.rm=TRUE) > MAX_EXPONENT) {
-        if (debug) cat("OVERFLOW in softmax(): x =", x, ", b =", b, ", constant =", constant, ", products=", products, "\n")
+    if (max(products, na.rm = TRUE) > MAX_EXPONENT) {
+        if (debug) cat("OVERFLOW in softmax(): x =", x, ", b =", b, ", constant =", constant, ", products = ", products, "\n")
         answer <- rep(0, length(x))
         answer[which.max(x)] <- 1
         answer[is.na(x)] <- NA
     }
     else {
         exponented <- exp(products)
-        answer <- exponented / sum(exponented, na.rm=TRUE)
+        answer <- exponented / sum(exponented, na.rm = TRUE)
     }
     return(answer)
 }
@@ -819,8 +836,8 @@ miscstat$rvfPlot <- function(model, FONTSIZE = 10) {
 # -----------------------------------------------------------------------------
 
 miscstat$pairwise_contrasts <- function(
-        term, model, alternative = c("two.sided", "less", "greater"),
-        DEBUG = FALSE) {
+        term, model, alternative = c("two.sided", "less", "greater"))
+{
     alternative <- match.arg(alternative)
     # We'd normally do:
     #
@@ -872,17 +889,19 @@ miscstat$pairwise_contrasts <- function(
     return(d)
 }
 
+
 miscstat$get_n_for_factor <- function(term, model) {
-    factors <- strsplit(term, ":", fixed=TRUE)[[1]]
+    factors <- strsplit(term, ":", fixed = TRUE)[[1]]
     d <- model@frame
     n_list <- count(d, factors)$freq
     harmonic_mean_n <- miscmath$harmonic_mean(n_list)
     return(data.frame(
-        term=term,
-        n_list=paste(n_list, collapse=","),
-        harmonic_mean_n=harmonic_mean_n
+        term = term,
+        n_list = paste(n_list, collapse = ","),
+        harmonic_mean_n = harmonic_mean_n
     ))
 }
+
 
 miscstat$are_predictors_factors <- function(model, predictors) {
     if (length(predictors) < 1) {
@@ -895,14 +914,17 @@ miscstat$are_predictors_factors <- function(model, predictors) {
     }
 }
 
+
 miscstat$predictor_names_from_term <- function(term) {
     strsplit(term, ":")[[1]]
 }
+
 
 miscstat$are_all_predictors_in_term_factors <- function(model, term) {
     predictors <- miscstat$predictor_names_from_term(term)
     all(miscstat$are_predictors_factors(model, predictors))
 }
+
 
 miscstat$do_terms_contain_only_factors <- function(model, terms) {
     sapply(
@@ -912,9 +934,10 @@ miscstat$do_terms_contain_only_factors <- function(model, terms) {
     )
 }
 
+
 miscstat$sed_info <- function(
-        model, term=NULL,
-        alternative=c("two.sided", "less", "greater"), DEBUG=FALSE) {
+        model, term = NULL,
+        alternative = c("two.sided", "less", "greater"), DEBUG = FALSE) {
     # model: an lmer/lmerTest model.
     # term: e.g. "area:manipulation:csvalence"
     alternative <- match.arg(alternative)
@@ -935,7 +958,7 @@ miscstat$sed_info <- function(
     }
 
     # Find the highest-order interaction
-    n_colons <- lapply(useful_terms, misclang$n_char_occurrences, char=":")
+    n_colons <- lapply(useful_terms, misclang$n_char_occurrences, char = ":")
     highest_order_interaction <- useful_terms[which.max(n_colons)]
 
     # Pairwise contrasts for factors
@@ -1031,6 +1054,7 @@ miscstat$sigstars <- function(p, default = "") {
                   ifelse(p < 0.05, "*", default)))
 }
 
+
 #lmer_effect_size_1_poor <- function(lmer_model) {
 #    coeffs <- coef(summary(lmer_model))
 #    colnames(coeffs) <- c(
@@ -1050,6 +1074,7 @@ miscstat$sigstars <- function(p, default = "") {
 #    # ... wrong but close?
 #    return(dt)
 #}
+
 
 miscstat$sum_of_squares <- function(x) {
     # The sum of squared deviations from the mean
@@ -1086,6 +1111,7 @@ miscstat$cohen_size_eta_sq <- function(eta_sq, default = "-") {
            ifelse(eta_sq >= 0.06, "medium",
                   ifelse(eta_sq >= 0.01, "small", default)))
 }
+
 
 miscstat$lmer_effect_size_eta_sq <- function(lmer_model) {
     if (class(lmer_model) != "merModLmerTest") {
@@ -1255,7 +1281,7 @@ miscstat$check_distribution <- function(model, silent = FALSE)
     data <- model_call[3]
     model_text <- paste0(function_name, "(", formula, ", data = ", data, ")")
 
-    subheading(paste0("Distribution checks for: ", model_text))
+    miscstat$subheading(paste0("Distribution checks for: ", model_text))
 
     # -------------------------------------------------------------------------
     # Shapiro-Wilk test for normality
@@ -1297,7 +1323,7 @@ miscstat$check_distribution <- function(model, silent = FALSE)
     # -------------------------------------------------------------------------
     # Q-Q plot (showing deviation from normality)
     # -------------------------------------------------------------------------
-    if (!exists('stat_qq_line', where='package:ggplot2', mode='function')) {
+    if (!exists('stat_qq_line', where = 'package:ggplot2', mode = 'function')) {
         # https://stackoverflow.com/questions/15214411/see-if-a-variable-function-exists-in-a-package
         cat('No stat_qq_line; install a later version of ggplot2, e.g. with:
 
@@ -1306,7 +1332,7 @@ miscstat$check_distribution <- function(model, silent = FALSE)
         qq_plot <- NULL
     } else {
         qq_plot <- (
-            ggplot(NULL, aes(sample=resid))
+            ggplot(NULL, aes(sample = resid))
             + stat_qq()
             + stat_qq_line()
             + ggtitle(paste0("Q-Q plot of residuals for: ", model_text))
@@ -1340,12 +1366,12 @@ miscstat$IGNOREME_MISCSTAT_EXAMPLE <- "
     # WORKING/THINKING
 
     testdata <- expand.grid(
-        A=c(1, 2, 3),
-        B=c(10, 11, 12),
-        subj=seq(1,50)
+        A = c(1, 2, 3),
+        B = c(10, 11, 12),
+        subj = seq(1,50)
     )
     testdata <- within(testdata, {
-        y <- 13 + 0.5*A + 6*B + rnorm(sd=0.5, n=nrow(testdata))
+        y <- 13 + 0.5*A + 6*B + rnorm(sd = 0.5, n = nrow(testdata))
         # will give intercept = 13 + 0.5*1 + 6*10 = 73.5 (at A1, B1)
         #   A2 effect = 0.5 (relative to A1)
         #   A3 effect = 1   (relative to A1)
@@ -1356,7 +1382,7 @@ miscstat$IGNOREME_MISCSTAT_EXAMPLE <- "
         B <- as.factor(B)
         subj <- as.factor(subj)
     })
-    testmodel <- lmer(y ~ A*B + (1 | subj), data=testdata)
+    testmodel <- lmer(y ~ A*B + (1 | subj), data = testdata)
     print(sed_info(testmodel))
 
 "

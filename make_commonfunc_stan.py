@@ -117,7 +117,7 @@ This is probably preferable - a script to make the .stan file.
 
 - Functions related to ``categorical`` and ``categorical_logit`` distributions.
 
-"""
+"""  # noqa
 
 import argparse
 from enum import Enum
@@ -389,7 +389,7 @@ _ = """
         real logit = log_p - log_1mp;
         return logit;
     }
-"""
+"""  # noqa
 
 SIMPLE_FUNCTIONS = """
     // ------------------------------------------------------------------------
@@ -817,7 +817,7 @@ SIMPLE_FUNCTIONS = """
         return z;
     }
 
-"""
+"""  # noqa
 
 DUFF_ANOVA_FUNCTIONS = """
     // ------------------------------------------------------------------------
@@ -1032,7 +1032,7 @@ LOG_PROB_HEADER = """
             vector * vector
 
     */
-"""
+"""  # noqa
 
 LOG_PROB_HELPERS = """
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1198,7 +1198,7 @@ LOG_PROB_HELPERS = """
             }
         }
     }
-"""
+"""  # noqa
 
 REPARAM_HEADER = """
     // ------------------------------------------------------------------------
@@ -1568,7 +1568,7 @@ def get_beta_distribution() -> str:
     // - Stan 2.16.0 manual p532; R ?dbeta;
     //   https://www.rdocumentation.org/packages/visualize/versions/4.3.0/topics/visualize.beta
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    """
+    """  # noqa
 
     supported_combinations = []  # type: List[Tuple[VarDescriptor, VarDescriptor, VarDescriptor]]  # noqa
     for y in ALL_TYPES:
@@ -1820,7 +1820,7 @@ def make_reparam_normal(y: VarDescriptor,
     The reparameterization is to a standard (unit) normal distribution,
     N(0, 1). See get_reparamaterized_normal().
     """
-    if ((y.dimensions > 1  or y.singleton) and
+    if ((y.dimensions > 1 or y.singleton) and
             (not mu.singleton or not sigma.singleton)):
         raise NotImplementedError("y={}, mu={}, sigma={}".format(
             y, mu, sigma))
@@ -1988,7 +1988,7 @@ def make_reparam_normal(y: VarDescriptor,
             fe=funcname_extra,
             ya=y.abbreviation,
             constraints=constraints,
-        )
+        )  # noqa
     else:
         raise AssertionError("bug")
 
@@ -2081,7 +2081,7 @@ def make_reparam_cauchy(y: VarDescriptor,
     The reparameterization is to a uniform distribution.
     See get_reparameterized_cauchy() for docs.
     """
-    if ((y.dimensions > 1  or y.singleton) and
+    if ((y.dimensions > 1 or y.singleton) and
             (not mu.singleton or not sigma.singleton)):
         raise NotImplementedError("y={}, mu={}, sigma={}".format(
             y, mu, sigma))

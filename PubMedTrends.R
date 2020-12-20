@@ -10,14 +10,15 @@ library("directlabels")
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 #==============================================================================
 
-PubMedTrends = new.env()
+PubMedTrends <- new.env()
+
 
 ########################
 # Download PubMed Data #
 ########################
 
-PubMedTrends$PubMedTrend <- function(query, yrStart=1950, yrMax=2009,
-                                     calculate_relative_frequencies=FALSE)
+PubMedTrends$PubMedTrend <- function(query, yrStart = 1950, yrMax = 2009,
+                                     calculate_relative_frequencies = FALSE)
 {
     ### Some error checking ###
     if (is.numeric(yrStart) == FALSE || is.numeric(yrMax) == FALSE) {
@@ -25,7 +26,7 @@ PubMedTrends$PubMedTrend <- function(query, yrStart=1950, yrMax=2009,
     }
     if (yrStart < 1800) {
         stop(paste("Sure you want to look for hits from the 17th century (yrStart = " ,
-                   yrStart, ")?\n", sep=""))
+                   yrStart, ")?\n", sep = ""))
     }
     this.year <- Sys.time()
     this.year <- as.integer(format(this.year, "%Y"))
@@ -56,15 +57,15 @@ PubMedTrends$PubMedTrend <- function(query, yrStart=1950, yrMax=2009,
             # tell progressbar how it's going
             setTxtProgressBar(pb, i)
             # add publication date [dp] to query
-            query.parsed <- paste(query.gsub, "+AND+",i, "%5Bppdat%5D", sep="")
+            query.parsed <- paste(query.gsub, "+AND+",i, "%5Bppdat%5D", sep = "")
             # Get XML with number of hits for query.parsed
 
             url <- paste("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&rettype=count&term=",
                          query.parsed, sep = "")
-            # cat("\n", url, "\n", sep="")
+            # cat("\n", url, "\n", sep = "")
             pub.esearch <- getURL(url)
             # Parse XML
-            # cat("\n", pub.esearch, "\n", sep="")
+            # cat("\n", pub.esearch, "\n", sep = "")
             pub.esearch <- xmlTreeParse(pub.esearch, asText = TRUE)
             # Get number of hits from XML
             pub.count <- as.numeric(xmlValue(pub.esearch[["doc"]][["eSearchResult"]][["Count"]]))
@@ -86,7 +87,7 @@ PubMedTrends$PubMedTrend <- function(query, yrStart=1950, yrMax=2009,
     if (calculate_relative_frequencies) {
         ### Calculate relative frequencies ###
         # load file with pubmed total citations from 1947-2009
-        load(file="total_table")
+        load(file = "total_table")
         # match year
         match <- match(df$year, total.table$year)
         # add total count
@@ -99,10 +100,11 @@ PubMedTrends$PubMedTrend <- function(query, yrStart=1950, yrMax=2009,
     return(df)
 }
 
+
 #######################
 ### Show total hits ###
 #######################
-PubMedTrends$PubTotalHits <- function(args=FALSE)
+PubMedTrends$PubTotalHits <- function(args = FALSE)
 {
   # Get column total for query 'x'
   GetCount <- function(x) {

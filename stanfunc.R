@@ -16,16 +16,17 @@ library(reshape)
 library(rstan)
 library(stringr)
 
+
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 #==============================================================================
 
 stanfunc <- new.env()
 
-DEFAULT_CHAINS <- 8
-DEFAULT_ITER <- 2000
-DEFAULT_INIT <- "0"  # the Stan default, "random", uses the range -2 to +2
-DEFAULT_SEED <- 1234  # for consistency across runs
+stanfunc$DEFAULT_CHAINS <- 8
+stanfunc$DEFAULT_ITER <- 2000
+stanfunc$DEFAULT_INIT <- "0"  # the Stan default, "random", uses the range -2 to +2
+stanfunc$DEFAULT_SEED <- 1234  # for consistency across runs
 
 
 #==============================================================================
@@ -43,10 +44,10 @@ stanfunc$load_or_run_stan <- function(
         save_cpp_filename = NULL,
         save_code_filename = NULL,  # old name for save_cpp_filename
         forcerun = FALSE,
-        chains = DEFAULT_CHAINS,
-        iter = DEFAULT_ITER,
-        init = DEFAULT_INIT,  # the default, "random", uses the range -2 to +2
-        seed = DEFAULT_SEED,  # for consistency across runs
+        chains = stanfunc$DEFAULT_CHAINS,
+        iter = stanfunc$DEFAULT_ITER,
+        init = stanfunc$DEFAULT_INIT,  # the default, "random", uses the range -2 to +2
+        seed = stanfunc$DEFAULT_SEED,  # for consistency across runs
         cache_filetype = c("rds", "rda"),
         ...)
 {
@@ -83,7 +84,7 @@ stanfunc$load_or_run_stan <- function(
             stop("Must specify 'model_code' to use 'save_stancode_filename'")
         }
         cat("--- Saving Stan code to file: ",
-            save_stancode_filename, "...\n", sep="")
+            save_stancode_filename, "...\n", sep = "")
         stancodefile <- file(save_stancode_filename)
         writeLines(model_code, stancodefile)
         close(stancodefile)
@@ -96,7 +97,7 @@ stanfunc$load_or_run_stan <- function(
 
     if (saving && !is.null(save_data_filename)) {
         cat("--- Saving Stan data to file: ",
-            save_data_filename, "...\n", sep="")
+            save_data_filename, "...\n", sep = "")
         saveRDS(data, file = save_data_filename)
         cat("... saved\n")
     }
@@ -117,7 +118,7 @@ stanfunc$load_or_run_stan <- function(
         cpp_code <- stanc_result$cppcode
 
         cat("--- Saving C++ code to file: ",
-            save_cpp_filename, "...\n", sep="")
+            save_cpp_filename, "...\n", sep = "")
         cppfile <- file(save_cpp_filename)
         writeLines(cpp_code, cppfile)
         close(cppfile)
@@ -135,12 +136,12 @@ stanfunc$load_or_run_stan <- function(
         if (cache_filetype == "rds") {
             # .Rds
             cat("Loading Stan model fit from RDS file: ",
-                fit_filename, "...\n", sep="")
+                fit_filename, "...\n", sep = "")
             fit <- readRDS(fit_filename)
         } else {
             # .Rda, .Rdata
             cat("Loading Stan model fit from RDA file: ",
-                fit_filename, "...\n", sep="")
+                fit_filename, "...\n", sep = "")
             fit <- NULL  # so we can detect the change when we load
             load(fit_filename)  # assumes it will be called 'fit'
             if (class(fit) != "stanfit") {
@@ -165,14 +166,14 @@ stanfunc$load_or_run_stan <- function(
                 n_cores_stan, " when ", n_cores_available,
                 " are available; retry after issuing the command\n",
                 "    options(mc.cores = parallel::detectCores())",
-                sep=""))
+                sep = ""))
         }
         if (n_cores_stan <= 1) {
             warning("Running with a single CPU core; Stan may be slow")
         }
 
         cat(paste("--- Running Stan, model ", model_name,
-                  ", starting at ", Sys.time(), "...\n", sep=""))
+                  ", starting at ", Sys.time(), "...\n", sep = ""))
 
         # Stan now supports parallel operation directly
         # Note that it distinguishes between 'file' being NULL (OK) or
@@ -208,12 +209,12 @@ stanfunc$load_or_run_stan <- function(
         if (cache_filetype == "rds") {
             # .Rds
             cat("--- Saving Stan model fit to RDS file: ",
-                fit_filename, "...\n", sep="")
+                fit_filename, "...\n", sep = "")
             saveRDS(fit, file = fit_filename)  # load with readRDS()
         } else {
             # .Rda, .Rdata
             cat("--- Saving Stan model fit to RDA file: ",
-                fit_filename, "...\n", sep="")
+                fit_filename, "...\n", sep = "")
             save(list = c("fit"), file = fit_filename)
         }
         cat("... saved\n")
@@ -295,7 +296,7 @@ stanfunc$load_or_run_bridge_sampler <- function(
         # Save
         # ---------------------------------------------------------------------
         cat("--- Saving bridge_sampler() fit to RDS file: ",
-            filename, "...\n", sep="")
+            filename, "...\n", sep = "")
         saveRDS(b, file = filename)  # load with readRDS()
         cat("... saved\n")
     }
@@ -310,8 +311,8 @@ stanfunc$load_or_run_vb <- function(
         file = NULL,
         model_code = "",
         forcerun = FALSE,
-        init = DEFAULT_INIT,
-        seed = DEFAULT_SEED,
+        init = stanfunc$DEFAULT_INIT,
+        seed = stanfunc$DEFAULT_SEED,
         ...)
 {
     if (is.null(file) == (model_code == "")) {
@@ -324,7 +325,7 @@ stanfunc$load_or_run_vb <- function(
         # ---------------------------------------------------------------------
 
         cat("Loading Stan VB fit from RDS file: ",
-            vbfit_filename, "...\n", sep="")
+            vbfit_filename, "...\n", sep = "")
         vb_fit <- readRDS(vbfit_filename)
         cat("... loaded\n")
 
@@ -334,7 +335,7 @@ stanfunc$load_or_run_vb <- function(
         # Run
         # ---------------------------------------------------------------------
         cat(paste("Running variational Bayes approximation to Stan model ",
-                  model_name, ", starting at ", Sys.time(), "...\n", sep=""))
+                  model_name, ", starting at ", Sys.time(), "...\n", sep = ""))
 
         cat("Building model...")
         if (!is.null(file)) {
@@ -360,7 +361,7 @@ stanfunc$load_or_run_vb <- function(
         # Save
         # ---------------------------------------------------------------------
         cat("--- Saving Stan model fit to RDS file: ",
-            vbfit_filename, "...\n", sep="")
+            vbfit_filename, "...\n", sep = "")
         saveRDS(vb_fit, file = vbfit_filename)  # load with readRDS()
         cat("... saved\n")
     }
@@ -376,10 +377,10 @@ stanfunc$quickrun <- function(
     file = NULL,
     model_code = "",
     forcerun = FALSE,
-    chains = DEFAULT_CHAINS,
-    iter = DEFAULT_ITER,
-    init = DEFAULT_INIT,  # the default, "random", uses the range -2 to +2
-    seed = DEFAULT_SEED,  # for consistency across runs
+    chains = stanfunc$DEFAULT_CHAINS,
+    iter = stanfunc$DEFAULT_ITER,
+    init = stanfunc$DEFAULT_INIT,  # the default, "random", uses the range -2 to +2
+    seed = stanfunc$DEFAULT_SEED,  # for consistency across runs
     control = NULL,
     vb = FALSE,  # quick-and-dirty variational Bayes
     save_code = FALSE,  # unnecessary; both Stan and C++ code is extractable from the Stan fit
@@ -395,14 +396,14 @@ stanfunc$quickrun <- function(
 
     # Note that C++ code is extractable from the Stan fit.
     fit_filename <- file.path(fit_cache_dir,
-                              paste(model_name, FIT_SUFFIX, sep=""))
+                              paste(model_name, FIT_SUFFIX, sep = ""))
     bridge_filename <- file.path(fit_cache_dir,
-                              paste(model_name, BRIDGE_SUFFIX, sep=""))
+                              paste(model_name, BRIDGE_SUFFIX, sep = ""))
     vbfit_filename <- file.path(fit_cache_dir,
-                                paste(model_name, VBFIT_SUFFIX, sep=""))
+                                paste(model_name, VBFIT_SUFFIX, sep = ""))
     if (save_code) {
         cpp_filename <- file.path(fit_cache_dir,
-                                  paste(model_name, CPP_SUFFIX, sep=""))
+                                  paste(model_name, CPP_SUFFIX, sep = ""))
     } else {
         cpp_filename <- NULL
     }
@@ -418,7 +419,7 @@ stanfunc$quickrun <- function(
     if (vb) {
 
         cat(paste("Running variational Bayes approximation to Stan model ",
-                  model_name, "...\n", sep=""))
+                  model_name, "...\n", sep = ""))
         result$vb_fit <- stanfunc$load_or_run_vb(
             data = data,
             file = file,
@@ -432,7 +433,7 @@ stanfunc$quickrun <- function(
 
     } else {
 
-        cat(paste("Running Stan model ", model_name, "...\n", sep=""))
+        cat(paste("Running Stan model ", model_name, "...\n", sep = ""))
 
         # Stan fit
         result$fit <- stanfunc$load_or_run_stan(
@@ -544,7 +545,7 @@ stanfunc$compare_model_evidence <- function(bridgesample_list_list,
     )]
 
     d[, model_rank := frank(-log_marginal_likelihood,
-                            ties.method="min")]  # "sports method"
+                            ties.method = "min")]  # "sports method"
     # ... bigger (less negative) is better
     # ... and rank() ranks from smallest (-> 1) to biggest, so want the reverse
     # ... and data.table::frank is quicker than rank (not that we care here!)
@@ -774,7 +775,7 @@ stanfunc$annotated_parameters <- function(
     # Find nonzero parameters (credible interval excludes zero)
 
     get_colname <- function(prob) {
-        return(paste(prob * 100, "%", sep=""))
+        return(paste(prob * 100, "%", sep = ""))
     }
 
     nonzero_at <- function(lower, upper) {
@@ -860,18 +861,18 @@ stanfunc$parallel_stan <- function(
         code = "",
         data,
         cores = parallel:detectCores(),
-        chains = DEFAULT_CHAINS,
-        iter = DEFAULT_ITER,
+        chains = stanfunc$DEFAULT_CHAINS,
+        iter = stanfunc$DEFAULT_ITER,
         warmup = floor(iter/2),
-        seed = DEFAULT_SEED)
+        seed = stanfunc$DEFAULT_SEED)
 {
     warning("stanfunc$parallel_stan: DEPRECATED; superseded by developments to rstan")
-    cat("parallel_stan: cores=", cores,
-        ", chains=", chains,
-        ", iter=", iter,
-        ", seed=", seed,
+    cat("parallel_stan: cores = ", cores,
+        ", chains = ", chains,
+        ", iter = ", iter,
+        ", seed = ", seed,
         "\n",
-        sep="")
+        sep = "")
 
     cat("--- Step 1: compile the model (and run it once, very briefly, ignoring its output)\n")
     f1 <- stan(file = file,
@@ -925,17 +926,17 @@ stanfunc$load_or_run_stan_old <- function(data, code, file, forcerun = FALSE)
 
 stanfunc$parallel_stan_reuse_fit <- function(f1, data,
                                              cores = detectCores(),
-                                             chains = DEFAULT_CHAINS,
-                                             iter = DEFAULT_ITER,
-                                             seed = DEFAULT_SEED)
+                                             chains = stanfunc$DEFAULT_CHAINS,
+                                             iter = stanfunc$DEFAULT_ITER,
+                                             seed = stanfunc$DEFAULT_SEED)
 {
     warning("stanfunc$parallel_stan_reuse_fit: DEPRECATED; superseded by developments to rstan")
-    cat("parallel_stan_reuse_fit: cores=", cores,
-        ", chains=", chains,
-        ", iter=", iter,
-        ", seed=", seed,
+    cat("parallel_stan_reuse_fit: cores = ", cores,
+        ", chains = ", chains,
+        ", iter = ", iter,
+        ", seed = ", seed,
         "\n",
-        sep="")
+        sep = "")
 
     cat("--- Reusing existing model\n")
     sflist2 <- mclapply(
@@ -1131,7 +1132,7 @@ stanfunc$HDIofMCMC <- function(sampleVec, credMass = 0.95)
 }
 
 
-TEST_HDI_OF_MCMC <- '
+stanfunc$TEST_HDI_OF_MCMC <- '
     # See Kruschke (2011) p41, p628
     set.seed(1234)
     n = 20000
@@ -1264,7 +1265,7 @@ stanfunc$hdi_proportion_excluding_test_value <- function(
         if (debug) cat("testing proportion ", width,
                        ", interval: ", interval,
                        ", fails? ", current_interval_fails,
-                       "\n", sep="")
+                       "\n", sep = "")
         if (current_interval_fails) {
             # current interval fails, so return the previous
             return(prev_width)
@@ -1340,7 +1341,7 @@ stanfunc$plot_density_function <- function(
         my_density$y,
         xlab = parname,
         ylab = "Density",
-        main = paste("Posterior distribution of ", parname, sep=""),
+        main = paste("Posterior distribution of ", parname, sep = ""),
         type = "l",
         bty = "n",
         col = colour_density,
@@ -1366,7 +1367,7 @@ stanfunc$plot_density_function <- function(
             text(q[i], ypos_quantiles_upper,
                  prettyNum(q[i], digits = digits), col = colour_quantiles)
             text(q[i], ypos_quantiles_lower,
-                 paste(quantile_probs[i] * 100, "%", sep=""),
+                 paste(quantile_probs[i] * 100, "%", sep = ""),
                  col = colour_quantiles)
         }
     }
@@ -1420,7 +1421,7 @@ stanfunc$plot_density_function <- function(
         ypos_hdi_text <- mean_density_at_hdi + max_density * -0.05
         ypos_hdi_nums <- mean_density_at_hdi + max_density * 0.05
         text(mean(hdi_limits), ypos_hdi_text,
-             paste(hdi_percent, "% HDI", sep=""), col = colour_hdi)
+             paste(hdi_percent, "% HDI", sep = ""), col = colour_hdi)
         text(hdi_limits[1], ypos_hdi_nums,
              prettyNum(hdi_limits[1], digits = digits), col = colour_hdi)
         text(hdi_limits[2], ypos_hdi_nums,
@@ -1479,7 +1480,7 @@ stanfunc$ggplot_density_function <- function(
         + geom_line(colour = colour_density)
         + xlab(parname)
         + ylab("Density")
-        + ggtitle(paste("Posterior distribution of ", parname, sep=""))
+        + ggtitle(paste("Posterior distribution of ", parname, sep = ""))
         + ylim(0, max_density * 1.2)
     )
     if (!is.null(xlim)) {
@@ -1505,7 +1506,7 @@ stanfunc$ggplot_density_function <- function(
                            label = prettyNum(q[i], digits = digits),
                            colour = colour_quantiles)
                 + annotate("text", x = q[i], y = ypos_quantiles_lower,
-                           label = paste(quantile_probs[i] * 100, "%", sep=""),
+                           label = paste(quantile_probs[i] * 100, "%", sep = ""),
                            colour = colour_quantiles)
             )
         }
@@ -1559,7 +1560,7 @@ stanfunc$ggplot_density_function <- function(
                 linetype = lty_hdi,
             )
             + annotate("text", x = mean(hdi_limits), y = ypos_hdi_text,
-                       label = paste(hdi_percent, "% HDI", sep=""),
+                       label = paste(hdi_percent, "% HDI", sep = ""),
                        colour = colour_hdi,
                        vjust = hdi_text_vjust)
             + annotate("text", x = hdi_limits[1], y = ypos_hdi_nums,
@@ -1784,12 +1785,12 @@ stanfunc$generate_par_with_indices <- function(pn, pd)
     #cat("indices: \n"); print(indices)
     parnames <- NULL
     for (r in 1:nrow(indices)) {
-        name <- paste(pn, "[", sep="")
+        name <- paste(pn, "[", sep = "")
         for (c in 1:ncol(indices)) {
-            if (c > 1) name <- paste(name, ",", sep="")
-            name <- paste(name, indices[r,c], sep="")
+            if (c > 1) name <- paste(name, ",", sep = "")
+            name <- paste(name, indices[r,c], sep = "")
         }
-        name <- paste(name, "]", sep="")
+        name <- paste(name, "]", sep = "")
         parnames <- c(parnames, name)
     }
     #cat("parnames: \n"); print(parnames)

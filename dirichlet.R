@@ -4,36 +4,36 @@
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 #==============================================================================
 
-dirichlet = new.env()
+dirichlet <- new.env()
 
 #==============================================================================
 # Stephan et al. (2009) Neuroimage: Dirichlet parameter estimation
 #==============================================================================
 
-dirichlet$dirichlet_exceedance_by_sampling <- function(alpha, Nsamp=1e6) {
+dirichlet$dirichlet_exceedance_by_sampling <- function(alpha, Nsamp = 1e6) {
     # See https://github.com/neurodebian/spm8/blob/octave/spm_dirichlet_exceedance.m
     cat("dirichlet_exceedance, Nsamp =", Nsamp, "...\n")
-    NK = length(alpha)
+    NK <- length(alpha)
     # Do things in blocks:
-    nblk = ceiling(Nsamp * NK * 8 / 2^28)
-    nsamples_in_block = rep(floor(Nsamp/nblk), nblk)
+    nblk <- ceiling(Nsamp * NK * 8 / 2^28)
+    nsamples_in_block <- rep(floor(Nsamp/nblk), nblk)
     if (nblk > 1) {
-        nsamples_in_block[ length(nsamples_in_block) ] = Nsamp - sum( blk[1 : length(blk) - 1])
+        nsamples_in_block[ length(nsamples_in_block) ] <- Nsamp - sum( blk[1 : length(blk) - 1])
     }
     cat("nsamples_in_block:", nsamples_in_block, "\n")
-    wincounts = numeric(NK) # Initialize to zero
-    histbreaks = seq(1, NK + 1) - 0.5
+    wincounts <- numeric(NK) # Initialize to zero
+    histbreaks <- seq(1, NK + 1) - 0.5
     for (i in 1:nblk) {
         cat("block:", i, ", nsamples:", nsamples_in_block[i], "\n")
         # Sample from univariate gamma distribution, then normalize
-        r = matrix(0, nrow = nsamples_in_block[i], ncol = NK)
+        r <- matrix(0, nrow = nsamples_in_block[i], ncol = NK)
         for (k in 1:NK) {
-            r[,k] = rgamma(n = nsamples_in_block[i], shape = alpha[k], rate = 1)
+            r[,k] <- rgamma(n = nsamples_in_block[i], shape = alpha[k], rate = 1)
         }
-        r = r / colSums(r)
+        r <- r / colSums(r)
         # Exceedance probabilities
-        winners = apply(r, MARGIN = 1, FUN = which.max)
-        wincounts = wincounts + hist(winners, breaks = histbreaks, plot = FALSE)$counts
+        winners <- apply(r, MARGIN = 1, FUN = which.max)
+        wincounts <- wincounts + hist(winners, breaks = histbreaks, plot = FALSE)$counts
     }
     return(wincounts / Nsamp)
 }
@@ -57,34 +57,34 @@ dirichlet$dirichlet_posterior_alpha <- function(
     # - https://github.com/neurodebian/spm8/blob/octave/spm_BMS.m
     # - https://github.com/neurodebian/spm8/blob/octave/spm_Bcdf.m
     #   ... there's a typo: it says "Inverse CDF" at the top, but is really the CDF.
-    K = ncol(ln_p)
-    N = nrow(ln_p)
+    K <- ncol(ln_p)
+    N <- nrow(ln_p)
     if (is.null(alpha_0)) {
         # Usual Dirichlet prior: rep(1, K) where K is the number of models
-        alpha_0 = rep(1, K)
+        alpha_0 <- rep(1, K)
     }
-    CONVERGENCE_THRESHOLD = 1e-10
-    alpha = alpha_0
-    convergence_gap = 1 + CONVERGENCE_THRESHOLD # anything >CONVERGENCE_THRESHOLD is fine, so the "while" runs at least once
+    CONVERGENCE_THRESHOLD <- 1e-10
+    alpha <- alpha_0
+    convergence_gap <- 1 + CONVERGENCE_THRESHOLD # anything >CONVERGENCE_THRESHOLD is fine, so the "while" runs at least once
     while (convergence_gap > CONVERGENCE_THRESHOLD) {
         # Vectorize as much as possible:
-        d1 = matrix(digamma(alpha), nrow=N, ncol=K, byrow=TRUE)
-        d2 = digamma( sum(alpha) )
-        ln_u = ln_p + d1 + d2
-        ln_u = sign(ln_u) * pmin(MAX_EXPONENT, abs(ln_u)) # prevent numerical problems for badly scaled posteriors
-        u = exp(ln_u)
-        beta = colSums( u / rowSums(u) ) # rowSums() sums over k; colSums() sums over n
-        prev_alpha = alpha
-        alpha = alpha_0 + beta
-        convergence_gap = norm(alpha - prev_alpha, type="2") # 2-norm of a matrix, following Stephan et al.
+        d1 <- matrix(digamma(alpha), nrow = N, ncol = K, byrow = TRUE)
+        d2 <- digamma( sum(alpha) )
+        ln_u <- ln_p + d1 + d2
+        ln_u <- sign(ln_u) * pmin(MAX_EXPONENT, abs(ln_u)) # prevent numerical problems for badly scaled posteriors
+        u <- exp(ln_u)
+        beta <- colSums( u / rowSums(u) ) # rowSums() sums over k; colSums() sums over n
+        prev_alpha <- alpha
+        alpha <- alpha_0 + beta
+        convergence_gap <- norm(alpha - prev_alpha, type = "2") # 2-norm of a matrix, following Stephan et al.
         cat("alpha:", alpha, ", convergence_gap:", convergence_gap, "\n")
     }
-    exp_r = alpha / sum(alpha)
+    exp_r <- alpha / sum(alpha)
     if (K == 2) {
-        xp = dirichlet$dirichlet_exceedance_2_models(alpha)
+        xp <- dirichlet$dirichlet_exceedance_2_models(alpha)
     }
     else {
-        xp = dirichlet$dirichlet_exceedance_by_sampling(alpha, Nsamp)
+        xp <- dirichlet$dirichlet_exceedance_by_sampling(alpha, Nsamp)
     }
     return(list(
         alpha = alpha, # Dirichlet posterior

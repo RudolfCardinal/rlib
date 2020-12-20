@@ -21,7 +21,8 @@
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 #==============================================================================
 
-rpm = new.env()
+rpm <- new.env()
+
 
 #------------------------------------------------------------------------------
 # Posteriors for binomial things
@@ -29,9 +30,10 @@ rpm = new.env()
 
 rpm$posterior_pdf_given_uniform_prior_with_two_outcomes <- function(p, N, x)
 {
-    y = N - x
+    y <- N - x
     (1 / beta(x + 1, y + 1) ) * p^x * (1 - p)^y
 }
+
 
 rpm$best_estimator_of_p_given_uniform_prior_with_two_outcomes <- function(N, x)
 {
@@ -40,13 +42,14 @@ rpm$best_estimator_of_p_given_uniform_prior_with_two_outcomes <- function(N, x)
     # ... a mode of the posterior distribution
 }
 
+
 #------------------------------------------------------------------------------
 # Illustration
 #------------------------------------------------------------------------------
 
 rpm$demo.posterior.binomial <- function()
 {
-    p = seq(0,1,0.01)
+    p <- seq(0,1,0.01)
     plot(p, posterior_pdf_given_uniform_prior_with_two_outcomes(p, 5, 1))
 }
 
@@ -60,6 +63,7 @@ rpm$demo.posterior.binomial <- function()
 # CHOICE RULE given two pdfs... want to yield a probability of picking A given PDFs for A and B
 # - Gittins (1972) index? No.
 # - randomized probability matching (RPM) (Scott 2010)
+
 
 #------------------------------------------------------------------------------
 # RPM APPLIED TO THE BINOMIAL BANDIT
@@ -91,7 +95,7 @@ rpm$compute.probopt <- function(y, n)
             }
             return(r)
         }
-        ans[i] = integrate(f, 0, 1)$value
+        ans[i] <- integrate(f, 0, 1)$value
         # ... the integral from 0 to 1 of the function defined (equation 11
         # in Scott 2010)
     }
@@ -148,8 +152,8 @@ rpm$compute.probopt.matrix <- function(
 
     # Integration by trapezium rule so we can vectorize
 
-    v.dbeta <- Vectorize(dbeta, vectorize.args=c('x', 'shape1', 'shape2'))
-    v.pbeta <- Vectorize(pbeta, vectorize.args=c('q', 'shape1', 'shape2'))
+    v.dbeta <- Vectorize(dbeta, vectorize.args = c('x', 'shape1', 'shape2'))
+    v.pbeta <- Vectorize(pbeta, vectorize.args = c('q', 'shape1', 'shape2'))
 
     rpmDifferentialSingle <- function(x, rownum, action, others)
     {
@@ -163,7 +167,7 @@ rpm$compute.probopt.matrix <- function(
     rpmDifferentialMatrix <- function(x)
     {
         # Calculate a single set of values (we'll integrate over many such)
-        answer <- matrix(0, nrow=1, ncol=k)
+        answer <- matrix(0, nrow = 1, ncol = k)
         for (action in 1:k) {
             r <- v.dbeta(x, wins[, action] + 1, losses[, action] + 1)
             others <- (1:k)[-action]  # all actions except the current one
@@ -175,7 +179,7 @@ rpm$compute.probopt.matrix <- function(
         return(answer)
     }
 
-    optimum_probabilities <- matrix(0, nrow=nr, ncol=k)
+    optimum_probabilities <- matrix(0, nrow = nr, ncol = k)
 
     # TRAPEZIUM RULE METHOD (but a bit imprecise)
 
@@ -188,7 +192,7 @@ rpm$compute.probopt.matrix <- function(
         # integration_steps: number of trapezoids
         dx <- x_span / integration_steps
 
-        f_x_previous <- rpmDifferentialMatrix(x_start)  # values at x=0
+        f_x_previous <- rpmDifferentialMatrix(x_start)  # values at x = 0
         x <- x_start
         for (i in 1:integration_steps) {
             x <- x + dx
@@ -228,11 +232,11 @@ rpm$compute.probopt.matrix <- function(
                     }
                     optimum_probabilities[rownum, action] <- integrate(
                         rpmDifferentialSingle,
-                        lower=0,
-                        upper=1,
-                        rownum=rownum,
-                        action=action,
-                        others=others
+                        lower = 0,
+                        upper = 1,
+                        rownum = rownum,
+                        action = action,
+                        others = others
                     )$value
                 }
             }
@@ -242,6 +246,7 @@ rpm$compute.probopt.matrix <- function(
     return(optimum_probabilities)
 }
 
+
 rpm$test.compute.probopt.matrix <- function()
 {
     wins <- matrix(
@@ -250,14 +255,14 @@ rpm$test.compute.probopt.matrix <- function()
           19, 19,
           20, 5,
           0, 0),
-        ncol=2, byrow=TRUE)
+        ncol = 2, byrow = TRUE)
     losses <- matrix(
         c(29, 9,
           5, 1,
           29, 9,
           8, 0,
           0, 0),
-        ncol=2, byrow=TRUE)
+        ncol = 2, byrow = TRUE)
     totals <- wins + losses
     optprob <- rpm$compute.probopt.matrix(wins, totals)
 
@@ -290,6 +295,7 @@ rpm$sim.post <- function(y, n, ndraws)
     return(ans)
 }
 
+
 rpm$prob.winner <- function(post)
 {
     # As per Scott (2010) p649.
@@ -297,6 +303,7 @@ rpm$prob.winner <- function(post)
     w <- table(factor(max.col(post), levels = 1:k))
     return( w / sum(w) )
 }
+
 
 rpm$compute.win.prob <- function(y, n, ndraws, debug = TRUE)
 {
@@ -308,6 +315,7 @@ rpm$compute.win.prob <- function(y, n, ndraws, debug = TRUE)
     }
     return(prob.winner(sp))
 }
+
 
 #------------------------------------------------------------------------------
 # Illustration
@@ -338,10 +346,11 @@ rpm$demo.rpm <- function(debug = FALSE)
     print(n)
     cat("Optimal probability with which to perform each action:\n")
     print(compute.probopt(y, n))
-    wp <- compute.win.prob(y, n, n_sims, debug=debug)
+    wp <- compute.win.prob(y, n, n_sims, debug = debug)
     cat("Overall win probability per action in", n_sims, "simulations:\n")
     print(wp)
 }
+
 
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786

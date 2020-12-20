@@ -4,17 +4,19 @@
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 # =============================================================================
 
-miscmath = new.env()
+miscmath <- new.env()
+
 
 # =============================================================================
 # Geometric mean
 # =============================================================================
 
-miscmath$geometric_mean <- function(x, na.rm=TRUE) {
+miscmath$geometric_mean <- function(x, na.rm = TRUE) {
     # geometric mean
     # http://stackoverflow.com/questions/2602583
-    exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+    exp(sum(log(x[x > 0]), na.rm = na.rm) / length(x))
 }
+
 
 # =============================================================================
 # Harmonic mean
@@ -24,21 +26,23 @@ miscmath$harmonic_mean <- function(x) {
     1 / mean(1/x)
 }
 
+
 # =============================================================================
 # Logistic function
 # =============================================================================
 
 miscmath$logistic <- function(x, x0, k, L = 1) {
     # Notation as per https://en.wikipedia.org/wiki/Logistic_function
-    L / (1 + exp(-k * (x - x0)));
+    L / (1 + exp(-k * (x - x0)))
 }
+
 
 # =============================================================================
 # Logarithmic sequence
 # =============================================================================
 
 miscmath$log_sequence <- function(pow10low, pow10high,
-                                  minimum=NA, maximum=NA) {
+                                  minimum = NA, maximum = NA) {
     # http://stackoverflow.com/questions/23901907
     x <- c(2:10 %o% 10^(pow10low:pow10high))
     if (!is.na(minimum)) {
@@ -50,6 +54,7 @@ miscmath$log_sequence <- function(pow10low, pow10high,
     return(x)
 }
 
+
 # =============================================================================
 # Formatting numbers
 # =============================================================================
@@ -59,10 +64,12 @@ miscmath$is_integer <- function(x) {
     x %% 1 == 0
 }
 
+
 miscmath$format_dp <- function(x, dp) {
     # http://stackoverflow.com/questions/3443687/formatting-decimal-places-in-r
-    format(round(x, dp), nsmall=dp)
+    format(round(x, dp), nsmall = dp)
 }
+
 
 miscmath$format_dp_unless_integer <- function(x, dp) {
     # http://stackoverflow.com/questions/3443687/formatting-decimal-places-in-r
@@ -71,6 +78,7 @@ miscmath$format_dp_unless_integer <- function(x, dp) {
     }
     format_dp(x, dp)
 }
+
 
 miscmath$format_sf <- function(x, sf = 3,
                                scientific = FALSE,
@@ -87,7 +95,8 @@ miscmath$format_sf <- function(x, sf = 3,
            drop0trailing = drop0trailing)
 }
 
-miscmath$describe_p_value <- function(p, boundary_NS = 0.1, ns_val = "NS",
+
+miscmath$describe_p_value <- function(p, boundary_NS = 0.1,
                                       boundary_scientific = 0.0001) {
     ifelse(
         p > boundary_NS,
@@ -105,6 +114,7 @@ miscmath$describe_p_value <- function(p, boundary_NS = 0.1, ns_val = "NS",
     )
 }
 
+
 miscmath$p_stars <- function(p) {
     # Simply a convention!
     # http://stats.stackexchange.com/questions/29158/do-you-reject-the-null-hypothesis-when-p-alpha-or-p-leq-alpha
@@ -114,9 +124,11 @@ miscmath$p_stars <- function(p) {
                          "NS")))
 }
 
+
 miscmath$describe_p_value_with_stars <- function(p) {
     paste(miscmath$p_stars(p), ", ", miscmath$describe_p_value(p), sep = "")
 }
+
 
 # =============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786

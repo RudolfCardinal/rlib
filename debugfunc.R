@@ -12,22 +12,22 @@ debugfunc <- new.env()
 # Debug message
 # =============================================================================
 
-debugfunc$debug_message <- function(..., file="", filename="", append=TRUE) {
+debugfunc$debug_message <- function(..., file = "", filename = "", append = TRUE) {
     # Use the file parameter OR the filename parameter OR neither.
-    mode = "console"
+    mode <- "console"
     if (file != "") {
-        mode = "file"
+        mode <- "file"
     } else if (filename != "") {
-        mode = "filename"
+        mode <- "filename"
     }
 
     if (mode == "file") {
-        sink(file, append=append)
+        sink(file, append = append)
     } else if (mode == "filename") {
-        sink(filename, append=append)
+        sink(filename, append = append)
     }
 
-    cat(..., "\n", sep="")
+    cat(..., "\n", sep = "")
 
     if (mode == "file" || mode == "filename") {
         sink()
@@ -39,20 +39,20 @@ debugfunc$debug_message <- function(..., file="", filename="", append=TRUE) {
 # =============================================================================
 
 debugfunc$debug_quantity <- function(
-        x, file="", filename="", append=TRUE,
-        progress_to_console=TRUE, print_only=FALSE
+        x, file = "", filename = "", append = TRUE,
+        progress_to_console = TRUE, print_only = FALSE
 ) {
     # Use the file parameter OR the filename parameter OR neither.
 
     # To write to file, can use:
-    #       cat(..., file=file)
-    #       dput(x, file=file)
+    #       cat(..., file = file)
+    #       dput(x, file = file)
     # but not:
     #       print(x)
     # So the simplest way is to use sink().
     # This maintains a stack of diversions, so we divert then un-divert
     # Note also:
-    #       f <- open("output.txt", open="w")  # w=write, a=append
+    #       f <- open("output.txt", open = "w")  # w = write, a = append
     #       # write stuff
     #       flush(f)  # if desired
     #       close(f)
@@ -65,39 +65,39 @@ debugfunc$debug_quantity <- function(
     }
 
     x_name <- deparse(substitute(x))  # fetch the variable name passed in
-    LINEBREAK_1 <- paste(c(rep("=", 79), "\n"), collapse="")
-    LINEBREAK_2 <- paste(c(rep("-", 79), "\n"), collapse="")
+    LINEBREAK_1 <- paste(c(rep("=", 79), "\n"), collapse = "")
+    LINEBREAK_2 <- paste(c(rep("-", 79), "\n"), collapse = "")
 
     if (progress_to_console) {
         destination <- mode
         if (mode == "filename") {
-            destination = filename
+            destination <- filename
         }
-        cat("DEBUGGING QUANTITY: ", x_name, " TO ", destination, "\n", sep="")
+        cat("DEBUGGING QUANTITY: ", x_name, " TO ", destination, "\n", sep = "")
     }
 
     if (mode == "file") {
-        sink(file, append=append)
+        sink(file, append = append)
     } else if (mode == "filename") {
-        sink(filename, append=append)
+        sink(filename, append = append)
     }
 
-    cat(LINEBREAK_1, "DEBUGGING QUANTITY: ", x_name, "\n", sep="")
-    cat(LINEBREAK_2, "... print(", x_name, "):\n", LINEBREAK_2, sep="")
+    cat(LINEBREAK_1, "DEBUGGING QUANTITY: ", x_name, "\n", sep = "")
+    cat(LINEBREAK_2, "... print(", x_name, "):\n", LINEBREAK_2, sep = "")
     print(x)
     if (!print_only) {
-        cat(LINEBREAK_2, "... dput(", x_name, "):\n", LINEBREAK_2, sep="")
-        dput(x, file=file)
+        cat(LINEBREAK_2, "... dput(", x_name, "):\n", LINEBREAK_2, sep = "")
+        dput(x, file = file)
     }
-    cat(LINEBREAK_1, file=file, sep="")
+    cat(LINEBREAK_1, file = file, sep = "")
 
     if (mode == "file" || mode == "filename") {
         sink()
     }
 }
-#f <- file("output.txt", open="w")
-#x <- list(a=1, b=2)
-#debug_quantity(x, file=f)
+#f <- file("output.txt", open = "w")
+#x <- list(a = 1, b = 2)
+#debug_quantity(x, file = f)
 #close(f)
 
 debugfunc$wtf_is <- function(x) {
@@ -119,8 +119,8 @@ debugfunc$wtf_is <- function(x) {
     print(str(x))
     cat("\n8. methods, for each class type:\n")
     for (c in class(x)) {
-        cat(paste('\n- methods(class="', c, '"):\n', sep=""))
-        print(methods(class=c))
+        cat(paste('\n- methods(class = "', c, '"):\n', sep = ""))
+        print(methods(class = c))
     }
 }
 
@@ -129,9 +129,9 @@ debugfunc$wtf_is <- function(x) {
 # Output columns
 # =============================================================================
 
-debugfunc$wideScreen <- function(howWide=Sys.getenv("COLUMNS")) {
+debugfunc$wideScreen <- function(howWide = Sys.getenv("COLUMNS")) {
     if (nchar(howWide) > 0) {  # under non-console clusters, envvar can be empty
-        options(width=as.integer(howWide))
+        options(width = as.integer(howWide))
     }
 }
 
@@ -141,17 +141,17 @@ debugfunc$wideScreen <- function(howWide=Sys.getenv("COLUMNS")) {
 
 debugfunc$STATUS_DISPLAY_LEVEL <- 0
 
-debugfunc$status <- function(msg, ellipsis=FALSE, increment=FALSE, colour="blue") {
+debugfunc$status <- function(msg, ellipsis = FALSE, increment = FALSE, colour = "blue") {
     cat(
         style(
             paste(
-                paste(rep("  ", debugfunc$STATUS_DISPLAY_LEVEL), collapse=""),
+                paste(rep("  ", debugfunc$STATUS_DISPLAY_LEVEL), collapse = ""),
                 msg,
                 ifelse(ellipsis, "...", ""),
                 "\n",
-                sep=""
+                sep = ""
             ),
-            fg=colour
+            fg = colour
         )
     )
     if (increment) {
@@ -159,21 +159,21 @@ debugfunc$status <- function(msg, ellipsis=FALSE, increment=FALSE, colour="blue"
     }
 }
 
-debugfunc$status_start <- function(msg, ellipsis=TRUE, colour="red") {
-    status(msg, increment=TRUE, ellipsis=ellipsis, colour=colour)
+debugfunc$status_start <- function(msg, ellipsis = TRUE, colour = "red") {
+    status(msg, increment = TRUE, ellipsis = ellipsis, colour = colour)
 }
 
-debugfunc$status_end <- function(msg="... done", announce=TRUE, colour="green") {
+debugfunc$status_end <- function(msg = "... done", announce = TRUE, colour = "green") {
     debugfunc$STATUS_DISPLAY_LEVEL <<- debugfunc$STATUS_DISPLAY_LEVEL - 1
     if (announce) {
         cat(style(
             paste(
-                paste(rep("  ", debugfunc$STATUS_DISPLAY_LEVEL), collapse=""),
+                paste(rep("  ", debugfunc$STATUS_DISPLAY_LEVEL), collapse = ""),
                 msg,
                 "\n",
-                sep=""
+                sep = ""
             ),
-            fg=colour))
+            fg = colour))
     }
 }
 

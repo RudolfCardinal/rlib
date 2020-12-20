@@ -8,18 +8,18 @@
 # A long time ago, it was those listed in the R_EXTRAS variable at
 #       http://egret.psychol.cam.ac.uk/techniques/scripts/rnc_ubuntu_setup
 
-PREFERRED_CRAN_REPOSITORY = c(CRAN="http://cran.ma.imperial.ac.uk")
+PREFERRED_CRAN_REPOSITORY <- c(CRAN = "http://cran.ma.imperial.ac.uk")
 
 
 install_if_absent <- function(libname,
-                              repos=PREFERRED_CRAN_REPOSITORY,
-                              type=getOption("pkgType"))
+                              repos = PREFERRED_CRAN_REPOSITORY,
+                              type = getOption("pkgType"))
 {
-    if (require(libname, character.only=TRUE)) {
+    if (require(libname, character.only = TRUE)) {
         cat("Loaded library:", libname, "\n")
     } else {
-        cat("Attempting to install package: ", libname, " (type=", type, ")\n", sep="")
-        install.packages(libname, repos=repos, dependencies=TRUE, type=type)
+        cat("Attempting to install package: ", libname, " (type = ", type, ")\n", sep = "")
+        install.packages(libname, repos = repos, dependencies = TRUE, type = type)
         if (require(libname, character.only = TRUE)) {
             cat("Loaded newly installed library:", libname, "\n")
         } else {
@@ -32,13 +32,13 @@ install_if_absent <- function(libname,
 install_github_if_absent <- function(libname, github_name)
 {
     require(devtools)
-    if (require(libname, character.only=TRUE)) {
+    if (require(libname, character.only = TRUE)) {
         cat("Loaded library:", libname, "\n")
     } else {
         cat("Attempting to install Github package:", libname, "\n")
-        cat("... from: https://github.com/", github_name, "\n", sep="")
+        cat("... from: https://github.com/", github_name, "\n", sep = "")
         devtools::install_github(github_name)
-        if (require(libname, character.only=TRUE)) {
+        if (require(libname, character.only = TRUE)) {
             cat("Loaded library:", libname, "\n")
         } else {
             cat("FAILED TO INSTALL GITHUB PACKAGE:", libname, "\n")
@@ -150,7 +150,7 @@ for (i in 1:length(DESIRED_GITHUB_LIBRARIES)) {
 ## RStan is a package that's a bit different:
 #install_if_absent(
 #    "rstan",
-#    repos="https://github.com/stan-dev/rstan",
-#    type="source")
+#    repos = "https://github.com/stan-dev/rstan",
+#    type = "source")
 ## ... formerly (1) http://wiki.stan.googlecode.com/git/R
 ## ... formerly (2) http://wiki.rstan-repo.googlecode.com/git/

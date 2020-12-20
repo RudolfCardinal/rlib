@@ -5,7 +5,7 @@
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 # =============================================================================
 
-infotheoryfunc = new.env()
+infotheoryfunc <- new.env()
 
 # =============================================================================
 # Normalized mutual information
@@ -50,8 +50,8 @@ infotheoryfunc$f_emi <- function(s1, s2, l1, l2, n)  # expected mutual informati
 infotheoryfunc$f_nmi_ami <- function(v1, v2)
 {
     library(infotheo)
-    s1 <- tabulate(v1);
-    s2 <- tabulate(v2);
+    s1 <- tabulate(v1)
+    s2 <- tabulate(v2)
     l1 <- length(s1)
     l2 <- length(s2)
     N <- length(v1)
@@ -62,8 +62,8 @@ infotheoryfunc$f_nmi_ami <- function(v1, v2)
     nmi <- mi / max(h1, h2)        # NMI Normalized MI
     emi <- infotheoryfunc$f_emi(s1, s2, l1, l2, N)  # EMI Expected MI
     ami <- (mi - emi)/max(h1, h2)  #AMI Adjusted MI
-    return(c(normalized_mutual_information=nmi,
-             adjusted_mutual_information=ami))
+    return(c(normalized_mutual_information = nmi,
+             adjusted_mutual_information = ami))
 }
 
 
@@ -83,7 +83,7 @@ infotheoryfunc$computeKernelMatrix <- function(sample) {
 	n        <- nrow(sample)
 	Q        <- matrix(apply(sample^2, 1, sum), n, n)
 	distance <- Q + t(Q) - 2 * sample %*% t(sample)
-	exp(-kernlab::sigest(sample,scale=NULL)[2]*distance)
+	exp(-kernlab::sigest(sample,scale = NULL)[2]*distance)
 }
 
 infotheoryfunc$hsic <- function(sampleX, sampleY) {
@@ -101,7 +101,7 @@ hsiccop <- function(sampleX, sampleY) {
     infotheoryfunc$hsic(sampleX, sampleY)
 }
 
-infotheoryfunc$rdc <- function(x, y, k=20, s=1/6, f=sin) {
+infotheoryfunc$rdc <- function(x, y, k = 20, s = 1/6, f = sin) {
     # from https://github.com/lopezpaz/randomized_dependence_coefficient/blob/master/code/algorithms.r
     x <- cbind(apply(as.matrix(x), 2, function(u) rank(u)/length(u)), 1)
     y <- cbind(apply(as.matrix(y), 2, function(u) rank(u)/length(u)), 1)
@@ -110,7 +110,7 @@ infotheoryfunc$rdc <- function(x, y, k=20, s=1/6, f=sin) {
     cancor(cbind(f(x), 1), cbind(f(y), 1))$cor[1]
 }
 
-#infotheoryfunc$rdc_detail <- function(x, y, k=20, s=1/6, f=sin) {
+#infotheoryfunc$rdc_detail <- function(x, y, k = 20, s = 1/6, f = sin) {
 #    # RNC, based on the above.
 #    # *** Not finished. Intent is to try to extract *which* function is best.
 #    xm <- cbind(apply(as.matrix(x), 2, function(u) rank(u)/length(u)), 1)
@@ -121,11 +121,11 @@ infotheoryfunc$rdc <- function(x, y, k=20, s=1/6, f=sin) {
 #    ty <- cbind(f(ym %*% wy), 1)
 #    cc <- cancor(tx, ty)
 #    list(
-#        rdc=cc$cor[1],
-#        f=f,
-#        xcoef=cc$xcoef[1],
-#        ycoef=cc$ycoef[1],
-#        xcenter=cc$xcenter[1],
-#        ycenter=cc$ycenter[1]
+#        rdc = cc$cor[1],
+#        f = f,
+#        xcoef = cc$xcoef[1],
+#        ycoef = cc$ycoef[1],
+#        xcenter = cc$xcenter[1],
+#        ycenter = cc$ycenter[1]
 #    )
 #}
