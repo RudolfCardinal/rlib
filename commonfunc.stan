@@ -230,7 +230,6 @@
         return x - 1;
     }
     
-
     // ------------------------------------------------------------------------
     // Simple functions: matrix calculations
     // ------------------------------------------------------------------------
@@ -441,6 +440,72 @@
             }
         }
         return z;
+    }
+
+    // ------------------------------------------------------------------------
+    // Simple functions: pairwise differences
+    // ------------------------------------------------------------------------
+    // Two functions with different signatures can't have the same name...
+
+    matrix pairwiseDifferencesSpecifyDiagonal(vector x, vector y, 
+                                              real diagonal_value)
+    {
+        // - Given two vectors of equal length N, returns a matrix[N, N] result
+        //   where each element result[i, j] == x[i] - y[j].
+        // - Diagonal values, for which i == j, are populated with
+        //   diagonal_value. By default this is zero, but if this is to be a
+        //   result from e.g. a generated quantities block, Stan will complain
+        //   (that the largest value of Rhat is NaN) if diagonal values is unvaryingly
+        //   zero. Under those circumstances, you should pass in a small (e.g.
+        //   iteration-specific) random number, e.g. like this:
+        //          real tiny_random_number = uniform_rng(-1e-16, 1e-16);
+        //          group_diffs = pairwiseDifferences(x, y, tiny_random_number);
+
+        int n = num_elements(x);
+        matrix[n, n] result;
+        real diff_x_minus_y;  // working variable to save a lookup
+
+        if (n != num_elements(y)) {
+            reject("Incompatible arguments");
+        }
+        for (j in 1:n) {  // access matrices in column-major order
+            for (i in 1:n) {
+                if (i == j) {
+                    result[i, j] = diagonal_value;
+                } else if (i > j) {
+                    // We populate the bottom-left corner [i, j], where i > j,
+                    // and simultaneously cross-populate the corresponding cell
+                    // in the top-right corner [j, i].
+                    diff_x_minus_y = x[i] - y[j];
+                    result[i, j] = diff_x_minus_y;
+                    result[j, i] = -diff_x_minus_y;
+                }
+            }
+        }
+        return result;
+    }
+
+    matrix pairwiseDifferences(vector x, vector y)
+    {
+        // A version of pairwiseDifferences() with diagonal_value = 0.
+
+        return pairwiseDifferencesSpecifyDiagonal(x, y, 0);
+    }
+
+    matrix pairwiseDifferencesSelfSpecifyDiagonal(vector x, real diagonal_value)
+    {
+        // A version of pairwiseDifferences() to compare a vector to itself
+        // pairwise.
+
+        return pairwiseDifferencesSpecifyDiagonal(x, x, diagonal_value);
+    }
+
+    matrix pairwiseDifferencesSelf(vector x)
+    {
+        // A version of pairwiseDifferences() to compare a vector to itself
+        // pairwise with diagonal_value = 0.
+
+        return pairwiseDifferencesSpecifyDiagonal(x, x, 0);
     }
 
 

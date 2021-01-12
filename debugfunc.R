@@ -8,6 +8,7 @@ library(xtermStyle)
 
 debugfunc <- new.env()
 
+
 # =============================================================================
 # Debug message
 # =============================================================================
@@ -33,6 +34,7 @@ debugfunc$debug_message <- function(..., file = "", filename = "", append = TRUE
         sink()
     }
 }
+
 
 # =============================================================================
 # Debug a thing
@@ -100,6 +102,7 @@ debugfunc$debug_quantity <- function(
 #debug_quantity(x, file = f)
 #close(f)
 
+
 debugfunc$wtf_is <- function(x) {
     # For when you have no idea what something is.
     # http://stackoverflow.com/questions/8855589
@@ -135,11 +138,13 @@ debugfunc$wideScreen <- function(howWide = Sys.getenv("COLUMNS")) {
     }
 }
 
+
 # =============================================================================
 # Nested status messages
 # =============================================================================
 
 debugfunc$STATUS_DISPLAY_LEVEL <- 0
+
 
 debugfunc$status <- function(msg, ellipsis = FALSE, increment = FALSE, colour = "blue") {
     cat(
@@ -159,9 +164,11 @@ debugfunc$status <- function(msg, ellipsis = FALSE, increment = FALSE, colour = 
     }
 }
 
+
 debugfunc$status_start <- function(msg, ellipsis = TRUE, colour = "red") {
     status(msg, increment = TRUE, ellipsis = ellipsis, colour = colour)
 }
+
 
 debugfunc$status_end <- function(msg = "... done", announce = TRUE, colour = "green") {
     debugfunc$STATUS_DISPLAY_LEVEL <<- debugfunc$STATUS_DISPLAY_LEVEL - 1
@@ -176,6 +183,7 @@ debugfunc$status_end <- function(msg = "... done", announce = TRUE, colour = "gr
             fg = colour))
     }
 }
+
 
 # =============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
