@@ -634,7 +634,8 @@
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Helper functions for boundary checking
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    // See Stan (2017) manual p82.
+    // See Stan (2017, v2.16.0) manual p82, or e.g.
+    // https://mc-stan.org/docs/2_25/reference-manual/sampling-statements-section.html#truncation-with-lower-and-upper-bounds-in-stan
     // These are internal functions that ASSUME size match.
     // We can't use a leading "_" prefix on function names (Stan syntax error).
 

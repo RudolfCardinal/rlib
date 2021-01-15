@@ -247,17 +247,49 @@ HEADER = """
     // Common functions
     // ========================================================================
     /*
-        Reminders:
+        Reminders -- Stan's flavour of C++:
+        -----------------------------------------------------------------------
+
         - Annoyingly, you can't modify arguments to Stan user-defined
           functions. (No pass-by-reference.)
-        - size() doesn't work on a plain "vector". Use num_elements().
-        - Array/vector indexing is 1-based.
+
+        - You can't have templating of user-defined functions, i.e. not this:
+
+            template<T> T somefunc(T x);
+
+        - Two functions with the same name can't even have different
+          signatures. So not this:
+
+            real somefunc(real x);
+            vector somefunc(vector x);
+
+        - No default values for function parameters. So not this:
+
+            real somefunc(x, y = 0);
+
+        - We can't use a leading "_" prefix on function names (gives a Stan
+          syntax error).
+
         - The addition-assignment (+=) operator generally doesn't work (it
           appears to be reserved for the one variable "target += ...").
           Similarly for all others you might expect.
+
           - Aha! By Stan 2.19, this has changed. Can use "x += 1"
             (p19 of Stan 2.19 Reference Manual).
+
+        - No ternary (conditional, ?:) operator in Stan yet? So not this:
+
+            x = a ? b : c;
+
+        Reminders -- Stan, other:
+        -----------------------------------------------------------------------
+
+        - size() doesn't work on a plain "vector". Use num_elements().
+
+        - Array/vector indexing is 1-based.
+
         - Can't define constants in a functions{} block.
+
     */
 """
 
@@ -633,12 +665,13 @@ SIMPLE_FUNCTIONS = """
         int p = x_dimensions[1];
         int q = x_dimensions[2];
         vector[p] z;
+        real cell;
 
         if (q != num_elements(y)) {
             reject("Incompatible arguments");
         }
         for (i in 1:p) {  // rows of x
-            real cell = 0.0;
+            cell = 0.0;
             for (j in 1:q) {  // columns of x
                 cell += x[i, j] * y[j];
             }
@@ -655,12 +688,13 @@ SIMPLE_FUNCTIONS = """
         int p = x_dimensions[1];
         int q = x_dimensions[2];
         vector[p] z;
+        real cell;
 
         if (q != num_elements(y)) {
             reject("Incompatible arguments");
         }
         for (i in 1:p) {  // rows of x
-            real cell = 0.0;
+            cell = 0.0;
             for (j in 1:q) {  // columns of x
                 cell += x[i, j] * y[j];
             }
@@ -688,6 +722,7 @@ SIMPLE_FUNCTIONS = """
         int p = y_dimensions[1];
         int q = y_dimensions[2];
         vector[q] z;
+        real cell;
 
         if (p != num_elements(x)) {
             reject("Incompatible arguments");
@@ -710,12 +745,13 @@ SIMPLE_FUNCTIONS = """
         int p = y_dimensions[1];
         int q = y_dimensions[2];
         vector[q] z;
+        real cell;
 
         if (p != num_elements(x)) {
             reject("Incompatible arguments");
         }
         for (j in 1:q) {  // columns of y
-            real cell = 0.0;
+            cell = 0.0;
             for (i in 1:p) {  // rows of y
                 cell += x[j] * y[i, j];
             }
@@ -775,13 +811,14 @@ SIMPLE_FUNCTIONS = """
         int q = dimensions[2];
         int r = dimensions[3];
         matrix[q, r] z;
+        real cell;
 
         if (p != num_elements(x)) {
             reject("Incompatible arguments");
         }
         for (j in 1:q) {
             for (k in 1:r) {
-                real cell = 0.0;
+                cell = 0.0;
                 for (i in 1:p) {
                     cell += x[i] * y[i, j, k];
                 }
@@ -800,13 +837,14 @@ SIMPLE_FUNCTIONS = """
         int q = dimensions[2];
         int r = dimensions[3];
         real z[q, r];
+        real cell;
 
         if (p != num_elements(x)) {
             reject("Incompatible arguments");
         }
         for (j in 1:q) {
             for (k in 1:r) {
-                real cell = 0.0;
+                cell = 0.0;
                 for (i in 1:p) {
                     cell += x[i] * y[i, j, k];
                 }
@@ -946,8 +984,9 @@ DUFF_ANOVA_FUNCTIONS = """
         int length = num_elements(params);
         vector[length] newparams;
         real total = 0.0;
+        real value;
         for (i in 1:length - 1) {
-            real value = params[i];
+            value = params[i];
             newparams[i] = value;
             total = total + value;
         }
@@ -965,8 +1004,9 @@ DUFF_ANOVA_FUNCTIONS = """
         int new_length = initial_length + 1;
         vector[new_length] newparams;
         real total = 0.0;
+        real value;
         for (i in 1:initial_length) {
-            real value = params[i];
+            value = params[i];
             newparams[i] = value;
             total = total + value;
         }
@@ -1103,9 +1143,11 @@ LOG_PROB_HELPERS = """
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Helper functions for boundary checking
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    // See Stan (2017) manual p82.
+    // For the use of "target += negative_infinity()" with truncation, see Stan
+    // (2017, v2.16.0) manual p82, or e.g.
+    // https://mc-stan.org/docs/2_25/reference-manual/sampling-statements-section.html#truncation-with-lower-and-upper-bounds-in-stan
+    //
     // These are internal functions that ASSUME size match.
-    // We can't use a leading "_" prefix on function names (Stan syntax error).
 
     // Lower
 
@@ -1121,6 +1163,7 @@ LOG_PROB_HELPERS = """
         for (i in 1:length) {
             if (y[i] < lower) {
                 target += negative_infinity();
+                return;
             }
         }
     }
@@ -1131,6 +1174,7 @@ LOG_PROB_HELPERS = """
             for (j in 1:dimensions[2]) {
                 if (y[i, j] < lower) {
                     target += negative_infinity();
+                    return;
                 }
             }
         }
@@ -1143,6 +1187,7 @@ LOG_PROB_HELPERS = """
                 for (k in 1:dimensions[3]) {
                     if (y[i, j, k] < lower) {
                         target += negative_infinity();
+                        return;
                     }
                 }
             }
@@ -1154,6 +1199,7 @@ LOG_PROB_HELPERS = """
         for (i in 1:length) {
             if (y[i] < lower) {
                 target += negative_infinity();
+                return;
             }
         }
     }
@@ -1172,6 +1218,7 @@ LOG_PROB_HELPERS = """
         for (i in 1:length) {
             if (y[i] > upper) {
                 target += negative_infinity();
+                return;
             }
         }
     }
@@ -1182,6 +1229,7 @@ LOG_PROB_HELPERS = """
             for (j in 1:dimensions[2]) {
                 if (y[i, j] > upper) {
                     target += negative_infinity();
+                    return;
                 }
             }
         }
@@ -1194,6 +1242,7 @@ LOG_PROB_HELPERS = """
                 for (k in 1:dimensions[3]) {
                     if (y[i, j, k] > upper) {
                         target += negative_infinity();
+                        return;
                     }
                 }
             }
@@ -1205,6 +1254,7 @@ LOG_PROB_HELPERS = """
         for (i in 1:length) {
             if (y[i] > upper) {
                 target += negative_infinity();
+                return;
             }
         }
     }
@@ -1220,21 +1270,25 @@ LOG_PROB_HELPERS = """
     void enforceRangeBounds_A_lp(real[] y, real lower, real upper)
     {
         int length = num_elements(y);
+        real value;
         for (i in 1:length) {
-            real value = y[i];  // lookup only once
+            value = y[i];  // lookup only once
             if (value < lower || value > upper) {
                 target += negative_infinity();
+                return;
             }
         }
     }
     void enforceRangeBounds_2_lp(real[,] y, real lower, real upper)
     {
         int dimensions[2] = dims(y);
+        real value;
         for (i in 1:dimensions[1]) {
             for (j in 1:dimensions[2]) {
-                real value = y[i, j];  // lookup only once
+                value = y[i, j];  // lookup only once
                 if (value < lower || value > upper) {
                     target += negative_infinity();
+                    return;
                 }
             }
         }
@@ -1242,12 +1296,14 @@ LOG_PROB_HELPERS = """
     void enforceRangeBounds_3_lp(real[,,] y, real lower, real upper)
     {
         int dimensions[3] = dims(y);
+        real value;
         for (i in 1:dimensions[1]) {
             for (j in 1:dimensions[2]) {
                 for (k in 1:dimensions[3]) {
-                    real value = y[i, j, k];  // lookup only once
+                    value = y[i, j, k];  // lookup only once
                     if (value < lower || value > upper) {
                         target += negative_infinity();
+                        return;
                     }
                 }
             }
@@ -1256,10 +1312,12 @@ LOG_PROB_HELPERS = """
     void enforceRangeBounds_V_lp(vector y, real lower, real upper)
     {
         int length = num_elements(y);
+        real value;
         for (i in 1:length) {
-            real value = y[i];  // lookup only once
+            value = y[i];  // lookup only once
             if (value < lower || value > upper) {
                 target += negative_infinity();
+                return;
             }
         }
     }
