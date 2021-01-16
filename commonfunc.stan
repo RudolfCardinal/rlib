@@ -481,7 +481,7 @@
     }
 
     // ------------------------------------------------------------------------
-    // Simple functions: pairwise differences
+    // Simple functions: pairwise differences in matrix format
     // ------------------------------------------------------------------------
     // Two functions with different signatures can't have the same name...
 
@@ -544,6 +544,74 @@
         // pairwise with diagonal_value = 0.
 
         return pairwiseDifferencesSpecifyDiagonal(x, x, 0);
+    }
+
+    // ------------------------------------------------------------------------
+    // Simple functions: pairwise comparisons in vector format
+    // ------------------------------------------------------------------------
+
+    int factorial(int x);  // necessary for self-recursion
+    int factorial(int x)
+    {
+        // We could use tgamma(x + 1). But then we run into the dumbness that
+        // is the unwillingness of Stan to provide functions that round real
+        // numbers to integer, and the need for complex workarounds:
+        // https://discourse.mc-stan.org/t/real-to-integer-conversion/5622/9 So
+        // we could just implement a factorial algorithm; see
+        // http://www.luschny.de/math/factorial/FastFactorialFunctions.htm We
+        // will just use the simplest version:
+
+        if (x < 0) {
+            reject("Factorial undefined for negative numbers");
+        }
+        if (x == 0 || x == 1) {
+            return 1;  // 0! = 1, and 1! = 1
+        }
+        return x * factorial(x - 1);
+    }
+
+    int nCombinations(int n, int k)
+    {
+        // Returns the number of combinations of size k amongst n items.
+        //
+        // The two-stage approach is entirely because of a wrong warning
+        // message from Stan. If you use
+        //    return factorial(n) / (factorial(k) * factorial(n - k));
+        // then the integer division warning in Stan will print
+        //    factorial(n) / factorial(k) * factorial(n - k);
+        // ... the removal of the brackets in the warning message may make the
+        // reader think the code is wrong.
+
+        int denominator = factorial(k) * factorial(n - k);
+        return factorial(n) / denominator;
+    }
+
+    vector pairwiseVector(vector x)
+    {
+        // Given a vector x of length n (where n > 1), returns a vector of
+        // length C(n, 2) of every pairwise comparison.
+        //
+        // The first pairwise comparisons is x[1] - x[2], then x[1] - x[3],
+        // etc., up to x[1] - x[n]. Then it moves to x[2] - x[3], x[2] - x[4],
+        // etc. And so on; the last element is x[n - 1] - x[n].
+        //
+        // The inverse comparisons, e.g. x[2] - x[1], are not performed.
+
+        int n_items = num_elements(x);
+        int n_pairs = nCombinations(n_items, 2);
+        int pair = 1;
+        vector[n_pairs] differences;
+        if (n_pairs < 1) {
+            reject("Must have at least once pair");
+        }
+
+        for (i in 1:(n_items - 1)) {
+            for (j in (i + 1):n_items) {
+                differences[pair] = x[i] - x[j];
+                pair += 1;
+            }
+        }
+        return differences;
     }
 
 
