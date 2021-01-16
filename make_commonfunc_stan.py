@@ -277,9 +277,12 @@ HEADER = """
           - Aha! By Stan 2.19, this has changed. Can use "x += 1"
             (p19 of Stan 2.19 Reference Manual).
 
-        - No ternary (conditional, ?:) operator in Stan yet? So not this:
+        - The ternary (conditional, ?:) operator *is* supported, e.g.:
 
             x = a ? b : c;
+
+          Simpler C++ statements (e.g. with the ternary operator) translate
+          to fewer C++ statements.
 
         Reminders -- Stan, other:
         -----------------------------------------------------------------------
@@ -462,10 +465,17 @@ SIMPLE_FUNCTIONS = """
             Stan's version is in stan/math/prim/mat/fun/softmax.hpp; it uses
             Eigen.
         */
-        int length = num_elements(softmax_inputs);
-        real constant = max(softmax_inputs);
-        vector[length] s_exp_products = exp(softmax_inputs - constant);
-        return s_exp_products[index] / sum(s_exp_products);
+
+        /*
+            // OLD CODE:
+
+            int length = num_elements(softmax_inputs);
+            real constant = max(softmax_inputs);
+            vector[length] s_exp_products = exp(softmax_inputs - constant);
+            return s_exp_products[index] / sum(s_exp_products);
+        */
+
+        return softmax(softmax_inputs)[index];  // Use Stan's built-in version.
     }
 
     real softmaxNthInvTemp(vector softmax_inputs, real inverse_temp, int index)
@@ -478,8 +488,9 @@ SIMPLE_FUNCTIONS = """
                 real result = softmaxNthInvTemp(inputs, invtemp, index);
                 real result = softmax(inputs * invtemp)[index];
         */
-        
-        return softmaxNth(softmax_inputs * inverse_temp, index);
+
+        // return softmaxNth(softmax_inputs * inverse_temp, index);
+        return softmax(softmax_inputs * inverse_temp)[index];
     }
 
     real logitSoftmaxNth(vector inputs, int index)
@@ -534,35 +545,21 @@ SIMPLE_FUNCTIONS = """
         // ... but Stan doesn't have max(real, real) or min(real, real) 
         // functions!
 
-        if (x < min_value) {
-            return min_value;
-        } else if (x > max_value) {
-            return max_value;
-        } else {
-            return x;
-        }
+        return x < min_value ? min_value : (x > max_value ? max_value : x);
     }
 
     real boundLower(real x, real min_value)
     {
         // a.k.a. max()
 
-        if (x < min_value) {
-            return min_value;
-        } else {
-            return x;
-        }
+        return x < min_value ? min_value : x;
     }
 
     real boundUpper(real x, real max_value)
     {
         // a.k.a. min()
 
-        if (x > max_value) {
-            return max_value;
-        } else {
-            return x;
-        }
+        return x > max_value ? max_value : x;
     }
 
     // ------------------------------------------------------------------------
@@ -579,8 +576,7 @@ SIMPLE_FUNCTIONS = """
         //      vector[ncols] y = x[row];
         // so this function does that.
         
-        int x_dimensions[2] = dims(x);
-        int ncols = x_dimensions[2];
+        int ncols = dims(x)[2];
         vector[ncols] v;
         for (i in 1:ncols) {
             v[i] = x[row, i];
@@ -592,8 +588,7 @@ SIMPLE_FUNCTIONS = """
     {
         // As above, but for an int array.
         
-        int x_dimensions[2] = dims(x);
-        int ncols = x_dimensions[2];
+        int ncols = dims(x)[2];
         vector[ncols] v;
         for (i in 1:ncols) {
             v[i] = x[row, i];
@@ -728,7 +723,7 @@ SIMPLE_FUNCTIONS = """
             reject("Incompatible arguments");
         }
         for (j in 1:q) {  // columns of y
-            real cell = 0.0;
+            cell = 0.0;
             for (i in 1:p) {  // rows of y
                 cell += x[j] * y[i, j];
             }
@@ -957,7 +952,7 @@ SIMPLE_FUNCTIONS = """
         // reader think the code is wrong.
 
         int denominator = factorial(k) * factorial(n - k);
-        return factorial(n) / denominator;
+        return factorial(n) / denominator;  // will produce a Stan info message
     }
 
     vector pairwiseDifferencesVec(vector x)
@@ -1249,8 +1244,7 @@ LOG_PROB_HELPERS = """
     }
     void enforceLowerBound_A_lp(real[] y, real lower)
     {
-        int length = num_elements(y);
-        for (i in 1:length) {
+        for (i in 1:num_elements(y)) {
             if (y[i] < lower) {
                 target += negative_infinity();
                 return;
@@ -1285,8 +1279,7 @@ LOG_PROB_HELPERS = """
     }
     void enforceLowerBound_V_lp(vector y, real lower)
     {
-        int length = num_elements(y);
-        for (i in 1:length) {
+        for (i in 1:num_elements(y)) {
             if (y[i] < lower) {
                 target += negative_infinity();
                 return;
@@ -1304,8 +1297,7 @@ LOG_PROB_HELPERS = """
     }
     void enforceUpperBound_A_lp(real[] y, real upper)
     {
-        int length = num_elements(y);
-        for (i in 1:length) {
+        for (i in 1:num_elements(y)) {
             if (y[i] > upper) {
                 target += negative_infinity();
                 return;
@@ -1340,8 +1332,7 @@ LOG_PROB_HELPERS = """
     }
     void enforceUpperBound_V_lp(vector y, real upper)
     {
-        int length = num_elements(y);
-        for (i in 1:length) {
+        for (i in 1:num_elements(y)) {
             if (y[i] > upper) {
                 target += negative_infinity();
                 return;
@@ -1359,9 +1350,8 @@ LOG_PROB_HELPERS = """
     }
     void enforceRangeBounds_A_lp(real[] y, real lower, real upper)
     {
-        int length = num_elements(y);
         real value;
-        for (i in 1:length) {
+        for (i in 1:num_elements(y)) {
             value = y[i];  // lookup only once
             if (value < lower || value > upper) {
                 target += negative_infinity();
@@ -1401,9 +1391,8 @@ LOG_PROB_HELPERS = """
     }
     void enforceRangeBounds_V_lp(vector y, real lower, real upper)
     {
-        int length = num_elements(y);
         real value;
-        for (i in 1:length) {
+        for (i in 1:num_elements(y)) {
             value = y[i];  // lookup only once
             if (value < lower || value > upper) {
                 target += negative_infinity();
@@ -1468,8 +1457,7 @@ def sample_generic(name_caps: str,
                        pdf_call_params=pdf_call_params)
         elif y.dimensions == 2:
             code = """
-        int nrows = size(y);
-        for (i in 1:nrows) {{
+        for (i in 1:size(y)) {{
             target += {lpdf_func}(y[i] | {pdf_call_params});
             // ... y[i] is a one-dimensional array
         }}
@@ -1627,8 +1615,7 @@ def sample_uniform(y: VarDescriptor, lower: VarDescriptor,
         """
     elif y.dimensions == 2:
         code = """
-        int nrows = size(y);
-        for (i in 1:nrows) {
+        for (i in 1:size(y)) {
             target += uniform_lpdf(y[i] | lower, upper);
             // ... y[i] is a one-dimensional array
         }
