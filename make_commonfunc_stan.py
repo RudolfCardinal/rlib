@@ -226,9 +226,7 @@ class SampleMethod(Enum):
 # =============================================================================
 
 def comment(x: str) -> str:
-    return """
-    // {}
-    """.format(x)
+    return f"\n    // {x}\n"
 
 
 def remove_blank_lines(x: str) -> str:
@@ -1418,7 +1416,9 @@ def sample_generic(name_caps: str,
                    name_lower: str,
                    y: VarDescriptor,
                    distribution_params: List[VarDescriptor],
-                   method: SampleMethod) -> str:
+                   method: SampleMethod,
+                   cdf_prefix: str = None,
+                   cdf_call_params: str = None) -> str:
     """
     Writes functions to sample from arbitrary Stan distributions, with
     - correction of the "target" special log-probability variable for
@@ -1437,37 +1437,41 @@ def sample_generic(name_caps: str,
     upper = REAL.clone()
     upper.name = "upper"
     lpdf_func = "{}_lpdf".format(name_lower)
-    lcdf_func = "{}_lcdf".format(name_lower)
-    lccdf_func = "{}_lccdf".format(name_lower)
-    pdf_call_params = ", ".join(vd.name for vd in distribution_params)
+    cdf_prefix = cdf_prefix or name_lower
+    lcdf_func = "{}_lcdf".format(cdf_prefix)
+    lccdf_func = "{}_lccdf".format(cdf_prefix)
+    if distribution_params:
+        pdf_call_params = (
+            " | " + ", ".join(vd.name for vd in distribution_params)
+        )
+    else:
+        pdf_call_params = ""
+    cdf_call_params = cdf_call_params or pdf_call_params
     funcname_extra = ""
 
     if method == SampleMethod.PLAIN:
         if y.dimensions == 3:
-            code = """
+            code = f"""
         int dimensions[3] = dims(y);
         for (i in 1:dimensions[1]) {{
             for (j in 1:dimensions[2]) {{
                 for (k in 1:dimensions[3]) {{
-                    target += {lpdf_func}(y[i, j, k] | {pdf_call_params});
+                    target += {lpdf_func}(y[i, j, k]{pdf_call_params});
                 }}
             }}
         }}
-            """.format(lpdf_func=lpdf_func,
-                       pdf_call_params=pdf_call_params)
+            """
         elif y.dimensions == 2:
-            code = """
+            code = f"""
         for (i in 1:size(y)) {{
-            target += {lpdf_func}(y[i] | {pdf_call_params});
+            target += {lpdf_func}(y[i]{pdf_call_params});
             // ... y[i] is a one-dimensional array
         }}
-           """.format(lpdf_func=lpdf_func,
-                      pdf_call_params=pdf_call_params)
+           """
         else:  # vector, 1D array, real
-            code = """
-        target += {lpdf_func}(y | {pdf_call_params});
-            """.format(lpdf_func=lpdf_func,
-                       pdf_call_params=pdf_call_params)
+            code = f"""
+        target += {lpdf_func}(y{pdf_call_params});
+            """
 
     elif method in [SampleMethod.LOWER,
                     SampleMethod.UPPER,
@@ -1476,22 +1480,19 @@ def sample_generic(name_caps: str,
 
         # Define the correction PER SAMPLED VALUE.
         if method == SampleMethod.LOWER:
-            code = """
-        real correction_per_value = {lccdf_func}(lower | {pdf_call_params});
-            """.format(lccdf_func=lccdf_func,
-                       pdf_call_params=pdf_call_params)
+            code = f"""
+        real correction_per_value = {lccdf_func}(lower{cdf_call_params});
+            """
         elif method == SampleMethod.UPPER:
-            code = """
-        real correction_per_value = {lcdf_func}(upper | {pdf_call_params});
-            """.format(lcdf_func=lcdf_func,
-                       pdf_call_params=pdf_call_params)
+            code = f"""
+        real correction_per_value = {lcdf_func}(upper{cdf_call_params});
+            """
         elif method == SampleMethod.RANGE:
-            code = """
+            code = f"""
         real correction_per_value = log_diff_exp(
-            {lcdf_func}(upper | {pdf_call_params}),
-            {lcdf_func}(lower | {pdf_call_params}));
-            """.format(lcdf_func=lcdf_func,
-                       pdf_call_params=pdf_call_params)
+            {lcdf_func}(upper{cdf_call_params}),
+            {lcdf_func}(lower{cdf_call_params}));
+            """
         else:
             raise AssertionError("bug")
         code = code.rstrip()
@@ -1499,64 +1500,60 @@ def sample_generic(name_caps: str,
         # Sample, and apply the correction to the "target" special log-prob
         # variable.
         if y.dimensions == 3:
-            code += """
+            code += f"""
         int dimensions[3] = dims(y);
         for (i in 1:dimensions[1]) {{
             for (j in 1:dimensions[2]) {{
                 for (k in 1:dimensions[3]) {{
-                    target += {lpdf_func}(y[i, j, k] | {pdf_call_params}) -
+                    target += {lpdf_func}(y[i, j, k]{pdf_call_params}) -
                               correction_per_value;
                 }}
             }}
         }}
-                """.format(lpdf_func=lpdf_func,
-                           pdf_call_params=pdf_call_params)
+                """
         elif y.dimensions == 2:
-            code += """
+            code += f"""
         int dimensions[2] = dims(y);
         real correction_per_row = correction_per_value * dimensions[2];
         for (i in 1:dimensions[1]) {{
-            target += {lpdf_func}(y[i] | {pdf_call_params}) -
+            target += {lpdf_func}(y[i]{pdf_call_params}) -
                       correction_per_row;
             // ... y[i] is a one-dimensional array
         }}
-                """.format(lpdf_func=lpdf_func,
-                           pdf_call_params=pdf_call_params)
+                """
         elif y.dimensions == 1:  # vector or 1D array
-            code += """
-        target += {lpdf_func}(y | {pdf_call_params}) -
+            code += f"""
+        target += {lpdf_func}(y{pdf_call_params}) -
                   correction_per_value * num_elements(y);
-               """.format(lpdf_func=lpdf_func,
-                          pdf_call_params=pdf_call_params)
+               """
         elif y.singleton:
-            code += """
-        target += {lpdf_func}(y | {pdf_call_params}) -
+            code += f"""
+        target += {lpdf_func}(y{pdf_call_params}) -
                   correction_per_value;
-            """.format(lpdf_func=lpdf_func,
-                       pdf_call_params=pdf_call_params)
+            """
         else:
             raise AssertionError("bug")
         code = code.rstrip()
 
         # Apply bounds checking
         if method == SampleMethod.LOWER:
-            code += """
-        enforceLowerBound_{ya}_lp(y, lower);
-            """.format(ya=y.abbreviation)
+            code += f"""
+        enforceLowerBound_{y.abbreviation}_lp(y, lower);
+            """
             funcname_extra = "LowerBound"
             call_params += [lower]
 
         elif method == SampleMethod.UPPER:
-            code += """
-        enforceUpperBound_{ya}_lp(y, upper);
-            """.format(ya=y.abbreviation)
+            code += f"""
+        enforceUpperBound_{y.abbreviation}_lp(y, upper);
+            """
             funcname_extra = "UpperBound"
             call_params += [upper]
 
         elif method == SampleMethod.RANGE:
-            code += """
-        enforceRangeBounds_{ya}_lp(y, lower, upper);
-            """.format(ya=y.abbreviation)
+            code += f"""
+        enforceRangeBounds_{y.abbreviation}_lp(y, lower, upper);
+            """
             funcname_extra = "RangeBound"
             call_params += [lower, upper]
         else:
@@ -1571,19 +1568,15 @@ def sample_generic(name_caps: str,
         types="".join(vd.abbreviation for vd in [y] + distribution_params)
     )
     param_defs = ", ".join(
-        "{} {}".format(vd.typedef, vd.name)
+        f"{vd.typedef} {vd.name}"
         for vd in call_params
     )
-    return """
+    return f"""
     void {funcname}({param_defs})
     {{
-        {code}
+        {code.strip()}
     }}
-    """.format(
-        funcname=funcname,
-        param_defs=param_defs,
-        code=code.strip(),
-    )
+    """.rstrip() + "\n"
 
 
 def sample_uniform(y: VarDescriptor, lower: VarDescriptor,
@@ -1634,16 +1627,12 @@ def sample_uniform(y: VarDescriptor, lower: VarDescriptor,
         for vd in call_params
     )
 
-    return """
+    return f"""
     void {funcname}({param_defs})
     {{
-        {code}
+        {code.strip()}
     }}
-    """.format(
-        funcname=funcname,
-        param_defs=param_defs,
-        code=code.strip(),
-    )
+    """
 
 
 # =============================================================================
@@ -1701,6 +1690,80 @@ def get_normal_distribution() -> str:
         do_call(y, mu, sigma, SampleMethod.RANGE)
     return code
 
+
+def get_std_normal_distribution() -> str:
+    code = """
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Standard normal distribution, N(0,1)
+    // - Note that we have to use normal_lcdf (etc.) but can use
+    //   std_normal_lpdf.
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    """
+
+    supported_combinations = ALL_TYPES  # type: List[VarDescriptor]
+
+    def do_call(y_: VarDescriptor,
+                method: SampleMethod):
+        nonlocal code
+        # Cloning necessary to prevent name overwriting:
+        y_ = y_.clone()
+        code += sample_generic(
+            name_caps="StdNormal",
+            name_lower="std_normal",
+            y=y_,
+            distribution_params=[],
+            method=method,
+            cdf_prefix="normal",
+            cdf_call_params=" | 0, 1"
+        )
+
+    code += comment("Sampling")
+    for y in supported_combinations:
+        do_call(y, SampleMethod.PLAIN)
+    code += comment("Sampling with lower bound")
+    for y in supported_combinations:
+        do_call(y, SampleMethod.LOWER)
+    code += comment("Sampling with upper bound")
+    for y in supported_combinations:
+        do_call(y, SampleMethod.UPPER)
+    code += comment("Sampling with range (lower and upper) bounds")
+    for y in supported_combinations:
+        do_call(y, SampleMethod.RANGE)
+    return code
+
+
+STANDARD_NORMAL_SPECIALS = """
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Specials for half-standard-normal, constrained to be positive
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    void sampleStdNormalPositive_R_lp(real y)
+    {
+        sampleStdNormalLowerBound_R_lp(y, 0);
+    }
+
+    void sampleStdNormalPositive_A_lp(real[] y, real lower)
+    {
+        sampleStdNormalLowerBound_A_lp(y, 0);
+    }
+
+    void sampleStdNormalPositive_2_lp(real[,] y, real lower)
+    {
+        sampleStdNormalLowerBound_2_lp(y, 0);
+    }
+
+    void sampleStdNormalPositive_3_lp(real[,,] y, real lower)
+    {
+        sampleStdNormalLowerBound_3_lp(y, 0);
+    }
+
+    void sampleStdNormalPositive_V_lp(vector y, real lower)
+    {
+        sampleStdNormalLowerBound_V_lp(y, 0);
+    }
+
+"""
 
 # =============================================================================
 # Cauchy distribution
@@ -2567,6 +2630,8 @@ def get_code() -> str:
         LOG_PROB_HEADER +
         LOG_PROB_HELPERS +
         get_normal_distribution() +
+        get_std_normal_distribution() +
+        STANDARD_NORMAL_SPECIALS +
         get_cauchy_distribution() +
         get_beta_distribution() +
         get_gamma_distribution() +

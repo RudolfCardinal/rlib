@@ -938,17 +938,17 @@
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     
     // Sampling
-    
+
     void sampleNormal_RRR_lp(real y, real mu, real sigma)
     {
         target += normal_lpdf(y | mu, sigma);
     }
-    
+
     void sampleNormal_ARR_lp(real[] y, real mu, real sigma)
     {
         target += normal_lpdf(y | mu, sigma);
     }
-    
+
     void sampleNormal_2RR_lp(real[,] y, real mu, real sigma)
     {
         for (i in 1:size(y)) {
@@ -956,7 +956,7 @@
             // ... y[i] is a one-dimensional array
         }
     }
-    
+
     void sampleNormal_3RR_lp(real[,,] y, real mu, real sigma)
     {
         int dimensions[3] = dims(y);
@@ -968,14 +968,14 @@
             }
         }
     }
-    
+
     void sampleNormal_VRR_lp(vector y, real mu, real sigma)
     {
         target += normal_lpdf(y | mu, sigma);
     }
-    
+
     // Sampling with lower bound
-    
+
     void sampleNormalLowerBound_RRR_lp(real y, real mu, real sigma, real lower)
     {
         real correction_per_value = normal_lccdf(lower | mu, sigma);
@@ -983,7 +983,7 @@
                   correction_per_value;
         enforceLowerBound_R_lp(y, lower);
     }
-    
+
     void sampleNormalLowerBound_ARR_lp(real[] y, real mu, real sigma, real lower)
     {
         real correction_per_value = normal_lccdf(lower | mu, sigma);
@@ -991,7 +991,7 @@
                   correction_per_value * num_elements(y);
         enforceLowerBound_A_lp(y, lower);
     }
-    
+
     void sampleNormalLowerBound_2RR_lp(real[,] y, real mu, real sigma, real lower)
     {
         real correction_per_value = normal_lccdf(lower | mu, sigma);
@@ -1004,7 +1004,7 @@
         }
         enforceLowerBound_2_lp(y, lower);
     }
-    
+
     void sampleNormalLowerBound_3RR_lp(real[,,] y, real mu, real sigma, real lower)
     {
         real correction_per_value = normal_lccdf(lower | mu, sigma);
@@ -1019,7 +1019,7 @@
         }
         enforceLowerBound_3_lp(y, lower);
     }
-    
+
     void sampleNormalLowerBound_VRR_lp(vector y, real mu, real sigma, real lower)
     {
         real correction_per_value = normal_lccdf(lower | mu, sigma);
@@ -1027,9 +1027,9 @@
                   correction_per_value * num_elements(y);
         enforceLowerBound_V_lp(y, lower);
     }
-    
+
     // Sampling with upper bound
-    
+
     void sampleNormalUpperBound_RRR_lp(real y, real mu, real sigma, real upper)
     {
         real correction_per_value = normal_lcdf(upper | mu, sigma);
@@ -1037,7 +1037,7 @@
                   correction_per_value;
         enforceUpperBound_R_lp(y, upper);
     }
-    
+
     void sampleNormalUpperBound_ARR_lp(real[] y, real mu, real sigma, real upper)
     {
         real correction_per_value = normal_lcdf(upper | mu, sigma);
@@ -1045,7 +1045,7 @@
                   correction_per_value * num_elements(y);
         enforceUpperBound_A_lp(y, upper);
     }
-    
+
     void sampleNormalUpperBound_2RR_lp(real[,] y, real mu, real sigma, real upper)
     {
         real correction_per_value = normal_lcdf(upper | mu, sigma);
@@ -1058,7 +1058,7 @@
         }
         enforceUpperBound_2_lp(y, upper);
     }
-    
+
     void sampleNormalUpperBound_3RR_lp(real[,,] y, real mu, real sigma, real upper)
     {
         real correction_per_value = normal_lcdf(upper | mu, sigma);
@@ -1073,7 +1073,7 @@
         }
         enforceUpperBound_3_lp(y, upper);
     }
-    
+
     void sampleNormalUpperBound_VRR_lp(vector y, real mu, real sigma, real upper)
     {
         real correction_per_value = normal_lcdf(upper | mu, sigma);
@@ -1081,9 +1081,9 @@
                   correction_per_value * num_elements(y);
         enforceUpperBound_V_lp(y, upper);
     }
-    
+
     // Sampling with range (lower and upper) bounds
-    
+
     void sampleNormalRangeBound_RRR_lp(real y, real mu, real sigma, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1093,7 +1093,7 @@
                   correction_per_value;
         enforceRangeBounds_R_lp(y, lower, upper);
     }
-    
+
     void sampleNormalRangeBound_ARR_lp(real[] y, real mu, real sigma, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1103,7 +1103,7 @@
                   correction_per_value * num_elements(y);
         enforceRangeBounds_A_lp(y, lower, upper);
     }
-    
+
     void sampleNormalRangeBound_2RR_lp(real[,] y, real mu, real sigma, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1118,7 +1118,7 @@
         }
         enforceRangeBounds_2_lp(y, lower, upper);
     }
-    
+
     void sampleNormalRangeBound_3RR_lp(real[,,] y, real mu, real sigma, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1135,7 +1135,7 @@
         }
         enforceRangeBounds_3_lp(y, lower, upper);
     }
-    
+
     void sampleNormalRangeBound_VRR_lp(vector y, real mu, real sigma, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1145,24 +1145,270 @@
                   correction_per_value * num_elements(y);
         enforceRangeBounds_V_lp(y, lower, upper);
     }
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Standard normal distribution, N(0,1)
+    // - Note that we have to use normal_lcdf (etc.) but can use
+    //   std_normal_lpdf.
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     
+    // Sampling
+
+    void sampleStdNormal_R_lp(real y)
+    {
+        target += std_normal_lpdf(y);
+    }
+
+    void sampleStdNormal_A_lp(real[] y)
+    {
+        target += std_normal_lpdf(y);
+    }
+
+    void sampleStdNormal_2_lp(real[,] y)
+    {
+        for (i in 1:size(y)) {
+            target += std_normal_lpdf(y[i]);
+            // ... y[i] is a one-dimensional array
+        }
+    }
+
+    void sampleStdNormal_3_lp(real[,,] y)
+    {
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += std_normal_lpdf(y[i, j, k]);
+                }
+            }
+        }
+    }
+
+    void sampleStdNormal_V_lp(vector y)
+    {
+        target += std_normal_lpdf(y);
+    }
+
+    // Sampling with lower bound
+
+    void sampleStdNormalLowerBound_R_lp(real y, real lower)
+    {
+        real correction_per_value = normal_lccdf(lower | 0, 1);
+        target += std_normal_lpdf(y) -
+                  correction_per_value;
+        enforceLowerBound_R_lp(y, lower);
+    }
+
+    void sampleStdNormalLowerBound_A_lp(real[] y, real lower)
+    {
+        real correction_per_value = normal_lccdf(lower | 0, 1);
+        target += std_normal_lpdf(y) -
+                  correction_per_value * num_elements(y);
+        enforceLowerBound_A_lp(y, lower);
+    }
+
+    void sampleStdNormalLowerBound_2_lp(real[,] y, real lower)
+    {
+        real correction_per_value = normal_lccdf(lower | 0, 1);
+        int dimensions[2] = dims(y);
+        real correction_per_row = correction_per_value * dimensions[2];
+        for (i in 1:dimensions[1]) {
+            target += std_normal_lpdf(y[i]) -
+                      correction_per_row;
+            // ... y[i] is a one-dimensional array
+        }
+        enforceLowerBound_2_lp(y, lower);
+    }
+
+    void sampleStdNormalLowerBound_3_lp(real[,,] y, real lower)
+    {
+        real correction_per_value = normal_lccdf(lower | 0, 1);
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += std_normal_lpdf(y[i, j, k]) -
+                              correction_per_value;
+                }
+            }
+        }
+        enforceLowerBound_3_lp(y, lower);
+    }
+
+    void sampleStdNormalLowerBound_V_lp(vector y, real lower)
+    {
+        real correction_per_value = normal_lccdf(lower | 0, 1);
+        target += std_normal_lpdf(y) -
+                  correction_per_value * num_elements(y);
+        enforceLowerBound_V_lp(y, lower);
+    }
+
+    // Sampling with upper bound
+
+    void sampleStdNormalUpperBound_R_lp(real y, real upper)
+    {
+        real correction_per_value = normal_lcdf(upper | 0, 1);
+        target += std_normal_lpdf(y) -
+                  correction_per_value;
+        enforceUpperBound_R_lp(y, upper);
+    }
+
+    void sampleStdNormalUpperBound_A_lp(real[] y, real upper)
+    {
+        real correction_per_value = normal_lcdf(upper | 0, 1);
+        target += std_normal_lpdf(y) -
+                  correction_per_value * num_elements(y);
+        enforceUpperBound_A_lp(y, upper);
+    }
+
+    void sampleStdNormalUpperBound_2_lp(real[,] y, real upper)
+    {
+        real correction_per_value = normal_lcdf(upper | 0, 1);
+        int dimensions[2] = dims(y);
+        real correction_per_row = correction_per_value * dimensions[2];
+        for (i in 1:dimensions[1]) {
+            target += std_normal_lpdf(y[i]) -
+                      correction_per_row;
+            // ... y[i] is a one-dimensional array
+        }
+        enforceUpperBound_2_lp(y, upper);
+    }
+
+    void sampleStdNormalUpperBound_3_lp(real[,,] y, real upper)
+    {
+        real correction_per_value = normal_lcdf(upper | 0, 1);
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += std_normal_lpdf(y[i, j, k]) -
+                              correction_per_value;
+                }
+            }
+        }
+        enforceUpperBound_3_lp(y, upper);
+    }
+
+    void sampleStdNormalUpperBound_V_lp(vector y, real upper)
+    {
+        real correction_per_value = normal_lcdf(upper | 0, 1);
+        target += std_normal_lpdf(y) -
+                  correction_per_value * num_elements(y);
+        enforceUpperBound_V_lp(y, upper);
+    }
+
+    // Sampling with range (lower and upper) bounds
+
+    void sampleStdNormalRangeBound_R_lp(real y, real lower, real upper)
+    {
+        real correction_per_value = log_diff_exp(
+            normal_lcdf(upper | 0, 1),
+            normal_lcdf(lower | 0, 1));
+        target += std_normal_lpdf(y) -
+                  correction_per_value;
+        enforceRangeBounds_R_lp(y, lower, upper);
+    }
+
+    void sampleStdNormalRangeBound_A_lp(real[] y, real lower, real upper)
+    {
+        real correction_per_value = log_diff_exp(
+            normal_lcdf(upper | 0, 1),
+            normal_lcdf(lower | 0, 1));
+        target += std_normal_lpdf(y) -
+                  correction_per_value * num_elements(y);
+        enforceRangeBounds_A_lp(y, lower, upper);
+    }
+
+    void sampleStdNormalRangeBound_2_lp(real[,] y, real lower, real upper)
+    {
+        real correction_per_value = log_diff_exp(
+            normal_lcdf(upper | 0, 1),
+            normal_lcdf(lower | 0, 1));
+        int dimensions[2] = dims(y);
+        real correction_per_row = correction_per_value * dimensions[2];
+        for (i in 1:dimensions[1]) {
+            target += std_normal_lpdf(y[i]) -
+                      correction_per_row;
+            // ... y[i] is a one-dimensional array
+        }
+        enforceRangeBounds_2_lp(y, lower, upper);
+    }
+
+    void sampleStdNormalRangeBound_3_lp(real[,,] y, real lower, real upper)
+    {
+        real correction_per_value = log_diff_exp(
+            normal_lcdf(upper | 0, 1),
+            normal_lcdf(lower | 0, 1));
+        int dimensions[3] = dims(y);
+        for (i in 1:dimensions[1]) {
+            for (j in 1:dimensions[2]) {
+                for (k in 1:dimensions[3]) {
+                    target += std_normal_lpdf(y[i, j, k]) -
+                              correction_per_value;
+                }
+            }
+        }
+        enforceRangeBounds_3_lp(y, lower, upper);
+    }
+
+    void sampleStdNormalRangeBound_V_lp(vector y, real lower, real upper)
+    {
+        real correction_per_value = log_diff_exp(
+            normal_lcdf(upper | 0, 1),
+            normal_lcdf(lower | 0, 1));
+        target += std_normal_lpdf(y) -
+                  correction_per_value * num_elements(y);
+        enforceRangeBounds_V_lp(y, lower, upper);
+    }
+
+
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Specials for half-standard-normal, constrained to be positive
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    void sampleStdNormalPositive_R_lp(real y)
+    {
+        sampleStdNormalLowerBound_R_lp(y, 0);
+    }
+
+    void sampleStdNormalPositive_A_lp(real[] y, real lower)
+    {
+        sampleStdNormalLowerBound_A_lp(y, 0);
+    }
+
+    void sampleStdNormalPositive_2_lp(real[,] y, real lower)
+    {
+        sampleStdNormalLowerBound_2_lp(y, 0);
+    }
+
+    void sampleStdNormalPositive_3_lp(real[,,] y, real lower)
+    {
+        sampleStdNormalLowerBound_3_lp(y, 0);
+    }
+
+    void sampleStdNormalPositive_V_lp(vector y, real lower)
+    {
+        sampleStdNormalLowerBound_V_lp(y, 0);
+    }
+
+
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Cauchy distribution
     // - mu is location parameter; sigma is scale parameter
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     
     // Sampling
-    
+
     void sampleCauchy_RRR_lp(real y, real mu, real sigma)
     {
         target += cauchy_lpdf(y | mu, sigma);
     }
-    
+
     void sampleCauchy_ARR_lp(real[] y, real mu, real sigma)
     {
         target += cauchy_lpdf(y | mu, sigma);
     }
-    
+
     void sampleCauchy_2RR_lp(real[,] y, real mu, real sigma)
     {
         for (i in 1:size(y)) {
@@ -1170,7 +1416,7 @@
             // ... y[i] is a one-dimensional array
         }
     }
-    
+
     void sampleCauchy_3RR_lp(real[,,] y, real mu, real sigma)
     {
         int dimensions[3] = dims(y);
@@ -1182,14 +1428,14 @@
             }
         }
     }
-    
+
     void sampleCauchy_VRR_lp(vector y, real mu, real sigma)
     {
         target += cauchy_lpdf(y | mu, sigma);
     }
-    
+
     // Sampling with lower bound
-    
+
     void sampleCauchyLowerBound_RRR_lp(real y, real mu, real sigma, real lower)
     {
         real correction_per_value = cauchy_lccdf(lower | mu, sigma);
@@ -1197,7 +1443,7 @@
                   correction_per_value;
         enforceLowerBound_R_lp(y, lower);
     }
-    
+
     void sampleCauchyLowerBound_ARR_lp(real[] y, real mu, real sigma, real lower)
     {
         real correction_per_value = cauchy_lccdf(lower | mu, sigma);
@@ -1205,7 +1451,7 @@
                   correction_per_value * num_elements(y);
         enforceLowerBound_A_lp(y, lower);
     }
-    
+
     void sampleCauchyLowerBound_2RR_lp(real[,] y, real mu, real sigma, real lower)
     {
         real correction_per_value = cauchy_lccdf(lower | mu, sigma);
@@ -1218,7 +1464,7 @@
         }
         enforceLowerBound_2_lp(y, lower);
     }
-    
+
     void sampleCauchyLowerBound_3RR_lp(real[,,] y, real mu, real sigma, real lower)
     {
         real correction_per_value = cauchy_lccdf(lower | mu, sigma);
@@ -1233,7 +1479,7 @@
         }
         enforceLowerBound_3_lp(y, lower);
     }
-    
+
     void sampleCauchyLowerBound_VRR_lp(vector y, real mu, real sigma, real lower)
     {
         real correction_per_value = cauchy_lccdf(lower | mu, sigma);
@@ -1241,9 +1487,9 @@
                   correction_per_value * num_elements(y);
         enforceLowerBound_V_lp(y, lower);
     }
-    
+
     // Sampling with upper bound
-    
+
     void sampleCauchyUpperBound_RRR_lp(real y, real mu, real sigma, real upper)
     {
         real correction_per_value = cauchy_lcdf(upper | mu, sigma);
@@ -1251,7 +1497,7 @@
                   correction_per_value;
         enforceUpperBound_R_lp(y, upper);
     }
-    
+
     void sampleCauchyUpperBound_ARR_lp(real[] y, real mu, real sigma, real upper)
     {
         real correction_per_value = cauchy_lcdf(upper | mu, sigma);
@@ -1259,7 +1505,7 @@
                   correction_per_value * num_elements(y);
         enforceUpperBound_A_lp(y, upper);
     }
-    
+
     void sampleCauchyUpperBound_2RR_lp(real[,] y, real mu, real sigma, real upper)
     {
         real correction_per_value = cauchy_lcdf(upper | mu, sigma);
@@ -1272,7 +1518,7 @@
         }
         enforceUpperBound_2_lp(y, upper);
     }
-    
+
     void sampleCauchyUpperBound_3RR_lp(real[,,] y, real mu, real sigma, real upper)
     {
         real correction_per_value = cauchy_lcdf(upper | mu, sigma);
@@ -1287,7 +1533,7 @@
         }
         enforceUpperBound_3_lp(y, upper);
     }
-    
+
     void sampleCauchyUpperBound_VRR_lp(vector y, real mu, real sigma, real upper)
     {
         real correction_per_value = cauchy_lcdf(upper | mu, sigma);
@@ -1295,9 +1541,9 @@
                   correction_per_value * num_elements(y);
         enforceUpperBound_V_lp(y, upper);
     }
-    
+
     // Sampling with range (lower and upper) bounds
-    
+
     void sampleCauchyRangeBound_RRR_lp(real y, real mu, real sigma, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1307,7 +1553,7 @@
                   correction_per_value;
         enforceRangeBounds_R_lp(y, lower, upper);
     }
-    
+
     void sampleCauchyRangeBound_ARR_lp(real[] y, real mu, real sigma, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1317,7 +1563,7 @@
                   correction_per_value * num_elements(y);
         enforceRangeBounds_A_lp(y, lower, upper);
     }
-    
+
     void sampleCauchyRangeBound_2RR_lp(real[,] y, real mu, real sigma, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1332,7 +1578,7 @@
         }
         enforceRangeBounds_2_lp(y, lower, upper);
     }
-    
+
     void sampleCauchyRangeBound_3RR_lp(real[,,] y, real mu, real sigma, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1349,7 +1595,7 @@
         }
         enforceRangeBounds_3_lp(y, lower, upper);
     }
-    
+
     void sampleCauchyRangeBound_VRR_lp(vector y, real mu, real sigma, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1359,7 +1605,7 @@
                   correction_per_value * num_elements(y);
         enforceRangeBounds_V_lp(y, lower, upper);
     }
-    
+
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Beta distribution
     // - in R, alpha is called scale1, and beta is called scale2
@@ -1368,17 +1614,17 @@
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     
     // Sampling
-    
+
     void sampleBeta_RRR_lp(real y, real alpha, real beta)
     {
         target += beta_lpdf(y | alpha, beta);
     }
-    
+
     void sampleBeta_ARR_lp(real[] y, real alpha, real beta)
     {
         target += beta_lpdf(y | alpha, beta);
     }
-    
+
     void sampleBeta_2RR_lp(real[,] y, real alpha, real beta)
     {
         for (i in 1:size(y)) {
@@ -1386,7 +1632,7 @@
             // ... y[i] is a one-dimensional array
         }
     }
-    
+
     void sampleBeta_3RR_lp(real[,,] y, real alpha, real beta)
     {
         int dimensions[3] = dims(y);
@@ -1398,14 +1644,14 @@
             }
         }
     }
-    
+
     void sampleBeta_VRR_lp(vector y, real alpha, real beta)
     {
         target += beta_lpdf(y | alpha, beta);
     }
-    
+
     // Sampling with lower bound
-    
+
     void sampleBetaLowerBound_RRR_lp(real y, real alpha, real beta, real lower)
     {
         real correction_per_value = beta_lccdf(lower | alpha, beta);
@@ -1413,7 +1659,7 @@
                   correction_per_value;
         enforceLowerBound_R_lp(y, lower);
     }
-    
+
     void sampleBetaLowerBound_ARR_lp(real[] y, real alpha, real beta, real lower)
     {
         real correction_per_value = beta_lccdf(lower | alpha, beta);
@@ -1421,7 +1667,7 @@
                   correction_per_value * num_elements(y);
         enforceLowerBound_A_lp(y, lower);
     }
-    
+
     void sampleBetaLowerBound_2RR_lp(real[,] y, real alpha, real beta, real lower)
     {
         real correction_per_value = beta_lccdf(lower | alpha, beta);
@@ -1434,7 +1680,7 @@
         }
         enforceLowerBound_2_lp(y, lower);
     }
-    
+
     void sampleBetaLowerBound_3RR_lp(real[,,] y, real alpha, real beta, real lower)
     {
         real correction_per_value = beta_lccdf(lower | alpha, beta);
@@ -1449,7 +1695,7 @@
         }
         enforceLowerBound_3_lp(y, lower);
     }
-    
+
     void sampleBetaLowerBound_VRR_lp(vector y, real alpha, real beta, real lower)
     {
         real correction_per_value = beta_lccdf(lower | alpha, beta);
@@ -1457,9 +1703,9 @@
                   correction_per_value * num_elements(y);
         enforceLowerBound_V_lp(y, lower);
     }
-    
+
     // Sampling with upper bound
-    
+
     void sampleBetaUpperBound_RRR_lp(real y, real alpha, real beta, real upper)
     {
         real correction_per_value = beta_lcdf(upper | alpha, beta);
@@ -1467,7 +1713,7 @@
                   correction_per_value;
         enforceUpperBound_R_lp(y, upper);
     }
-    
+
     void sampleBetaUpperBound_ARR_lp(real[] y, real alpha, real beta, real upper)
     {
         real correction_per_value = beta_lcdf(upper | alpha, beta);
@@ -1475,7 +1721,7 @@
                   correction_per_value * num_elements(y);
         enforceUpperBound_A_lp(y, upper);
     }
-    
+
     void sampleBetaUpperBound_2RR_lp(real[,] y, real alpha, real beta, real upper)
     {
         real correction_per_value = beta_lcdf(upper | alpha, beta);
@@ -1488,7 +1734,7 @@
         }
         enforceUpperBound_2_lp(y, upper);
     }
-    
+
     void sampleBetaUpperBound_3RR_lp(real[,,] y, real alpha, real beta, real upper)
     {
         real correction_per_value = beta_lcdf(upper | alpha, beta);
@@ -1503,7 +1749,7 @@
         }
         enforceUpperBound_3_lp(y, upper);
     }
-    
+
     void sampleBetaUpperBound_VRR_lp(vector y, real alpha, real beta, real upper)
     {
         real correction_per_value = beta_lcdf(upper | alpha, beta);
@@ -1511,9 +1757,9 @@
                   correction_per_value * num_elements(y);
         enforceUpperBound_V_lp(y, upper);
     }
-    
+
     // Sampling with range (lower and upper) bounds
-    
+
     void sampleBetaRangeBound_RRR_lp(real y, real alpha, real beta, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1523,7 +1769,7 @@
                   correction_per_value;
         enforceRangeBounds_R_lp(y, lower, upper);
     }
-    
+
     void sampleBetaRangeBound_ARR_lp(real[] y, real alpha, real beta, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1533,7 +1779,7 @@
                   correction_per_value * num_elements(y);
         enforceRangeBounds_A_lp(y, lower, upper);
     }
-    
+
     void sampleBetaRangeBound_2RR_lp(real[,] y, real alpha, real beta, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1548,7 +1794,7 @@
         }
         enforceRangeBounds_2_lp(y, lower, upper);
     }
-    
+
     void sampleBetaRangeBound_3RR_lp(real[,,] y, real alpha, real beta, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1565,7 +1811,7 @@
         }
         enforceRangeBounds_3_lp(y, lower, upper);
     }
-    
+
     void sampleBetaRangeBound_VRR_lp(vector y, real alpha, real beta, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1575,7 +1821,7 @@
                   correction_per_value * num_elements(y);
         enforceRangeBounds_V_lp(y, lower, upper);
     }
-    
+
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Gamma distribution
     // - Stan's alpha is R's shape; Stan's beta is R's rate.
@@ -1584,17 +1830,17 @@
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     
     // Sampling
-    
+
     void sampleGamma_RRR_lp(real y, real alpha, real beta)
     {
         target += gamma_lpdf(y | alpha, beta);
     }
-    
+
     void sampleGamma_ARR_lp(real[] y, real alpha, real beta)
     {
         target += gamma_lpdf(y | alpha, beta);
     }
-    
+
     void sampleGamma_2RR_lp(real[,] y, real alpha, real beta)
     {
         for (i in 1:size(y)) {
@@ -1602,7 +1848,7 @@
             // ... y[i] is a one-dimensional array
         }
     }
-    
+
     void sampleGamma_3RR_lp(real[,,] y, real alpha, real beta)
     {
         int dimensions[3] = dims(y);
@@ -1614,14 +1860,14 @@
             }
         }
     }
-    
+
     void sampleGamma_VRR_lp(vector y, real alpha, real beta)
     {
         target += gamma_lpdf(y | alpha, beta);
     }
-    
+
     // Sampling with lower bound
-    
+
     void sampleGammaLowerBound_RRR_lp(real y, real alpha, real beta, real lower)
     {
         real correction_per_value = gamma_lccdf(lower | alpha, beta);
@@ -1629,7 +1875,7 @@
                   correction_per_value;
         enforceLowerBound_R_lp(y, lower);
     }
-    
+
     void sampleGammaLowerBound_ARR_lp(real[] y, real alpha, real beta, real lower)
     {
         real correction_per_value = gamma_lccdf(lower | alpha, beta);
@@ -1637,7 +1883,7 @@
                   correction_per_value * num_elements(y);
         enforceLowerBound_A_lp(y, lower);
     }
-    
+
     void sampleGammaLowerBound_2RR_lp(real[,] y, real alpha, real beta, real lower)
     {
         real correction_per_value = gamma_lccdf(lower | alpha, beta);
@@ -1650,7 +1896,7 @@
         }
         enforceLowerBound_2_lp(y, lower);
     }
-    
+
     void sampleGammaLowerBound_3RR_lp(real[,,] y, real alpha, real beta, real lower)
     {
         real correction_per_value = gamma_lccdf(lower | alpha, beta);
@@ -1665,7 +1911,7 @@
         }
         enforceLowerBound_3_lp(y, lower);
     }
-    
+
     void sampleGammaLowerBound_VRR_lp(vector y, real alpha, real beta, real lower)
     {
         real correction_per_value = gamma_lccdf(lower | alpha, beta);
@@ -1673,9 +1919,9 @@
                   correction_per_value * num_elements(y);
         enforceLowerBound_V_lp(y, lower);
     }
-    
+
     // Sampling with upper bound
-    
+
     void sampleGammaUpperBound_RRR_lp(real y, real alpha, real beta, real upper)
     {
         real correction_per_value = gamma_lcdf(upper | alpha, beta);
@@ -1683,7 +1929,7 @@
                   correction_per_value;
         enforceUpperBound_R_lp(y, upper);
     }
-    
+
     void sampleGammaUpperBound_ARR_lp(real[] y, real alpha, real beta, real upper)
     {
         real correction_per_value = gamma_lcdf(upper | alpha, beta);
@@ -1691,7 +1937,7 @@
                   correction_per_value * num_elements(y);
         enforceUpperBound_A_lp(y, upper);
     }
-    
+
     void sampleGammaUpperBound_2RR_lp(real[,] y, real alpha, real beta, real upper)
     {
         real correction_per_value = gamma_lcdf(upper | alpha, beta);
@@ -1704,7 +1950,7 @@
         }
         enforceUpperBound_2_lp(y, upper);
     }
-    
+
     void sampleGammaUpperBound_3RR_lp(real[,,] y, real alpha, real beta, real upper)
     {
         real correction_per_value = gamma_lcdf(upper | alpha, beta);
@@ -1719,7 +1965,7 @@
         }
         enforceUpperBound_3_lp(y, upper);
     }
-    
+
     void sampleGammaUpperBound_VRR_lp(vector y, real alpha, real beta, real upper)
     {
         real correction_per_value = gamma_lcdf(upper | alpha, beta);
@@ -1727,9 +1973,9 @@
                   correction_per_value * num_elements(y);
         enforceUpperBound_V_lp(y, upper);
     }
-    
+
     // Sampling with range (lower and upper) bounds
-    
+
     void sampleGammaRangeBound_RRR_lp(real y, real alpha, real beta, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1739,7 +1985,7 @@
                   correction_per_value;
         enforceRangeBounds_R_lp(y, lower, upper);
     }
-    
+
     void sampleGammaRangeBound_ARR_lp(real[] y, real alpha, real beta, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1749,7 +1995,7 @@
                   correction_per_value * num_elements(y);
         enforceRangeBounds_A_lp(y, lower, upper);
     }
-    
+
     void sampleGammaRangeBound_2RR_lp(real[,] y, real alpha, real beta, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1764,7 +2010,7 @@
         }
         enforceRangeBounds_2_lp(y, lower, upper);
     }
-    
+
     void sampleGammaRangeBound_3RR_lp(real[,,] y, real alpha, real beta, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1781,7 +2027,7 @@
         }
         enforceRangeBounds_3_lp(y, lower, upper);
     }
-    
+
     void sampleGammaRangeBound_VRR_lp(vector y, real alpha, real beta, real lower, real upper)
     {
         real correction_per_value = log_diff_exp(
@@ -1791,7 +2037,7 @@
                   correction_per_value * num_elements(y);
         enforceRangeBounds_V_lp(y, lower, upper);
     }
-    
+
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Uniform distribution
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1799,7 +2045,7 @@
     // Simple; no extra work for the bridge sampler.
     
     // Sampling
-    
+
     void sampleUniform_RRR_lp(real y, real lower, real upper)
     {
         target += uniform_lpdf(y | lower, upper);
@@ -2013,7 +2259,7 @@
     }
     
     // Plain
-    
+
     real getReparameterizedNormal_RRR_lp(real y_unit_normal, real mu, real sigma)
     {
         real result;
@@ -2297,7 +2543,7 @@
     }
     
     // With lower bound
-    
+
     real getReparameterizedNormalLowerBound_RRR_lp(real y_unit_normal, real mu, real sigma, real lower)
     {
         real result;
@@ -2623,7 +2869,7 @@
     }
     
     // With upper bound
-    
+
     real getReparameterizedNormalUpperBound_RRR_lp(real y_unit_normal, real mu, real sigma, real upper)
     {
         real result;
@@ -2949,7 +3195,7 @@
     }
     
     // With range (lower and upper) bounds
-    
+
     real getReparameterizedNormalRangeBound_RRR_lp(real y_unit_normal, real mu, real sigma, real lower, real upper)
     {
         real result;
@@ -3352,7 +3598,7 @@
     }
     
     // Plain
-    
+
     real getReparameterizedCauchy_RRR_lp(real y_uniform, real mu, real sigma)
     {
         real result;
@@ -3636,7 +3882,7 @@
     }
     
     // With lower bound
-    
+
     real getReparameterizedCauchyLowerBound_RRR_lp(real y_uniform, real mu, real sigma, real lower)
     {
         real result;
@@ -3962,7 +4208,7 @@
     }
     
     // With upper bound
-    
+
     real getReparameterizedCauchyUpperBound_RRR_lp(real y_uniform, real mu, real sigma, real upper)
     {
         real result;
@@ -4288,7 +4534,7 @@
     }
     
     // With range (lower and upper) bounds
-    
+
     real getReparameterizedCauchyRangeBound_RRR_lp(real y_uniform, real mu, real sigma, real lower, real upper)
     {
         real result;
