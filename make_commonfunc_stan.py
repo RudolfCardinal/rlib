@@ -960,7 +960,7 @@ SIMPLE_FUNCTIONS = """
         return factorial(n) / denominator;
     }
 
-    vector pairwiseVector(vector x)
+    vector pairwiseDifferencesVec(vector x)
     {
         // Given a vector x of length n (where n > 1), returns a vector of
         // length C(n, 2) of every pairwise comparison.
@@ -976,7 +976,29 @@ SIMPLE_FUNCTIONS = """
         int pair = 1;
         vector[n_pairs] differences;
         if (n_pairs < 1) {
-            reject("Must have at least once pair");
+            return differences;  // empty vector
+        }
+
+        for (i in 1:(n_items - 1)) {
+            for (j in (i + 1):n_items) {
+                differences[pair] = x[i] - x[j];
+                pair += 1;
+            }
+        }
+        return differences;
+    }
+
+    vector pairwiseDifferencesVecNPairsKnown(vector x, int n_pairs)
+    {
+        // As for pairwiseDifferencesVec, but with n_pairs precalculated
+        // for speed. (The caller will need to have precalculated this to
+        // define the size of the return vector...)
+
+        int n_items = num_elements(x);
+        int pair = 1;
+        vector[n_pairs] differences;
+        if (n_pairs < 1) {
+            return differences;  // empty vector
         }
 
         for (i in 1:(n_items - 1)) {
