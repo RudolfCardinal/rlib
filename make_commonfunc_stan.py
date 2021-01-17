@@ -933,7 +933,7 @@ SIMPLE_FUNCTIONS = """
         // will just use the simplest version:
 
         if (x < 0) {
-            reject("Factorial undefined for negative numbers");
+            reject("Factorial undefined for negative numbers. Called for: ", x);
         }
         if (x == 0 || x == 1) {
             return 1;  // 0! = 1, and 1! = 1
@@ -953,7 +953,11 @@ SIMPLE_FUNCTIONS = """
         // ... the removal of the brackets in the warning message may make the
         // reader think the code is wrong.
 
-        int denominator = factorial(k) * factorial(n - k);
+        int denominator;
+        if (n < 1 || k < 1 || n - k < 0) {
+            return 0;
+        }
+        denominator = factorial(k) * factorial(n - k);
         return factorial(n) / denominator;  // will produce a Stan info message
     }
 
