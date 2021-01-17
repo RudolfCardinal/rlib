@@ -8,7 +8,7 @@
         Reminders -- Stan's flavour of C++:
         -----------------------------------------------------------------------
 
-        - Annoyingly, you can't modify arguments to Stan user-defined
+        - Disappointingly, you can't modify arguments to Stan user-defined
           functions. (No pass-by-reference.)
 
         - You can't have templating of user-defined functions, i.e. not this:
@@ -45,7 +45,11 @@
         Reminders -- Stan, other:
         -----------------------------------------------------------------------
 
-        - size() doesn't work on a plain "vector". Use num_elements().
+        - OUTDATED: previously, size() didn't work on a plain "vector" and one
+          should have used num_elements(). This is fixed as of Stan ~2.24: see
+          https://discourse.mc-stan.org/t/option-to-keep-constant-terms-in-log-probability-via-standard-sampling-syntax/20278/2.
+          But remember that size() is "top-level" size (e.g. the first
+          dimension of an array), whereas num_elements() counts all elements.
 
         - Array/vector indexing is 1-based.
 
@@ -166,10 +170,10 @@
     real bound(real x, real min_value, real max_value)
     {
         // Returns x with minimum/maximum boundaries applied.
-        // We should simply be able to do this:
+        // We would simply do this:
         //     return max(min_value, min(x, max_value));
         // ... but Stan doesn't have max(real, real) or min(real, real) 
-        // functions!
+        // functions.
 
         return x < min_value ? min_value : (x > max_value ? max_value : x);
     }
@@ -548,9 +552,9 @@
     int factorial(int x);  // necessary for self-recursion
     int factorial(int x)
     {
-        // We could use tgamma(x + 1). But then we run into the dumbness that
-        // is the unwillingness of Stan to provide functions that round real
-        // numbers to integer, and the need for complex workarounds:
+        // We could use tgamma(x + 1). But then we run into the unwillingness
+        // of Stan to provide functions that round real numbers to integer, and
+        // the need for complex workarounds:
         // https://discourse.mc-stan.org/t/real-to-integer-conversion/5622/9 So
         // we could just implement a factorial algorithm; see
         // http://www.luschny.de/math/factorial/FastFactorialFunctions.htm We
