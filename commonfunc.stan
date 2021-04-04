@@ -94,18 +94,18 @@
                 
             Stan's version is in stan/math/prim/mat/fun/softmax.hpp; it uses
             Eigen.
+
+            This "homebrew" version is faster than using Stan's built-in
+            softmax(), surprisingly. See tests/test_stan_speed/softmax.stan.
         */
 
-        /*
-            // OLD CODE:
+        int length = num_elements(softmax_inputs);
+        real constant = max(softmax_inputs);
+        vector[length] s_exp_products = exp(softmax_inputs - constant);
+        return s_exp_products[index] / sum(s_exp_products);
 
-            int length = num_elements(softmax_inputs);
-            real constant = max(softmax_inputs);
-            vector[length] s_exp_products = exp(softmax_inputs - constant);
-            return s_exp_products[index] / sum(s_exp_products);
-        */
-
-        return softmax(softmax_inputs)[index];  // Use Stan's built-in version.
+        // The alternative (slower, surprisingly) would be:
+        // return softmax(softmax_inputs)[index];  // Use Stan's built-in version.
     }
 
     real softmaxNthInvTemp(vector softmax_inputs, real inverse_temp, int index)
@@ -119,23 +119,31 @@
                 real result = softmax(inputs * invtemp)[index];
         */
 
-        // return softmaxNth(softmax_inputs * inverse_temp, index);
-        return softmax(softmax_inputs * inverse_temp)[index];
+        return softmaxNth(softmax_inputs * inverse_temp, index);
+        // return softmax(softmax_inputs * inverse_temp)[index];
     }
 
     real logitSoftmaxNth(vector inputs, int index)
     {
         // Returns logit(softmax(inputs))[index].
 
-        // METHOD 1 (fewer calculations involved):
+        // METHOD 1 (fewer calculations involved and empirically faster):
         real log_p = inputs[index] - log_sum_exp(inputs);
         
-        // METHOD 2:
+        // METHOD 2 (empirically slower):
         // real log_p = log_softmax(inputs)[index];
 
         // EITHER WAY:
-        real log_1mp = log1m_exp(log_p);  // = log(1 - exp(log_p)) = log(1 - p)
-        return log_p - log_1mp;  // logit = log(p) - log(1 - p)
+        // Conceptually:
+        // (a) log_1mp = log(1 - p)
+        //             = log(1 - exp(log_p))
+        //             = log1m_exp(log_p)
+        // (b) logit   = log(p) - log(1 - p)
+        //             = log_p - log_1mp
+        // It is very slightly faster (from profiling) to do this in a single
+        // step:
+
+        return log_p - log1m_exp(log_p);
     }
     
     // ------------------------------------------------------------------------
@@ -247,7 +255,7 @@
     int except_I_I(int x, int except)
     {
         // The argument is an index to a vector v; the result is the equivalent
-        // index to a vector except_V_V(v, except).
+        // index to the vector returned by except_V_V(v, except).
         
         if (x < 1) {
             reject("Argument x is a Stan index so must be >= 1");
