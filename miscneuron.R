@@ -47,7 +47,8 @@ miscneuron$width_of_standard_logistic_sigmoid_encompassing <- function(fraction)
 }
 
 
-miscneuron$WIDTH_99PCT_STANDARD_LOGISTIC_SIGMOID <- width_of_standard_logistic_sigmoid_encompassing(0.99) # cache; it's 10.58661
+miscneuron$WIDTH_99PCT_STANDARD_LOGISTIC_SIGMOID <-
+    miscneuron$width_of_standard_logistic_sigmoid_encompassing(0.99) # cache; it's 10.58661
 
 
 sigmoid_specifying_width <- function(xval, xcentre, xwidth99percent, ymin = 0, ymax = 1) {

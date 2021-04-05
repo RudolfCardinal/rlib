@@ -8,6 +8,5 @@ fi
 
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
-"${THIS_DIR}/softmax" sample
-"${CMDSTANHOME}/bin/stansummary" output.csv
-
+cd "${CMDSTANHOME}"
+make "${THIS_DIR}/profile_softmax"

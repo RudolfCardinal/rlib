@@ -23,7 +23,7 @@ install_if_absent <- function(libname,
         if (require(libname, character.only = TRUE)) {
             cat("Loaded newly installed library:", libname, "\n")
         } else {
-            cat("FAILED TO INSTALL PACKAGE:", libname, "\n")
+            stop("FAILED TO INSTALL PACKAGE:", libname, "\n")
         }
     }
 }
@@ -41,7 +41,7 @@ install_github_if_absent <- function(libname, github_name)
         if (require(libname, character.only = TRUE)) {
             cat("Loaded library:", libname, "\n")
         } else {
-            cat("FAILED TO INSTALL GITHUB PACKAGE:", libname, "\n")
+            stop("FAILED TO INSTALL GITHUB PACKAGE:", libname, "\n")
         }
     }
 }
@@ -62,6 +62,7 @@ DESIRED_LIBRARIES <- c(
     "devtools",  # e.g. install R packages from github
     "diagram",  # visualize simple graphs/networks
     "DiagrammeR",  # graph/network visualization
+    "directlabels",  # used by PubMedTrends.R
     "doParallel",  # parallel computing
     "doSNOW",  # use SNOW for parallel computing
     "ez",  # ezANOVA
@@ -84,6 +85,7 @@ DESIRED_LIBRARIES <- c(
     "maptools",  # for spatial maps
     "matrixStats",  # high-performance matrix functions
     "MCMCglmm",  # MCMC generalized linear mixed models
+    "moments",  # e.g. skewness, kurosis
     "nlme",  # nonlinear mixed effects models
     "nortest",  # tests for normality
     "openxlsx",  # manipulate Excel files

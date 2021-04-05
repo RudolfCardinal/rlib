@@ -468,7 +468,8 @@ SIMPLE_FUNCTIONS = """
             Eigen.
 
             This "homebrew" version is faster than using Stan's built-in
-            softmax(), surprisingly. See tests/test_stan_speed/softmax.stan.
+            softmax(), surprisingly. See
+            tests/profile_stan_softmax/profile_softmax.stan.
         */
 
         int length = num_elements(softmax_inputs);
