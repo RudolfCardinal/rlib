@@ -499,9 +499,10 @@ stanfunc$compare_model_evidence <- function(bridgesample_list_list,
     # detail:
     #   keep the details used for intermediate calculations
     #
-    # stanfit_list:
-    #   NULL, or a list of stanfits whose order must match bridgesample_list;
-    #   if present, summary statistics (such as maximum R-hat) are included
+    # rhat_warning_threshold:
+    #   If this threshold for R-hat is exceeded, warnings are shown. A value
+    #   of 1.2 is a typical threshold and 1.1 is a stringent criterion (Brooks
+    #   and Gelman 1998, doi:10.1080/10618600.1998.10474787, p. 444).
     #
     # Note:
     # - "marginal likelihood" is the same as "evidence" (e.g. Kruschke 2011

@@ -15,8 +15,8 @@
 Fast, accurate Stan
 ===================
 
-The compiler environment
-------------------------
+C++ compiler optimization
+-------------------------
 
 You want RStan itself and your own C++ code to be compiled with the ``-O3``
 (highest) `level of optimization
@@ -45,6 +45,17 @@ This is slightly confusing.
         library(tools)
         tools::makevars_user()  # e.g. /home/rudolf/.R/Makevars
 
+You may find that RStan has done the work for you at some point, in which case
+your ``Makevars`` file may look like this:
+
+.. code-block:: ini
+
+    # created by rstan at Fri Jun 28 14:04:38 2013
+    CXXFLAGS = -O3 -pipe   $(LTO)     #set_by_rstan
+    R_XTRA_CPPFLAGS =  -I$(R_INCLUDE_DIR)      #set_by_rstan
+
+... but if not, ensure ``CXXFLAGS`` contains ``-O3``.
+
 `This link <https://groups.google.com/g/stan-users/c/a96cURY9gVI?pli=1>`_
 suggests that RStan automatically uses ``-O3`` for installation.
 
@@ -57,15 +68,15 @@ General Stan/C++ coding
 
 - Use fewer C++ statements; Stan applies an overhead to each.
 
-  If you're thinking of making a cut-down model by setting parameters to zero,
-  be aware that this might be much slower (e.g. five-fold in one example) than
-  cutting out the unneeded code.
+  If you're thinking of making a cut-down model by setting parameters to zero
+  in code for a more complex model, be aware that this might be much slower
+  (e.g. five-fold in one example) than cutting out the unnecessary code.
 
 - Don't check constraints twice, or apply unnecessary constraints. See
   https://mc-stan.org/docs/2_26/stan-users-guide/avoiding-validation.html.
   So, for example, if you use ``real<lower=0> some_standard_deviation`` but
   then have another method of enforcing the zero lower bound, you could cut out
-  the ``<lower=0>``. (This took times down to 83-96% of former values in one
+  the ``<lower=0>``. (Removing this check cut execution time by 4–17% in one
   quite simple scenario.)
 
 - Vectorize everything that you can.
@@ -136,8 +147,8 @@ Parameterizing the model
 
 - Make the parameter space easy for Stan to explore.
 
-- When a quantity is sampled from a Normal(mu, sigma) distribution, sample it
-  from a N(0, 1) distribution and scale it:
+- When a quantity is sampled from a Normal(mu, sigma) distribution, consider
+  sampling it from a N(0, 1) distribution and scale it:
 
     .. code-block:: C++
 
@@ -146,14 +157,18 @@ Parameterizing the model
 
   This is referred to as "noncentred parameterization" or the "Matt trick".
 
-- Try to use "soft constraints", i.e. avoid hard pass/fail boundaries for the
-  sampling algorithm (such as truncated distributions).
+  Think of it this way: if you use ``normal(mu, sigma)``, Stan is having to
+  sample from a "moving target", whereas N(0, 1) is a "stationary target".
+
+- Try to use "soft constraints", i.e. avoid hard pass/fail boundaries (such as
+  truncated distributions) for the sampling algorithm.
 
 - In particular, consider the method of sampling means from underlying
   standard normal N(0, 1) distributions, and standard deviations from similar
   (e.g. positive-half-normal, positive-half-Cauchy) distributions.
   Transformations are then applied to reach the desired parameter "space". For
-  example, Ahn2017_, Haines2018_, and Romeu2020_ use a method in which:
+  example, Ahn2017_, Haines2018_, and Romeu2020_ use a method that, when
+  expressed in Stan syntax, is as follows:
 
   - an unconstrained parameter A is sampled like this:
 
@@ -438,6 +453,11 @@ from 0))". That can be demonstrated simply again in R:
     mean(exp(0 + deviations))  # 1.648
     exp(0)  # 1
 
+Attempting to recover standard deviations in "parameter space" is unlikely to
+be meaningful. If ``z ~ N(0, sigma)`` and ``y = exp(z)`` then ``y`` is not
+normally distributed, so it has no "standard deviation"; the relevant SD is
+that of ``z``, which will be estimated by Stan directly.
+
 
 Group-level testing
 -------------------
@@ -453,8 +473,10 @@ In general, it is desirable not to assume homogeneity of variance, and instead
 to model (and test for) variance differences between groups. However, for "low
 *n*" studies, there may be insufficient data to estimate the variances
 separately. In this situation, you may find that even a very simple conceptual
-model does not converge, and you may be better off assuming homogeneity of
-variance (and such models will also run faster).
+model does not converge, and you may have to assume homogeneity of variance
+(such models will also run faster). The assumption of homogeneity of variance
+is of course the norm in traditional null-hypothesis significance testing
+methods such as ANOVA.
 
 
 Variational inference
