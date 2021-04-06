@@ -1,16 +1,19 @@
 .. stan_speed.rst
 
 .. _Ahn2017: https://pubmed.ncbi.nlm.nih.gov/29601060/
+.. _CRIU: https://criu.org/
 .. _Docker Swarm: https://docs.docker.com/engine/swarm/
-.. _Hains2018: https://pubmed.ncbi.nlm.nih.gov/30289167/
+.. _Haines2018: https://pubmed.ncbi.nlm.nih.gov/30289167/
+.. _Kanen2019: https://pubmed.ncbi.nlm.nih.gov/31324936/
 .. _Romeu2020: https://pubmed.ncbi.nlm.nih.gov/31735532/
 .. _Singularity: https://sylabs.io/singularity/
 .. _SLURM: https://slurm.schedmd.com/
 .. _Unison: https://www.cis.upenn.edu/~bcpierce/unison/
+.. _Yao2018: https://arxiv.org/abs/1802.02538
 
 
-Making Stan run faster
-======================
+Fast, accurate Stan
+===================
 
 The compiler environment
 ------------------------
@@ -53,6 +56,17 @@ General Stan/C++ coding
 -----------------------
 
 - Use fewer C++ statements; Stan applies an overhead to each.
+
+  If you're thinking of making a cut-down model by setting parameters to zero,
+  be aware that this might be much slower (e.g. five-fold in one example) than
+  cutting out the unneeded code.
+
+- Don't check constraints twice, or apply unnecessary constraints. See
+  https://mc-stan.org/docs/2_26/stan-users-guide/avoiding-validation.html.
+  So, for example, if you use ``real<lower=0> some_standard_deviation`` but
+  then have another method of enforcing the zero lower bound, you could cut out
+  the ``<lower=0>``. (This took times down to 83-96% of former values in one
+  quite simple scenario.)
 
 - Vectorize everything that you can.
 
@@ -117,8 +131,8 @@ General Stan/C++ coding
   ``softmax()``. See ``tests/profile_stan_softmax/profile_softmax.stan``.
 
 
-The model and parameterization
-------------------------------
+Parameterizing the model
+------------------------
 
 - Make the parameter space easy for Stan to explore.
 
@@ -127,54 +141,70 @@ The model and parameterization
 
     .. code-block:: C++
 
-        standard_normal_X ~ Normal(0, 1);
+        standard_normal_X ~ std_normal();  // = Normal(0, 1) but faster
         X = sigma * standard_normal_X + mu;
 
   This is referred to as "noncentred parameterization" or the "Matt trick".
 
 - Try to use "soft constraints", i.e. avoid hard pass/fail boundaries for the
-  sampling algorithm (such as truncated distributions). In particular, consider
-  e.g. the Ahn2017_, Hains2018_, Romeu2020_ method in which:
+  sampling algorithm (such as truncated distributions).
+
+- In particular, consider the method of sampling means from underlying
+  standard normal N(0, 1) distributions, and standard deviations from similar
+  (e.g. positive-half-normal, positive-half-Cauchy) distributions.
+  Transformations are then applied to reach the desired parameter "space". For
+  example, Ahn2017_, Haines2018_, and Romeu2020_ use a method in which:
 
   - an unconstrained parameter A is sampled like this:
 
     .. code-block:: C++
 
-        real mu_A;
-        real<lower=0> sigma_A;
-        real A;
-
-        mu_A ~ normal(0, 10);
-        sigma_A ~ cauchy(0, 5);  // half-Cauchy because of <lower=0> limit
-        A ~ normal(mu_A, sigma_A);
+        parameters {
+            real mu_A;
+            real<lower=0> sigma_A;
+            real A;
+        }
+        model {
+            mu_A ~ normal(0, 10);
+            sigma_A ~ cauchy(0, 5);  // half-Cauchy because of <lower=0> limit
+            A ~ normal(mu_A, sigma_A);
+        }
 
   - a positive parameter B is sampled like this:
 
     .. code-block:: C++
 
-        real mu_B;
-        real<lower=0> sigma_B;
-        real normal_B;
-        real B;
-
-        mu_B ~ normal(0, 1);
-        sigma_B ~ cauchy(0, 5);  // half-Cauchy because of <lower=0> limit
-        normal_B ~ normal(mu_B, sigma_B);
-        B = exp(normal_B);
+        parameters {
+            real mu_B;
+            real<lower=0> sigma_B;
+            real raw_normal_B;
+        }
+        transformed parameters {
+            real B = exp(raw_normal_B);
+        }
+        model {
+            mu_B ~ std_normal();  // = Normal(0, 1) but faster
+            sigma_B ~ cauchy(0, 5);  // half-Cauchy because of <lower=0> limit
+            raw_normal_B ~ normal(mu_B, sigma_B);
+        }
 
   - a parameter C in the range [0, 1] is sampled like this:
 
     .. code-block:: C++
 
-        real mu_C;
-        real<lower=0> sigma_C;
-        real normal_C;
-        real C;
-
-        mu_C ~ normal(0, 1);
-        sigma_C ~ cauchy(0, 5);  // half-Cauchy because of <lower=0> limit
-        normal_C ~ normal(mu_C, sigma_C);
-        C = Phi(normal_C);  // equivalent to "inverse_probit(normal_C)"
+        parameters {
+            real mu_C;
+            real<lower=0> sigma_C;
+            real raw_normal_C;
+        }
+        transformed parameters {
+            real C = Phi(raw_normal_C);  // equivalent to "inverse_probit(raw_normal_C)"
+        }
+        model {
+            mu_C ~ std_normal();  // = Normal(0, 1) but faster
+            sigma_C ~ cauchy(0, 5);  // half-Cauchy because of <lower=0> limit
+            raw_normal_C ~ normal(mu_C, sigma_C);
+        }
 
     - The **probit** function is the quantile function (the inverse of the
       cumulative distribution function) for the standard normal
@@ -192,15 +222,247 @@ The model and parameterization
 
     .. code-block:: C++
 
-        real mu_D;
-        real<lower=0> sigma_D;
-        real normal_D;
-        real D;
+        parameters {
+            real mu_D;
+            real<lower=0> sigma_D;
+            real raw_normal_D;
+        }
+        transformed parameters {
+            real D = U * Phi(raw_normal_D);
+        }
+        model {
+            mu_D ~ normal(0, 1);
+            sigma_D ~ cauchy(0, 5);  // half-Cauchy because of <lower=0> limit
+            raw_normal_D ~ normal(mu_D, sigma_D);
+        }
 
-        mu_D ~ normal(0, 1);
-        sigma_D ~ cauchy(0, 5);  // half-Cauchy because of <lower=0> limit
-        normal_D ~ normal(mu_D, sigma_D);
-        D = U * Phi(normal_D);
+Presentationally, one can show posterior values/distributions of the "unit
+normal" variable, or the transformed value (e.g. Ahn2017_, pp. 31, 47;
+:math:`K` or :math:`K′` in Haines2018_, pp. 2544, 2546, 2553; Romeu2020_, p.
+107711). See below for cautions regarding the interpretation of transformed
+values.
+
+Unsure what a half-Cauchy distribution looks like? Try this:
+
+.. code-block:: R
+
+    curve(dnorm(x, mean = 0, sd = 1), 0, 5, col = "blue", ylab = "density")
+    curve(dcauchy(x, location = 0, scale = 1), 0, 5, col = "red", add = TRUE)
+
+This isn't the only way. Note that ``uniform`` is an undesirable (hard-edged)
+alternative, but a ``beta`` distribution may be perfectly useful for a [0,1]
+parameter. (If you use ``beta``, you might choose e.g. "normally distributed
+deviations about a beta-distributed mean"; e.g. Kanen2019_. In theory such
+values can go outside the range [0,1] but you can then ``reject()`` them.)
+
+
+The interpretation of transformed parameters
+--------------------------------------------
+
+Be careful not to misinterpret transformed parameters.
+
+Let's use the example of the transformed parameter B above.
+
+Note that the mean of B in "B space" is NOT the mean of sampled values of
+``exp(mu_B)``. (Though it is, of course, the mean of sampled values of B
+itself, and the mean of exponentiated values of ``raw_normal_B``.) Likewise,
+the standard deviation of B in "B space" is NOT ``exp(sigma_B)``! As a
+demonstration in R:
+
+.. code-block:: R
+
+    set.seed(1)  # for reproducibility
+    mu_B <- 5
+    sigma_B <- 2
+    raw_normal_B <- rnorm(n = 1000, mean = mu_B, sd = sigma_B)
+    B <- exp(raw_normal_B)
+
+    print(mean(raw_normal_B))  # about 5
+    print(exp(mu_B))  # 148.4
+    print(mean(B))  # about 1280
+    print(mean(exp(raw_normal_B)))  # identical to mean(B); about 1280
+
+    print(sd(raw_normal_B))  # about 2
+    print(exp(sigma_B))  # 7.389
+    print(sd(B))  # about 10100
+    print(sd(exp(raw_normal_B)))  # identical to sd(B); about 10100
+
+Why is this relevant? Because sometimes, `for efficiency
+<https://mc-stan.org/docs/2_18/reference-manual/program-block-generated-quantities.html>`_,
+you will not store the things you care about in the "transformed parameters"
+block, and must therefore generate them in the "generated quantities" block.
+
+Here's an example (which is highly inelegant!) in which the transformed means
+are not used directly within "transformed parameters" but are calculated within
+"generated quantities":
+
+.. code-block:: R
+
+        # Load RStan
+        library(rstan)
+        options(mc.cores = parallel::detectCores())
+        rstan_options(auto_write = TRUE)
+
+        # Generate some data
+        set.seed(1)  # for reproducibility
+        N_SUBJECTS <- 100
+        N_OBSERVATIONS_PER_SUBJECT <- 100
+        N_OBSERVATIONS <- N_SUBJECTS * N_OBSERVATIONS_PER_SUBJECT
+        RAW_OVERALL_MEAN <- 1  # in "standard normal" space
+        RAW_BETWEEN_SUBJECTS_SD <- 0.5  # in "standard normal" space
+        RAW_WITHIN_SUBJECTS_SD <- 0.2  # in "standard normal" space
+        EPSILON <- 0.05  # tolerance
+        repeat {
+            # Fake randomness so we actually end up with a mean/SD that is
+            # what we want, within the tolerance of EPSILON_*.
+            raw_subject_deviation_from_overall_mean <- rnorm(
+                n = N_SUBJECTS, mean = 0, sd = RAW_BETWEEN_SUBJECTS_SD
+            )
+            if (abs(mean(raw_subject_deviation_from_overall_mean)) <=
+                        EPSILON &&
+                    abs(sd(raw_subject_deviation_from_overall_mean) -
+                        RAW_BETWEEN_SUBJECTS_SD) <= EPSILON) {
+                break
+            }
+        }
+        subject <- rep(1:N_SUBJECTS, each = N_OBSERVATIONS_PER_SUBJECT)
+        repeat {
+            # Likewise, "constrained randonmess":
+            error <- rnorm(
+                n = N_OBSERVATIONS, mean = 0, sd = RAW_WITHIN_SUBJECTS_SD)
+            if (abs(mean(error)) <= EPSILON &&
+                    abs(sd(error) - RAW_WITHIN_SUBJECTS_SD) <= EPSILON) {
+                break
+            }
+        }
+        raw_y <- (
+            RAW_OVERALL_MEAN +
+            raw_subject_deviation_from_overall_mean[subject] +
+            error
+        )  # in "standard normal" space
+        y <- exp(raw_y)
+        standata <- list(
+            N_SUBJECTS = N_SUBJECTS,
+            N_OBSERVATIONS = N_OBSERVATIONS,
+            subject = subject,
+            y = y
+        )
+
+        # Analyse it with Stan
+        model_code <- '
+            // Single-group within-subjects design.
+            // The prefix "raw_" means "in standard normal (Z) space".
+            data {
+                int<lower=1> N_SUBJECTS;
+                int<lower=1> N_OBSERVATIONS;
+                int<lower=1> subject[N_OBSERVATIONS];
+                real y[N_OBSERVATIONS];
+            }
+            parameters {
+                real raw_overall_mean;
+                real<lower=0> raw_between_subjects_sd;
+                real<lower=0> raw_within_subject_sd;
+
+                vector[N_SUBJECTS] raw_subject_deviation_from_overall_mean;
+            }
+            transformed parameters {
+                vector[N_SUBJECTS] raw_subject_mean = (
+                    raw_overall_mean +  // real
+                    raw_subject_deviation_from_overall_mean  // vector
+                );
+            }
+            model {
+                vector[N_OBSERVATIONS] raw_predicted;
+
+                // Sample parameters
+                raw_overall_mean ~ std_normal();
+                raw_between_subjects_sd ~ cauchy(0, 5);
+                raw_within_subject_sd ~ cauchy(0, 5);
+                raw_subject_deviation_from_overall_mean ~ normal(
+                    0, raw_between_subjects_sd);
+
+                // Conceptually, raw_subject_mean is calculated at this point.
+
+                // Calculate the per-subject mean for each observation:
+                for (i in 1:N_OBSERVATIONS) {
+                    raw_predicted[i] = raw_subject_mean[subject[i]];
+                }
+
+                // Fit to data:
+                //      y ~ exp(normal(...)), or
+                //      log(y) ~ normal(...), or
+                //      y ~ lognormal(...):
+                y ~ lognormal(raw_predicted, raw_within_subject_sd);
+            }
+            generated quantities {
+                real transformed_overall_mean = exp(raw_overall_mean);
+                real mean_of_transformed_subject_means = mean(
+                    exp(raw_subject_mean)
+                );
+            }
+        '
+        fit <- rstan::stan(
+            model_code = model_code,
+            model_name = "Test model",
+            data = standata
+        )
+        print(fit)
+
+        # Means from Stan:
+        # - raw_overall_mean = 0.98 (95% HDI 0.87-1.07), accurate
+        # - raw_between_subjects_sd = 0.48 (HDI 0.42-0.56), accurate
+        # - raw_within_subjects_sd = 0.20 (HDI 0.20-0.21), accurate
+        # - transformed_overall_mean = 2.68 (HDI 2.38-2.90)
+        #   ... relevant but NOT the same as mean(y)
+        # - mean_of_transformed_subject_means = 3.00 (HDI 2.99-3.02)
+        #   ... more likely to be what you want.
+        #
+        # Compare to values from R:
+        print(mean(raw_y))  # 0.980
+        print(sd(raw_subject_deviation_from_overall_mean))  # 0.479
+        print(sd(error))  # 0.202
+        print(mean(y))  # 3.06
+        # ... noting that if all subjects don't have the same number of
+        #     observations, a different calculation would be required to
+        #     match mean_of_transformed_subject_means.
+
+In this case, the point to emphasize is that "mean(exp(raw_overall_mean))" is
+not the same as "mean(exp(raw_overall_mean + a normally distributed deviation
+from 0))". That can be demonstrated simply again in R:
+
+.. code-block:: R
+
+    set.seed(1)
+    deviations <- rnorm(n = 100000, mean = 0, sd = 1)
+    mean(0 + deviations)  # -0.00224
+    mean(exp(0 + deviations))  # 1.648
+    exp(0)  # 1
+
+
+Group-level testing
+-------------------
+
+I tend to follow the "cell means" approach outlined in Kanen2019_ (see the
+"Interpretation of results" section).
+
+
+Homogeneity of variance
+~~~~~~~~~~~~~~~~~~~~~~~
+
+In general, it is desirable not to assume homogeneity of variance, and instead
+to model (and test for) variance differences between groups. However, for "low
+*n*" studies, there may be insufficient data to estimate the variances
+separately. In this situation, you may find that even a very simple conceptual
+model does not converge, and you may be better off assuming homogeneity of
+variance (and such models will also run faster).
+
+
+Variational inference
+---------------------
+
+You will be tempted to use Stan's variational Bayes approximation (variational
+inference), e.g. via ``rstan::vb()``, because it is much quicker. But it can be
+wrong; see e.g. Yao2018_.
 
 
 Threads and processes
@@ -462,8 +724,28 @@ Quick clusters
 --------------
 
 Or: suppose your favourite high-performance computing (HPC) environment
-migrates to one with a short job length cap, and you wonder about doing it at
-home, or via a commercial cloud?
+migrates to one with a short job length cap
+(https://docs.hpc.cam.ac.uk/hpc/user-guide/long.html), and you wonder about
+doing it at home, or via a commercial cloud?
+
+Note that this problem might go away via checkpointing:
+
+- In Stan:
+  https://discourse.mc-stan.org/t/current-state-of-checkpointing-in-stan/12348/28.
+- There are generic checkpoint tools such as CRIU_.
+- SLURM supports ``scontrol checkpoint create JOB_ID`` and ``scontrol
+  checkpoint restart JOB_ID``. Its support appears built-in via DMTCP and/or
+  CRIU. See
+
+  - https://slurm.schedmd.com/SLUG16/ciemat-cr.pdf.
+  - https://slurm.schedmd.com/scontrol.html
+  - ``man scontrol``
+  - https://slurm.schedmd.com/sbatch.html
+  - https://www.nersc.gov/assets/Uploads/Checkpoint-Restart-20191106.pdf
+  - http://community.dur.ac.uk/ncc.admin/preemption/
+  - https://hpc-aub-users-guide.readthedocs.io/en/latest/octopus/jobs.html
+
+But otherwise...
 
 The whole principle of parallel high-performance computing is to bring many
 CPUs to a single problem (e.g. subdivisions of a common set of data). So the
