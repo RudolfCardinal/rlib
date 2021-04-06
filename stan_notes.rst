@@ -1,9 +1,13 @@
 .. stan_speed.rst
 
 .. _Ahn2017: https://pubmed.ncbi.nlm.nih.gov/29601060/
+.. _BetancourtGirolami2013: https://arxiv.org/abs/1312.0906
+.. _Bowling2009: https://www.jiem.org/index.php/jiem/article/view/60
 .. _CRIU: https://criu.org/
 .. _Docker Swarm: https://docs.docker.com/engine/swarm/
+.. _Gelman2006: https://doi.org/10.1214/06-BA117A
 .. _Haines2018: https://pubmed.ncbi.nlm.nih.gov/30289167/
+.. _Howell1997: https://en.wikipedia.org/wiki/Special:BookSources?isbn=0-534-51993-8
 .. _Kanen2019: https://pubmed.ncbi.nlm.nih.gov/31324936/
 .. _Romeu2020: https://pubmed.ncbi.nlm.nih.gov/31735532/
 .. _Singularity: https://sylabs.io/singularity/
@@ -213,7 +217,8 @@ Parameterizing the model
             real raw_normal_C;
         }
         transformed parameters {
-            real C = Phi(raw_normal_C);  // equivalent to "inverse_probit(raw_normal_C)"
+            real C = Phi_approx(raw_normal_C);
+            // ... equivalent to "inverse_probit(raw_normal_C)"
         }
         model {
             mu_C ~ std_normal();  // = Normal(0, 1) but faster
@@ -230,7 +235,13 @@ Parameterizing the model
       (CDF) of the standard normal distribution, often written ``Φ()``. It maps
       [−∞, +∞] to [0, 1]. In R, this function is ``pnorm()``, as in ``p <-
       pnorm(q)``. In Stan, it is `Phi()
-      <https://mc-stan.org/docs/2_21/stan-users-guide/logistic-probit-regression-section.html>`_.
+      <https://mc-stan.org/docs/2_21/stan-users-guide/logistic-probit-regression-section.html>`_
+      or ``Phi_approx()`` (as used by Ahn2017_, p. 39). ``Phi_approx`` is
+      "close and much more efficient"
+      (https://discourse.mc-stan.org/t/reparameterize-in-a-hierarchical-model/1833;
+      see also
+      https://mc-stan.org/docs/2_21/functions-reference/Phi-function.html and
+      Bowling2009_).
 
   - a parameter D in the range [0, U], where U is an upper limit, is sampled
     like this:
@@ -243,7 +254,7 @@ Parameterizing the model
             real raw_normal_D;
         }
         transformed parameters {
-            real D = U * Phi(raw_normal_D);
+            real D = U * Phi_approx(raw_normal_D);
         }
         model {
             mu_D ~ normal(0, 1);
@@ -269,6 +280,29 @@ alternative, but a ``beta`` distribution may be perfectly useful for a [0,1]
 parameter. (If you use ``beta``, you might choose e.g. "normally distributed
 deviations about a beta-distributed mean"; e.g. Kanen2019_. In theory such
 values can go outside the range [0,1] but you can then ``reject()`` them.)
+
+Regarding reparameterization, see also:
+
+- https://www.occasionaldivergences.com/post/non-centered/: explains that
+  **divergent transitions (divergences)** indicate that Stan's Hamiltonian Monte
+  Carlo algorithm is having trouble exploring the posterior distribution, and
+  that **exceeding the maximum treedepth** is a warning about inefficiency
+  rather than lack of model validity.
+
+- https://mc-stan.org/docs/2_26/stan-users-guide/reparameterization-section.html:
+  notes that the Cauchy is sometimes a tricky distribution and a candidate for
+  reparameterization, and describes non-centred parameterization in general.
+
+  - But see Gelman2006_, who recommends the half-Cauchy (p. 528) as a prior for
+    standard deviations.
+  - ... and even that Stan page uses ``sigma ~ cauchy(0, 5)`` in one of its
+    reparameterized examples.
+
+- https://groups.google.com/g/stan-users/c/PkQxfc_QyGg: some 2015 discussion of
+  the technique. See also BetancourtGirolami2013_.
+
+- https://stats.stackexchange.com/questions/473386/matts-trick-reparametrization-makes-my-models-slower-not-faster:
+  an example when the reparameterization makes things worse, not better.
 
 
 The interpretation of transformed parameters
@@ -428,14 +462,15 @@ are not used directly within "transformed parameters" but are calculated within
         # - raw_between_subjects_sd = 0.48 (HDI 0.42-0.56), accurate
         # - raw_within_subjects_sd = 0.20 (HDI 0.20-0.21), accurate
         # - transformed_overall_mean = 2.68 (HDI 2.38-2.90)
-        #   ... relevant but NOT the same as mean(y)
+        #   ... relevant (estimates exp(RAW_OVERALL_MEAN)), but NOT mean(y)
         # - mean_of_transformed_subject_means = 3.00 (HDI 2.99-3.02)
-        #   ... more likely to be what you want.
+        #   ... potentially also of interest.
         #
         # Compare to values from R:
         print(mean(raw_y))  # 0.980
         print(sd(raw_subject_deviation_from_overall_mean))  # 0.479
         print(sd(error))  # 0.202
+        print(exp(RAW_OVERALL_MEAN))  # 2.718
         print(mean(y))  # 3.06
         # ... noting that if all subjects don't have the same number of
         #     observations, a different calculation would be required to
@@ -453,10 +488,58 @@ from 0))". That can be demonstrated simply again in R:
     mean(exp(0 + deviations))  # 1.648
     exp(0)  # 1
 
+    # This is because of the intrinsic difference between mean(transform(x))
+    # transform(mean(x)). It doesn't even depend on random noise:
+    zero_sum_deviations <- rep(c(-1, 1), times = 100)
+    mean(zero_sum_deviations)  # exactly 0
+    sum(zero_sum_deviations)  # exactly 0
+    mean(exp(0 + zero_sum_deviations))  # 1.543
+
 Attempting to recover standard deviations in "parameter space" is unlikely to
 be meaningful. If ``z ~ N(0, sigma)`` and ``y = exp(z)`` then ``y`` is not
 normally distributed, so it has no "standard deviation"; the relevant SD is
 that of ``z``, which will be estimated by Stan directly.
+
+Which transformed parameter should you report as your posterior? For example,
+in a single-group, multi-subject, within-subjects design, do you want (a) the
+transformed version of the "underlying" (e.g. normally distributed) group mean,
+or (b) the mean of the transformed per-subject means?
+
+Let's illustrate this with a very basic example, using the reciprocal
+transformation between speed ("underlying") and time ("transformed") for a 100m
+race. Suppose five runners, some of them admittedly quite slow, race at 2, 4,
+6, 8, and 10 m/s. Their mean speed is 6 m/s. Their times will be 50, 25, 16.67,
+12.5, and 10 s, for a mean time of 22.83 s. But if a hypothetical person ran at
+the "average speed" of 6 m/s, they would take 16.67 s — and if they ran the
+"average time" of 22.83 s, they would be running at 4.38 m/s. So you could
+report the mean speed (sensible in this example), but then (a) "the time taken
+by a person running at the group's mean speed" (16.67 s), or the (b) "mean
+time" (22.83 s).
+
+In the context of a cognitive model of a task, therefore, do we want (a) "the
+parameter used by a hypothetical subject of [group] mean underlying
+normally-distributed raw parameter", or "the mean of the parameters used by our
+subjects"?
+
+Looking at the `hBayesDM <https://ccs-lab.github.io/hBayesDM/>`_ code for the
+go/no-task, `gng_m1.stan
+<https://github.com/CCS-Lab/hBayesDM/blob/develop/commons/stan_files/gng_m1.stan>`_,
+where ``N`` is the number of subjects and ``T`` the maximum number of trials
+per subject, we see that conceptually it (1) draws group means (``mu_pr``)
+and standard deviations (``sigma``) from predetermined priors in N(0, 1)
+space; (2) uses these to scale unit-normal variables for three parameters
+(``xi_pr``, ``ep_pr``, ``rho_pr``) into "parameter space" (``xi``, ``ep``,
+``rho``); (3) performs the cognitive calculations using those parameters; (4)
+in the "generated quantiies" block, transforms the group-level means
+(``mu_pr``) into "parameter space" and reports these (``mu_xi``, ``mu_ep``,
+``mu_rho``). This is therefore approach (a).
+
+That also accords with the Howell1997_ (p. 325) advice to analyse the
+transformed thing, then report back_transform(mean(transform(raw_values)));
+Howell uses the example of analysing log salary, then reporting
+antilog(mean(log salary)).
+
+So: approach (a).
 
 
 Group-level testing
