@@ -738,6 +738,9 @@ stanfunc$summary_by_par_regex <- function(fit, pars = NULL,
     # Optionally, filter on a regex
     if (!is.null(par_regex)) {
         s <- s[grepl(par_regex, s$parameter), ]
+        if (nrow(s) == 0) {
+            stop(paste0("No parameters match regex: ", par_regex))
+        }
     }
     return(s)
 }
