@@ -9,7 +9,10 @@
 .. _Haines2018: https://pubmed.ncbi.nlm.nih.gov/30289167/
 .. _Howell1997: https://en.wikipedia.org/wiki/Special:BookSources?isbn=0-534-51993-8
 .. _Kanen2019: https://pubmed.ncbi.nlm.nih.gov/31324936/
+.. _Klein2016: https://doi.org/10.1214/15-BA983
+.. _OpenCL: https://en.wikipedia.org/wiki/OpenCL
 .. _Romeu2020: https://pubmed.ncbi.nlm.nih.gov/31735532/
+.. _Simpson2017: https://doi.org/10.1214/16-STS576
 .. _Singularity: https://sylabs.io/singularity/
 .. _SLURM: https://slurm.schedmd.com/
 .. _Unison: https://www.cis.upenn.edu/~bcpierce/unison/
@@ -78,10 +81,32 @@ General Stan/C++ coding
 
 - Don't check constraints twice, or apply unnecessary constraints. See
   https://mc-stan.org/docs/2_26/stan-users-guide/avoiding-validation.html.
-  So, for example, if you use ``real<lower=0> some_standard_deviation`` but
-  then have another method of enforcing the zero lower bound, you could cut out
-  the ``<lower=0>``. (Removing this check cut execution time by 4–17% in one
-  quite simple scenario.)
+
+  The obvious situation that I wondered about was if, for example, if you use
+  ``real<lower=0> some_standard_deviation`` but then have another method of
+  enforcing the zero lower bound (say, a bridgesampling-compatible sampling
+  function that does ``target += negative_infinity()`` if the variable is out
+  of bounds), you could cut out the ``<lower=0>``. (Removing this check cut
+  execution time by 4–17% in one quite simple scenario.)
+
+  However, see
+  https://groups.google.com/forum/#!msg/stan-users/4gv3fNCqSNk/VonPUkdcZuUJ,
+  which appears to suggest (in 2012) that it is important to include these
+  constraints: "A common mistake in .stan files is the failure to restrict the
+  support of a parameter in the parameters {} block and to then attempt to
+  restrict the support of a parameter with a prior in the model {} block...
+  restrict the support of parameters when appropriate; if no prior is
+  specified, it is implicitly uniform over the parameter's support... if you
+  want to impose an informative prior, it should put non-zero (but perhaps
+  arbitrarily small) mass over the entire support of that parameter".
+
+  But then the 2021 Stan Reference Manual says
+  (https://mc-stan.org/docs/2_26/reference-manual/sampling-statements-section.html)
+  that truncated distributions are now explicitly supported and the process of
+  doing ``target += negative_infinity()`` if the result is out of bounds is
+  exactly equivalent. (And the bad examples given by Goodrich in 2012 didn't
+  do that.) (Note also that vectorized truncated distributions are not yet
+  supported, as of Stan 2.26).
 
 - Vectorize everything that you can.
 
@@ -297,6 +322,16 @@ Regarding reparameterization, see also:
     standard deviations.
   - ... and even that Stan page uses ``sigma ~ cauchy(0, 5)`` in one of its
     reparameterized examples.
+
+  - This is examined at
+    https://stats.stackexchange.com/questions/346034/choosing-prior-for-sigma2-in-the-normal-polynomial-regression-model-y-i,
+    which refers to Simpson et al. (2014), published as Simpson2017_. Simpson
+    et al. discuss this on p. 8: the half-normal being potentialy too
+    "light-tailed" but the half-Cauchy giving poor numerical behaviour. They
+    argue for another, exponential, distribution.
+
+ - Klein2016_ note that the half-normal distribution performs perfectly well as
+   the prior for standard deviation (p. 1096).
 
 - https://groups.google.com/g/stan-users/c/PkQxfc_QyGg: some 2015 discussion of
   the technique. See also BetancourtGirolami2013_.
@@ -591,6 +626,56 @@ chains than I have cores.
 See https://mc-stan.org/docs/2_26/stan-users-guide/parallelization-chapter.html.
 
 
+GPU support
+-----------
+
+Stan will also support GPU calculations via OpenCL_. See:
+
+- http://mc-stan.org/math/opencl_support.html
+- https://discourse.mc-stan.org/t/stan-is-not-working-on-gpu-in-linux/21331
+- https://discourse.mc-stan.org/t/partial-specialization-error-when-compiling-model-with-opencl-enabled/21250
+- https://discourse.mc-stan.org/t/gpu-functions-in-rstan/13722/6
+
+Find out whether your system supports OpenCL via:
+
+.. code-block:: bash
+
+    clinfo  # if not installed: sudo apt install clinfo
+    clinfo -l  # list platforms/devices only
+
+For example, it may produce output like:
+
+.. code-block:: none
+
+    Platform #0: NVIDIA CUDA
+     `-- Device #0: GeForce GTX 660 Ti
+
+Choose your device number (e.g. 0 in the example above).
+
+For CmdStan, edit either ``~/.config/stan/make.local`` or
+``${CMDSTANHOME}/make/local`` to include these lines:
+
+.. code-block:: bash
+
+    STAN_OPENCL = true
+    CHOSEN_OPENCL_DEVICE = 0  # choose from the output of "clinfo -l"
+
+    $(info STAN_OPENCL is ${STAN_OPENCL})
+    ifeq (${STAN_OPENCL}, true)
+        $(info CHOSEN_OPENCL_DEVICE is ${CHOSEN_OPENCL_DEVICE})
+        OPENCL_DEVICE_ID = ${CHOSEN_OPENCL_DEVICE}
+        OPENCL_PLATFORM_ID = ${CHOSEN_OPENCL_DEVICE}
+        CXXFLAGS += -fpermissive
+    endif
+
+It looks like OpenCL is supported for CmdStan but not for RStan as of July
+2020:
+https://discourse.mc-stan.org/t/setting-up-gpu-for-rstan-on-windows-10/16472.
+Also (as per the links above) there is an overhead for using GPUs and it's not
+clear to me exactly what the conditions are when enabling OpenCL will help.
+Still, something for the near future.
+
+
 Profiling
 ---------
 
@@ -621,6 +706,87 @@ Bridge sampling, generated quantities
 
   - therefore, you should consider temporarily disabling your GQ blocks during
     model comparison if :math:`(n − 1)g > t`.
+
+
+Troubleshooting run failures
+----------------------------
+
+- This error from ``bridgesampling``:
+
+  .. code-block:: none
+
+    Error in tmp$r_vals[lr - 1] * tmp$r_vals[lr] :
+      non-numeric argument to binary operator
+
+  may be this bug: https://github.com/quentingronau/bridgesampling/issues/18
+
+
+Troubleshooting poor convergence (high R-hat)
+---------------------------------------------
+
+- See https://mc-stan.org/misc/warnings.html, which gives recommendations.
+
+  ... e.g. more samples, by increasing ``iter``.
+
+- See also
+  https://mc-stan.org/users/documentation/case-studies/divergences_and_bias.html
+  (also at https://betanalpha.github.io/assets/case_studies/divergences_and_bias.html).
+
+  ... e.g. increase ``adapt_delta`` towards 1.
+
+- https://betanalpha.github.io/assets/case_studies/rstan_workflow.html
+
+Consider also:
+
+- reparameterization;
+
+- tighter priors, if scientifically reasonable;
+
+- ``init`` at the centre of distributions if it wasn't.
+
+
+Which block does my variable belong in?
+---------------------------------------
+
+See
+https://mc-stan.org/docs/2_18/reference-manual/overview-of-stans-program-blocks.html.
+
+- ``data``: when you want to provide data, which may vary, to Stan.
+
+- ``transformed data``: when you want to use transformed versions of the data,
+  or when you want to declare constants.
+
+- ``parameters``: when you want Stan to "jiggle" the variable to find the best
+  fit.
+
+- ``transformed parameters``: when you want to use (and later inspect) values
+  that are transformations of the ``parameters``.
+
+- ``model``: for local calculations only, enabling you to fit the model.
+  Variables declared in the model block are not saved. Sampling statements
+  (e.g. ``y ~ normal(mu, sigma)`` or ``target += normal_lpdf(y | mu, sigma)``)
+  go here.
+
+- ``generated quantities``: when you want to calculate and extract something
+  based on ``parameters`` or ``transformed parameters``, but that calculation
+  isn't important for model fitting (it's just "observing" the model after it
+  has been fitted).
+
+One thing that looks like a deficiency at first glance is that you may perform
+complex calculations in the ``model`` and then want to save some of these (e.g.
+an important intermediate variable, like reward prediction error, or something
+more basic like "proportion of trials predicted correctly"). Since that can't
+be saved in ``model``, do you have to repeat the calculation logic in
+``generated quantities``? And since you can't return complex objects from
+user-defined functions, and you can't pass by reference (allowing a function to
+modify objects referred to by its parameters), then is this significantly
+limiting? My 2013 question, kindly answered by Bob Carpenter, is `here
+<https://groups.google.com/g/stan-users/c/lybDQTpMWRw>`_. The **answer** is to
+put them in the ``transformed parameter`` block (and hide any associated
+temporary variables with a local ``{}`` block). The **downside** may be that this entails
+a very large quantity of data being saved, because you will have to save
+anything that you then want to refer to in the model block (i.e. for the final
+step of fitting the model to the actual data).
 
 
 High-performance computing
