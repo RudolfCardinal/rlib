@@ -3,7 +3,7 @@
 requireNamespace("data.table")
 requireNamespace("ggplot2")
 requireNamespace("lmerTest")
-requireNamespace("lsmeans")
+requireNamespace("emmeans")
 requireNamespace("MASS")
 requireNamespace("moments")
 requireNamespace("multcomp")
@@ -760,7 +760,10 @@ miscstat$softmax <- function(x, b = 1, debug = TRUE) {
     # ... softmax is invariant to addition of a constant: Daw article and
     #     http://www.faqs.org/faqs/ai-faq/neural-nets/part2/section-12.html#b
     if (max(products, na.rm = TRUE) > MAX_EXPONENT) {
-        if (debug) cat("OVERFLOW in softmax(): x =", x, ", b =", b, ", constant =", constant, ", products = ", products, "\n")
+        if (debug) {
+            cat("OVERFLOW in softmax(): x =", x, ", b =", b,
+                ", constant =", constant, ", products = ", products, "\n")
+        }
         answer <- rep(0, length(x))
         answer[which.max(x)] <- 1
         answer[is.na(x)] <- NA
@@ -836,9 +839,16 @@ miscstat$rvfPlot <- function(model, FONTSIZE = 10) {
 # -----------------------------------------------------------------------------
 
 miscstat$pairwise_contrasts <- function(
-        term, model, alternative = c("two.sided", "less", "greater"))
+        term,
+        model,
+        alternative = c("two.sided", "less", "greater"),
+        debug = FALSE
+    )
 {
+    # NB the "model" parameter is used in an eval() statement, below.
+
     alternative <- match.arg(alternative)
+
     # We'd normally do:
     #
     #   multcomp::glht(model, linfct = multcomp::mcp(area = "Tukey"))
@@ -863,11 +873,19 @@ miscstat$pairwise_contrasts <- function(
     #   http://stackoverflow.com/questions/5542945/opposite-of-rs-deparsesubstitutevar
     #
     # Anyway, the answer in R is to eval it.
+    #
+    # As of 2021-05-21 and lsmmeans_2.30-0 / emmeans_1.4.8, lsmeans::lsm has
+    # been replaced by emmeans::lsm.
 
-    expr <- paste(
-        "multcomp::glht(model, linfct = lsmeans::lsm(pairwise ~ ", term, "), ",
-        "alternative=\"", alternative, "\")",
-        sep = "")
+    if (debug) {
+        cat(paste0(
+            "miscstat$pairwise_contrasts(): evaluating for term: ", term, "\n"
+        ))
+    }
+    expr <- paste0(
+        "multcomp::glht(model, linfct = emmeans::lsm(pairwise ~ ", term, "), ",
+        "alternative=\"", alternative, "\")"
+    )
     g <- eval(parse(text = expr))
     summ <- summary(g)
     test <- summ$test
@@ -893,7 +911,7 @@ miscstat$pairwise_contrasts <- function(
 miscstat$get_n_for_factor <- function(term, model) {
     factors <- strsplit(term, ":", fixed = TRUE)[[1]]
     d <- model@frame
-    n_list <- count(d, factors)$freq
+    n_list <- plyr::count(d, factors)$freq
     harmonic_mean_n <- miscmath$harmonic_mean(n_list)
     return(data.frame(
         term = term,
@@ -937,7 +955,11 @@ miscstat$do_terms_contain_only_factors <- function(model, terms) {
 
 miscstat$sed_info <- function(
         model, term = NULL,
-        alternative = c("two.sided", "less", "greater"), DEBUG = FALSE) {
+        alternative = c("two.sided", "less", "greater"),
+        with_pairwise_comparisons = FALSE,
+        debug = FALSE
+    )
+{
     # model: an lmer/lmerTest model.
     # term: e.g. "area:manipulation:csvalence"
     alternative <- match.arg(alternative)
@@ -948,13 +970,13 @@ miscstat$sed_info <- function(
     all_terms <- rownames(an)
 
     # Eliminate things with covariates (continuous predictors) in:
-    if (DEBUG) {
+    if (debug) {
         cat("ALL TERMS:", all_terms, "\n")
     }
     useful_terms <- all_terms[
         which(miscstat$do_terms_contain_only_factors(model, all_terms))]
-    if (DEBUG) {
-        cat("FACTOR-ONLY TERMS:", useful_terms, "\n")
+    if (debug) {
+        cat("FACTOR-ONLY TERMS (HAVING DROPPED COVARIATES):", useful_terms, "\n")
     }
 
     # Find the highest-order interaction
@@ -962,12 +984,16 @@ miscstat$sed_info <- function(
     highest_order_interaction <- useful_terms[which.max(n_colons)]
 
     # Pairwise contrasts for factors
-    comparisons <- ldply(
-        useful_terms,
-        miscstat$pairwise_contrasts,
-        model,
-        alternative = alternative
-    )
+    if (with_pairwise_comparisons) {
+        comparisons <- plyr::ldply(
+            useful_terms,
+            miscstat$pairwise_contrasts,
+            model,
+            alternative = alternative
+        )
+    } else {
+        comparisons <- NULL
+    }
 
     # std_error_fixed_effects_estimates <- sqrt(diag(vcov(model)))
     # names(std_error_fixed_effects_estimates) <- vcov(model)@Dimnames[[1]]
@@ -977,39 +1003,91 @@ miscstat$sed_info <- function(
     # NOTE, for example, that the "standard error of effect X" where X is
     # something like "treatment - control" is, obviously, an SED.
 
-    n_by_factor <- ldply(
+    n_by_factor <- plyr::ldply(
         useful_terms,
         miscstat$get_n_for_factor,
         model
     )
     an <- cbind(an[useful_terms, ], n_by_factor)
-    an <- rename(an, c("Mean Sq" = "ms_effect",
-                       "F.value" = "F",
-                       "Pr(>F)" = "p"))
+    # Sometimes we get "F.value"; sometimes "F value".
+    if ("F value" %in% colnames(an)) {
+        an <- plyr::rename(
+            an,
+            c(
+                "Mean Sq" = "ms_effect",
+                "F value" = "F",
+                "Pr(>F)" = "p"
+            )
+        )
+    } else {
+        an <- plyr::rename(
+            an,
+            c(
+                "Mean Sq" = "ms_effect",
+                "F.value" = "F",
+                "Pr(>F)" = "p"
+            )
+        )
+    }
+
+    # Here's where we calculate the SED.
+    # - See Cardinal & Aitken (2006), pp. 94-99.
+    # - Note that no one SED is appropriate for all comparisons, so there is
+    #   a bit of iffiness in picking one -- but sometimes it is helpful for
+    #   visual representations.
+
     an <- within(an, {
+        term <- rownames(an)
         ms_error <- ms_effect / F  # since F = ms_effect / ms_error
-        iffy_sed <- sqrt(2 * ms_error / harmonic_mean_n)
+
+        sed <- sqrt(2 * ms_error / harmonic_mean_n)
+
         # t_eq_sqrt_F_for_2_grps <- sqrt(F)
     })
-    highest_interaction_iffy_sed <- an[highest_order_interaction,
-                                       "iffy_sed"]
+    seds_alone <- an$sed
+    names(seds_alone) <- an$term
 
-    # *** Not sure that iffy_sed is always right. OK in simple situations, but
-    # not so sure in complex ones...
+    # We always give this SED:
+    highest_interaction_sed <- an[highest_order_interaction, "sed"]
+    # Not sure that this is always right. OK in simple situations, but not so
+    # sure in complex ones...
+
+    # The user can also ask for a specific SED (though it's in the ANOVA table
+    # too):
+    if (!is.null(term)) {
+        if (!(term %in% all_terms)) {
+            stop(paste0("Unknown term: ", term))
+        }
+        if (!(term %in% useful_terms)) {
+            stop(paste0("Term involves covariates: ", term))
+        }
+        term_sed <- an[term, "sed"]
+    } else {
+        term_sed <- NULL
+    }
 
     return(list(
         pairwise_contrasts = comparisons,
-        highest_order_interaction = highest_order_interaction,
         coefficients = summ$coefficients,
         anova = an,
         notes = c(
-            "There is no *one* SED appropriate for all comparisons! See e.g. Cardinal & Aitken 2006 p98.",
-            "Pairwise contrasts use multcomp::glht(model, linfct = lsmeans::lsm(pairwise ~ FACTOR)).",
-            "Least-squares means estimates (with SE of estimate) are from lmerTest::lsmeans().",
-            "highest_interaction_iffy_sed is the iffy_sed for the highest_order_interaction term. But see note 1 above."
+            "(1) There is no *one* SED appropriate for all comparisons! See e.g. Cardinal & Aitken 2006 p98.",
+            "(2) Pairwise contrasts use multcomp::glht(model, linfct = emmeans::lsm(pairwise ~ FACTOR)).",
+            "(3) Least-squares means estimates (with SE of estimate) are from lmerTest::lsmeansLT().",
+            "(4) 'highest_order_interaction_sed' is the SED for the 'highest_order_interaction_term'. But see note 1 above.",
+            "(5) 'term_sed' is the SED for 'term', if specified.",
+            "(6) All SEDs are in 'anova' and in 'seds'."
         ),
-        highest_interaction_iffy_sed = highest_interaction_iffy_sed,
-        lsmeans = lmerTest::lsmeans(model)
+        highest_order_interaction_term = highest_order_interaction,
+        highest_order_interaction_sed = highest_interaction_sed,
+        term = term,
+        term_sed = term_sed,
+        seds = seds_alone,
+
+        # By lmerTest_3.1-2, lsmeans() has gone and been replaced by
+        # lsmeansLT(). See
+        # https://www.rdocumentation.org/packages/lmerTest/versions/2.0-36/topics/lsmeans.
+        lsmeans = lmerTest::lsmeansLT(model)
     ))
 }
 
