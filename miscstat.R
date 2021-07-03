@@ -170,6 +170,37 @@ miscstat$summarize_by_factors_datatable <- function(dt, depvarname, factornames)
 }
 
 
+miscstat$weighted_sd <- function(x, weights = NULL, ...) {
+    # Weighted standard deviation.
+    # See also:
+    # - https://stackoverflow.com/questions/10049402/calculating-weighted-mean-and-standard-deviation
+    # - https://www.statology.org/weighted-standard-deviation-in-r/
+
+    # Example:
+    #
+    # x <- c(rep(10, 5), rep(20, 15))
+    # w <- c(rep( 3, 5), rep(1,  15))
+    #
+    # mean(x)  # 17.5
+    #
+    # stats::weighted.mean(x, w)  # 15
+    # Hmisc::wtd.mean(x, w)  # 15
+    #
+    # stats::var(x)  # 19.7
+    # Hmisc::wtd.var(x, w)  # 25.9
+    #
+    # stats::sd(x)  # 4.44
+    # sqrt(Hmisc::wtd.var(x, w))  # 5.08
+
+    weighted_variance <- Hmisc::wtd.var(x, weights = weights, ...)
+    return(sqrt(weighted_variance))
+}
+
+
+# Weighted SEM: no clear definition
+# - https://stats.stackexchange.com/questions/25895/computing-standard-error-in-weighted-mean-estimation
+
+
 # =============================================================================
 # Simple comparisons of data
 # =============================================================================
@@ -1126,10 +1157,39 @@ miscstat$lmer_effect_size_r_squared <- function(lmer_model) {
 }
 
 
-miscstat$sigstars <- function(p, default = "") {
-    ifelse(p < 0.001, "***",
-           ifelse(p < 0.01, "**",
-                  ifelse(p < 0.05, "*", default)))
+miscstat$sigstars <- function(p, default = "", symbol = "*", nmax = 3) {
+    # For a p value, return annotation in conventional style for alpha = 0.05,
+    # such as "**" for p < 0.01. Basically, there is one star for every
+    # division by 10, except that our "top-level" value is 0.05, not 0.1. The
+    # "default" value, e.g. blank or "NS", is returned for values over 0.05.
+    #
+    # Examples:
+    #
+    #   p       log10(p)    -floor(log10(p)) - 1    nstars (example)        output  interpretation
+    #
+    #   0.99    -0.004      0                       0                       NS
+    #   0.1     -1          0                       0                       NS
+    #   0.05    -1.30103    1                       0                       NS
+    #   0.04    -1.39794    1                       1                       *       p < 0.05
+    #   0.01    -2          1                       1                       *       p < 0.05
+    #   0.005   -2.301      2                       2                       **      p < 0.01
+    #   0.001   -3          2                       2                       **      p < 0.01
+    #   0.0005  -3.301      3                       3                       ***     p < 0.001
+    #   0.00005 -4.301      4                       4 or nmax if smaller    ****    p < 0.0001 (or *** p < 0.001 if nmax == 3)
+    #
+    # p <- c(0.99, 0.1, 0.05, 0.04, 0.01, 0.005, 0.001, 0.0005, 0.00005)
+
+    draft_nstars <- -floor(log10(p)) - 1
+    nstars <- ifelse(
+        draft_nstars <= 1,
+        ifelse(p < 0.05, 1, 0),
+        pmin(draft_nstars, nmax)
+    )
+    return(ifelse(
+        nstars == 0,
+        default,
+        stringr::str_dup(symbol, nstars)
+    ))
 }
 
 
