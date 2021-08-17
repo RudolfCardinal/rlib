@@ -233,6 +233,7 @@ stanfunc$load_or_run_bridge_sampler <- function(
     data = NULL,
     cores = parallel::detectCores(),
     forcerun = FALSE,
+    algorithm = NULL,  # for the rare occasions when you want "Fixed_param"
     ...)
 {
     if (!forcerun && file.exists(filename)) {
@@ -270,14 +271,16 @@ stanfunc$load_or_run_bridge_sampler <- function(
                     file = file,
                     data = data,  # if you use data = list(), it segfaults
                     chains = 1,
-                    iter = 1  # despite the bridgesampling help, iter = 0 causes an error
+                    iter = 1,  # despite the bridgesampling help, iter = 0 causes an error
+                    algorithm = algorithm
                 )
             } else {
                 stanfit_model <- rstan::stan(
                     model_code = model_code,
                     data = data,
                     chains = 1,
-                    iter = 1
+                    iter = 1,
+                    algorithm = algorithm
                 )
             }
             cat("... done\n")
