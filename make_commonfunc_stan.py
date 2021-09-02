@@ -1844,7 +1844,12 @@ def get_beta_distribution() -> str:
     code = """
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Beta distribution
-    // - in R, alpha is called scale1, and beta is called scale2
+    // - In R, alpha is called scale1, and beta is called scale2.
+    // - Its distribution is confined to the range [0, 1]. See
+    //   https://en.wikipedia.org/wiki/Beta_distribution. In R, try:
+    //
+    //   curve(dbeta(x, shape1 = 1.2, shape2 = 1.2), -0.1, 1.1, ylab = "density")
+    //
     // - Stan 2.16.0 manual p532; R ?dbeta;
     //   https://www.rdocumentation.org/packages/visualize/versions/4.3.0/topics/visualize.beta
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -12,63 +12,7 @@ library(data.table)
 library(ggplot2)
 library(matrixStats)
 library(parallel)
-library(reshape)    // Sampling in "parameters" block:
-    //
-    // S1. Per-group means are initially sampled in N(0, 1) space.
-    // S2. Per-group intersubject SDs are sampled in half-normal N(0, 0.2)[+]
-    //     space.
-    // S3. Per-subject effects (in between-subjects designs, each subject's
-    //     deviation from its group mean; etc.) are initially sampled in N(0,
-    //     1) space.
-    //
-    // Transformations in "transformed parameters" block:
-    //
-    // T1. Per-subject effects  are then transformed to N(0, intersubject_sd)
-    //     space.
-    // T2. Subject values are calculated in "Stan parameter space" as:
-    //          subject_value = group_mean [S1] + subject_specific_effect [T1]
-    // T3. We then convert from "Stan parameter space" to "task parameter
-    //     space". This depends on our target parameter:
-    //     - Bounded parameters are inverse probit-transformed to (0, 1), then
-    //       scaled; e.g. a range of (0, 7) is given by: y = Phi(x) * 7.
-    //       The probit function is the quantile function for the standard
-    //       normal distribution [https://en.wikipedia.org/wiki/Probit]. So the
-    //       inverse probit transformation is the standard normal cumulative
-    //       distribution function; in Stan this is Phi() and in R it is
-    //       pnorm(q, mean = 0, sd = 1).
-    //     - Unbounded parameters are exponentially transformed to (0, +inf)
-    //       using: y = exp(x).
-    //
-    // We use an "nspace<X>_" prefix when variables are not in "task parameter
-    // space".
-    //
-    // This obviously affects the priors a bit, but it is simple. A major
-    // advantage is of being able to operate in an unconstrained space
-    // throughout, then constrain at the end if required (rather than e.g.
-    // having a constrained parameter to which you add a deviation that might
-    // take it out of its constraints).
-    //
-    // We will also code our models to use all parameters. Then, for models that
-    // don't use a given parameter, we declare/initialize the per-subject
-    // effects as constants in "transformed data", rather than in "transformed
-    // parameters".
-    //
-    // Finally, we must put the calculations in varying places across different
-    // types of model. What is described above holds for between-subjects
-    // designs. Then:
-    // - SINGLE GROUP. Sample each parameter (per subject) from N(0, 1), which
-    //   takes us directly to the result of the "T2" step; then transform it as
-    //   in T3 above.
-    // - WITHIN-SUBJECTS DESIGNS (a subject can be in several groups). This
-    //   means you can't calculate "per-subject" final values. One could
-    //   calculate within the "model" rather than the "transformed parameters"
-    //   block. But extracting the transformed values is likely to be helpful.
-    //   In which case, declare an array or matrix such as
-    //          real<lower=..., upper=...> s_g_param[N_SUBJECTS, N_GROUPS];
-    //          matrix<lower=..., upper=...>[N_SUBJECTS, N_GROUPS] s_g_param;
-    //   and calculate combinations there. A matrix is probably preferable
-    //   [https://mc-stan.org/docs/2_18/stan-users-guide/indexing-efficiency-section.html].
-
+library(reshape)
 library(rstan)
 library(stringr)
 

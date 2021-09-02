@@ -106,7 +106,31 @@ General Stan/C++ coding
   doing ``target += negative_infinity()`` if the result is out of bounds is
   exactly equivalent. (And the bad examples given by Goodrich in 2012 didn't
   do that.) (Note also that vectorized truncated distributions are not yet
-  supported, as of Stan 2.26).
+  supported, as of Stan 2.26.)
+
+  In practice, though, with rstan 2.21.2, removal of these constraints often
+  leads to failure with:
+
+  .. code-block:
+
+    Chain 1: Rejecting initial value:
+    Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
+    Chain 1:   Stan can't start sampling from this initial value.
+
+  **More on "rejecting initial value":**
+
+  - https://discourse.mc-stan.org/t/rejecting-initial-value/6258/2
+  - https://discourse.mc-stan.org/t/initial-value-rejected/5040/2
+  - https://mc-stan.org/docs/2_27/reference-manual/initialization.html
+  - Using ``init="0"`` initializes all variables to 0 "on the unconstrained
+    support", which is typically in the middle.
+  - Stan works with unconstrained values, so creates an unconstrained variable
+    based on the constraints declared:
+    https://mc-stan.org/docs/2_27/reference-manual/variable-transforms-chapter.html#variable-transforms.chapter
+
+  ... so this error usually reflects the lack of constraints;
+  **keep constraints** if unsure, at least for now. This may improve with
+  future versions of Stan.
 
 - Vectorize everything that you can.
 
@@ -114,7 +138,7 @@ General Stan/C++ coding
 
   In this context:
 
-    .. code-block:: C++
+    .. code-block::
 
         data {
             int N_TRIALS;
@@ -123,7 +147,7 @@ General Stan/C++ coding
 
   this method is slow:
 
-    .. code-block:: C++
+    .. code-block::
 
         model {
             real p_choose_rhs;
@@ -135,7 +159,7 @@ General Stan/C++ coding
 
   and this is faster, as it vectorizes the sampling statement:
 
-    .. code-block:: C++
+    .. code-block::
 
         model {
             vector[N_TRIALS] p_choose_rhs;
@@ -174,10 +198,13 @@ General Stan/C++ coding
 Parameterizing the model
 ------------------------
 
+Parameterization: general
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
 - Make the parameter space easy for Stan to explore.
 
-- When a quantity is sampled from a Normal(mu, sigma) distribution, consider
-  sampling it from a N(0, 1) distribution and scale it:
+- When a quantity is sampled from a :math:`N(\mu, \sigma)` distribution,
+  consider sampling it from a :math:`N(0, 1)` distribution and scaling it:
 
     .. code-block:: C++
 
@@ -189,17 +216,61 @@ Parameterizing the model
   Think of it this way: if you use ``normal(mu, sigma)``, Stan is having to
   sample from a "moving target", whereas N(0, 1) is a "stationary target".
 
-- Try to use "soft constraints", i.e. avoid hard pass/fail boundaries (such as
-  truncated distributions) for the sampling algorithm.
+- Try to use "soft constraints", i.e. avoid hard pass/fail boundaries (such
+  as truncated distributions) for the sampling algorithm.
 
-- In particular, consider the method of sampling means from underlying
-  standard normal N(0, 1) distributions, and standard deviations from similar
-  (e.g. positive-half-normal, positive-half-Cauchy) distributions.
-  Transformations are then applied to reach the desired parameter "space". For
-  example, Ahn2017_, Haines2018_, and Romeu2020_ use a method that, when
-  expressed in Stan syntax, is as follows:
+- Unsure what a half-Cauchy distribution looks like? Try this:
 
-  - an unconstrained parameter A is sampled like this:
+  .. code-block:: R
+
+    curve(dnorm(x, mean = 0, sd = 1), 0, 5, col = "blue", ylab = "density")
+    curve(dcauchy(x, location = 0, scale = 1), 0, 5, col = "red", add = TRUE)
+
+Regarding reparameterization, see also:
+
+- https://www.occasionaldivergences.com/post/non-centered/: explains that
+  **divergent transitions (divergences)** indicate that Stan's Hamiltonian Monte
+  Carlo algorithm is having trouble exploring the posterior distribution, and
+  that **exceeding the maximum treedepth** is a warning about inefficiency
+  rather than lack of model validity.
+
+- https://mc-stan.org/docs/2_26/stan-users-guide/reparameterization-section.html:
+  notes that the Cauchy is sometimes a tricky distribution and a candidate for
+  reparameterization, and describes non-centred parameterization in general.
+
+  - But see Gelman2006_, who recommends the half-Cauchy (p. 528) as a prior for
+    standard deviations.
+  - ... and even that Stan page uses ``sigma ~ cauchy(0, 5)`` in one of its
+    reparameterized examples.
+
+  - This is examined at
+    https://stats.stackexchange.com/questions/346034/choosing-prior-for-sigma2-in-the-normal-polynomial-regression-model-y-i,
+    which refers to Simpson et al. (2014), published as Simpson2017_. Simpson
+    et al. discuss this on p. 8: the half-normal being potentialy too
+    "light-tailed" but the half-Cauchy giving poor numerical behaviour. They
+    argue for another, exponential, distribution.
+
+ - Klein2016_ note that the half-normal distribution performs perfectly well as
+   the prior for standard deviation (p. 1096).
+
+- https://groups.google.com/g/stan-users/c/PkQxfc_QyGg: some 2015 discussion of
+  the technique. See also BetancourtGirolami2013_.
+
+- https://stats.stackexchange.com/questions/473386/matts-trick-reparametrization-makes-my-models-slower-not-faster:
+  an example when the reparameterization makes things worse, not better.
+
+
+Parameterization: Ahn method (everything is standard normal)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Consider the method of sampling means from underlying standard normal N(0, 1)
+distributions, and standard deviations from similar (e.g. positive-half-normal,
+positive-half-Cauchy) distributions. Transformations are then applied to reach
+the desired parameter "space". For example, Ahn2017_ (for the hBayesDM
+package), Haines2018_, and Romeu2020_ use a method that, when expressed in Stan
+syntax, is as follows:
+
+-   an unconstrained parameter A is sampled like this:
 
     .. code-block:: C++
 
@@ -214,7 +285,7 @@ Parameterizing the model
             A ~ normal(mu_A, sigma_A);
         }
 
-  - a positive parameter B is sampled like this:
+-   a positive parameter B is sampled like this:
 
     .. code-block:: C++
 
@@ -232,7 +303,7 @@ Parameterizing the model
             raw_normal_B ~ normal(mu_B, sigma_B);
         }
 
-  - a parameter C in the range [0, 1] is sampled like this:
+-   a parameter C in the range [0, 1] is sampled like this:
 
     .. code-block:: C++
 
@@ -268,7 +339,7 @@ Parameterizing the model
       https://mc-stan.org/docs/2_21/functions-reference/Phi-function.html and
       Bowling2009_).
 
-  - a parameter D in the range [0, U], where U is an upper limit, is sampled
+-   a parameter D in the range [0, U], where U is an upper limit, is sampled
     like this:
 
     .. code-block:: C++
@@ -287,57 +358,163 @@ Parameterizing the model
             raw_normal_D ~ normal(mu_D, sigma_D);
         }
 
-Presentationally, one can show posterior values/distributions of the "unit
-normal" variable, or the transformed value (e.g. Ahn2017_, pp. 31, 47;
-:math:`K` or :math:`K′` in Haines2018_, pp. 2544, 2546, 2553; Romeu2020_, p.
-107711). See below for cautions regarding the interpretation of transformed
-values.
 
-Unsure what a half-Cauchy distribution looks like? Try this:
+**Practicalities**
 
-.. code-block:: R
+For a family of models with subsets of parameters, one option is to code the
+models to use all parameters. Then, for models that don't use a given
+parameter, we declare/initialize the per-subject effects as constants in
+``transformed data``, rather than in ``transformed parameters``.
 
-    curve(dnorm(x, mean = 0, sd = 1), 0, 5, col = "blue", ylab = "density")
-    curve(dcauchy(x, location = 0, scale = 1), 0, 5, col = "red", add = TRUE)
+Finally, we must put the calculations in varying places across different types
+of model. What is described above holds for between-subjects designs. Then:
 
-This isn't the only way. Note that ``uniform`` is an undesirable (hard-edged)
-alternative, but a ``beta`` distribution may be perfectly useful for a [0,1]
-parameter. (If you use ``beta``, you might choose e.g. "normally distributed
-deviations about a beta-distributed mean"; e.g. Kanen2019_. In theory such
-values can go outside the range [0,1] but you can then ``reject()`` them.)
+-   SINGLE GROUP. Sample each parameter (per subject) from :math:`N(0, 1)`,
+    which takes us directly to the result of the "transformation 2" step; then
+    transform it as in the "transformation 3" step above.
 
-Regarding reparameterization, see also:
+-   WITHIN-SUBJECTS DESIGNS (a subject can be in several groups). This means
+    you can't calculate "per-subject" final values. One could calculate within
+    the ``model`` rather than the ``transformed parameters`` block. But
+    extracting the transformed values is likely to be helpful. In which case,
+    declare an array or matrix such as
 
-- https://www.occasionaldivergences.com/post/non-centered/: explains that
-  **divergent transitions (divergences)** indicate that Stan's Hamiltonian Monte
-  Carlo algorithm is having trouble exploring the posterior distribution, and
-  that **exceeding the maximum treedepth** is a warning about inefficiency
-  rather than lack of model validity.
+    .. code-block:: C++
 
-- https://mc-stan.org/docs/2_26/stan-users-guide/reparameterization-section.html:
-  notes that the Cauchy is sometimes a tricky distribution and a candidate for
-  reparameterization, and describes non-centred parameterization in general.
+          real<lower=..., upper=...> s_g_param[N_SUBJECTS, N_GROUPS];
+          matrix<lower=..., upper=...>[N_SUBJECTS, N_GROUPS] s_g_param;
 
-  - But see Gelman2006_, who recommends the half-Cauchy (p. 528) as a prior for
-    standard deviations.
-  - ... and even that Stan page uses ``sigma ~ cauchy(0, 5)`` in one of its
-    reparameterized examples.
+    and calculate combinations there. A matrix is probably preferable
+    [https://mc-stan.org/docs/2_18/stan-users-guide/indexing-efficiency-section.html].
 
-  - This is examined at
-    https://stats.stackexchange.com/questions/346034/choosing-prior-for-sigma2-in-the-normal-polynomial-regression-model-y-i,
-    which refers to Simpson et al. (2014), published as Simpson2017_. Simpson
-    et al. discuss this on p. 8: the half-normal being potentialy too
-    "light-tailed" but the half-Cauchy giving poor numerical behaviour. They
-    argue for another, exponential, distribution.
+So, for subject-within-group work:
 
- - Klein2016_ note that the half-normal distribution performs perfectly well as
-   the prior for standard deviation (p. 1096).
+*Sampling* in the ``parameters`` or ``model`` block:
 
-- https://groups.google.com/g/stan-users/c/PkQxfc_QyGg: some 2015 discussion of
-  the technique. See also BetancourtGirolami2013_.
+1.  Per-group means are initially sampled in :math:`N(0, 1)` space.
 
-- https://stats.stackexchange.com/questions/473386/matts-trick-reparametrization-makes-my-models-slower-not-faster:
-  an example when the reparameterization makes things worse, not better.
+2.  Per-group intersubject SDs are sampled in half-normal :math:`N(0, 0.2)^+`
+    space.
+
+3.  Per-subject effects (in between-subjects designs, each subject's deviation
+    from its group mean; etc.) are initially sampled in :math:`N(0, 1)` space.
+
+*Transformations* in the ``transformed parameters`` block:
+
+1.  Per-subject effects  are then transformed to :math:`N(0, intersubject SD)`.
+
+2.  Subject values are calculated in "Stan parameter space" as:
+
+    .. code-block::
+
+        subject_value = group_mean [S1] + subject_specific_effect [T1]
+
+3.  We then convert from "Stan (unit normal) parameter space" to "task
+    parameter space". This depends on our target parameter:
+
+    -   Bounded parameters are inverse probit-transformed to :math:`(0, 1)`,
+        then scaled; e.g. a range of :math:`(0, 7)` is given by:
+        ``y = Phi_approx(x) * 7``.
+
+    -   Unbounded positive parameters are exponentially transformed to
+        :math:`(0, +\infty)` using ``y = exp(x)``.
+
+You might want to label parameters that are in "standard normal" (raw) space,
+rather than "task parameter space", e.g. with a prefix like ``raw_``.
+
+*Priors* are therefore, approximately:
+
+-   For everything, via temporary "raw" variable :math:`r`:
+
+    :math:`\mu_{\mathrm group} \textasciitilde N(0, 1)`
+
+    :math:`\sigma_{\mathrm group} \textasciitilde N(0, 0.2)^+`
+
+    :math:`r_{\mathrm subject} \textasciitilde N(\mu_{\mathrm group}, \sigma_{\mathrm group})`
+
+-   For bounded group means in range :math:`(L, U)`:
+
+    :math:`x_{\mathrm subject} = L + (U - L) \cdot \phi(r_{\mathrm subject})`
+
+-   For unbounded positive means:
+
+    :math:`x_{\mathrm subject} = {\mathrm e}^{r_{\mathrm subject}}`
+
+**Presentation**
+
+One can show posterior values/distributions of the "unit normal" variable, or
+the transformed value (e.g. Ahn2017_, pp. 31, 47; :math:`K` or :math:`K′` in
+Haines2018_, pp. 2544, 2546, 2553; Romeu2020_, p. 107711). See below for
+cautions regarding the interpretation of transformed values.
+
+**Advantages**
+
+A major advantage is of being able to operate in an unconstrained space
+throughout, then constrain at the end if required (rather than e.g. having a
+constrained parameter to which you add a deviation that might take it out of
+its constraints).
+
+**Disadvantage**
+
+-   This obviously affects the priors a bit.
+
+-   It's a bit fiddlier to extract the transformed parameters of interest.
+
+-   It doesn't converge in some of my models, whereas direct sampling converged
+    fine.
+
+
+Parameterization: direct method
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Another way is to sampling directly from the distributions of interest. For
+example, using a subjects-within-groups design:
+
+**Sampling** in the ``parameters`` or ``model`` block:
+
+1.  Per-group means are sampled in bounded parameter space, with sensible
+    per-parameter priors.
+
+2.  Per-group intersubject SDs are sampled in half-normal
+    :math:`N(0, SD_prior)^+` space, e.g. :math:`N(0, 0.05)^+` for a parameter
+    bounded [0, 1].
+
+3.  Per-subject effects (in between-subjects designs, each subject's deviation
+    from its group mean; etc.) are initially sampled in :math:`N(0, 1)` space.
+    [SAME AS ROMEU.]
+
+**Transformations** in the ``transformed parameters`` block:
+
+1.  Per-subject effects  are then transformed to :math:`N(0, intersubject SD)`
+    space. [SAME AS ROMEU.]
+
+2.  Subject values are calculated as:
+
+    .. code-block::
+
+        subject_value = group_mean [S1] + subject_specific_effect [T1]
+
+    and then bounded (clipped, but without potential for sampling
+    failure) in parameter space.
+
+**Advantages:**
+
+-   Convergence, in this case. Took maximum :math:`\^{R}` from ~160 to ~1,
+    where other measures hadn't helped (models here: 12 Romeu, 16 direct).
+
+    Why? Initialization parameters were at 0 (raw), meaning that bounded
+    parameters start at the middle of the range, since (for bounded parameters)
+    ``probit(0) = pnorm(q = 0, mean = 0, sd = 1) = 0.5``, and (for unbounded
+    positive parameters) :math:`e^0 = 1`. But in diagnostic plots, a lot got
+    stuck at 0.
+
+-   Parameters are directly meaningful (no need to jump through hoops in
+    ``generated quantities`` to get useful values out).
+
+**Disadvantages:**
+
+-   Clipping, potentially. You could ``reject()`` out-of-bounds values as
+    an alternative.
 
 
 The interpretation of transformed parameters
@@ -382,134 +559,134 @@ are not used directly within "transformed parameters" but are calculated within
 
 .. code-block:: R
 
-        # Load RStan
-        library(rstan)
-        options(mc.cores = parallel::detectCores())
-        rstan_options(auto_write = TRUE)
+    # Load RStan
+    library(rstan)
+    options(mc.cores = parallel::detectCores())
+    rstan_options(auto_write = TRUE)
 
-        # Generate some data
-        set.seed(1)  # for reproducibility
-        N_SUBJECTS <- 100
-        N_OBSERVATIONS_PER_SUBJECT <- 100
-        N_OBSERVATIONS <- N_SUBJECTS * N_OBSERVATIONS_PER_SUBJECT
-        RAW_OVERALL_MEAN <- 1  # in "standard normal" space
-        RAW_BETWEEN_SUBJECTS_SD <- 0.5  # in "standard normal" space
-        RAW_WITHIN_SUBJECTS_SD <- 0.2  # in "standard normal" space
-        EPSILON <- 0.05  # tolerance
-        repeat {
-            # Fake randomness so we actually end up with a mean/SD that is
-            # what we want, within the tolerance of EPSILON_*.
-            raw_subject_deviation_from_overall_mean <- rnorm(
-                n = N_SUBJECTS, mean = 0, sd = RAW_BETWEEN_SUBJECTS_SD
-            )
-            if (abs(mean(raw_subject_deviation_from_overall_mean)) <=
-                        EPSILON &&
-                    abs(sd(raw_subject_deviation_from_overall_mean) -
-                        RAW_BETWEEN_SUBJECTS_SD) <= EPSILON) {
-                break
-            }
-        }
-        subject <- rep(1:N_SUBJECTS, each = N_OBSERVATIONS_PER_SUBJECT)
-        repeat {
-            # Likewise, "constrained randonmess":
-            error <- rnorm(
-                n = N_OBSERVATIONS, mean = 0, sd = RAW_WITHIN_SUBJECTS_SD)
-            if (abs(mean(error)) <= EPSILON &&
-                    abs(sd(error) - RAW_WITHIN_SUBJECTS_SD) <= EPSILON) {
-                break
-            }
-        }
-        raw_y <- (
-            RAW_OVERALL_MEAN +
-            raw_subject_deviation_from_overall_mean[subject] +
-            error
-        )  # in "standard normal" space
-        y <- exp(raw_y)
-        standata <- list(
-            N_SUBJECTS = N_SUBJECTS,
-            N_OBSERVATIONS = N_OBSERVATIONS,
-            subject = subject,
-            y = y
+    # Generate some data
+    set.seed(1)  # for reproducibility
+    N_SUBJECTS <- 100
+    N_OBSERVATIONS_PER_SUBJECT <- 100
+    N_OBSERVATIONS <- N_SUBJECTS * N_OBSERVATIONS_PER_SUBJECT
+    RAW_OVERALL_MEAN <- 1  # in "standard normal" space
+    RAW_BETWEEN_SUBJECTS_SD <- 0.5  # in "standard normal" space
+    RAW_WITHIN_SUBJECTS_SD <- 0.2  # in "standard normal" space
+    EPSILON <- 0.05  # tolerance
+    repeat {
+        # Fake randomness so we actually end up with a mean/SD that is
+        # what we want, within the tolerance of EPSILON_*.
+        raw_subject_deviation_from_overall_mean <- rnorm(
+            n = N_SUBJECTS, mean = 0, sd = RAW_BETWEEN_SUBJECTS_SD
         )
+        if (abs(mean(raw_subject_deviation_from_overall_mean)) <=
+                    EPSILON &&
+                abs(sd(raw_subject_deviation_from_overall_mean) -
+                    RAW_BETWEEN_SUBJECTS_SD) <= EPSILON) {
+            break
+        }
+    }
+    subject <- rep(1:N_SUBJECTS, each = N_OBSERVATIONS_PER_SUBJECT)
+    repeat {
+        # Likewise, "constrained randonmess":
+        error <- rnorm(
+            n = N_OBSERVATIONS, mean = 0, sd = RAW_WITHIN_SUBJECTS_SD)
+        if (abs(mean(error)) <= EPSILON &&
+                abs(sd(error) - RAW_WITHIN_SUBJECTS_SD) <= EPSILON) {
+            break
+        }
+    }
+    raw_y <- (
+        RAW_OVERALL_MEAN +
+        raw_subject_deviation_from_overall_mean[subject] +
+        error
+    )  # in "standard normal" space
+    y <- exp(raw_y)
+    standata <- list(
+        N_SUBJECTS = N_SUBJECTS,
+        N_OBSERVATIONS = N_OBSERVATIONS,
+        subject = subject,
+        y = y
+    )
 
-        # Analyse it with Stan
-        model_code <- '
-            // Single-group within-subjects design.
-            // The prefix "raw_" means "in standard normal (Z) space".
-            data {
-                int<lower=1> N_SUBJECTS;
-                int<lower=1> N_OBSERVATIONS;
-                int<lower=1> subject[N_OBSERVATIONS];
-                real y[N_OBSERVATIONS];
+    # Analyse it with Stan
+    model_code <- '
+        // Single-group within-subjects design.
+        // The prefix "raw_" means "in standard normal (Z) space".
+        data {
+            int<lower=1> N_SUBJECTS;
+            int<lower=1> N_OBSERVATIONS;
+            int<lower=1> subject[N_OBSERVATIONS];
+            real y[N_OBSERVATIONS];
+        }
+        parameters {
+            real raw_overall_mean;
+            real<lower=0> raw_between_subjects_sd;
+            real<lower=0> raw_within_subject_sd;
+
+            vector[N_SUBJECTS] raw_subject_deviation_from_overall_mean;
+        }
+        transformed parameters {
+            vector[N_SUBJECTS] raw_subject_mean = (
+                raw_overall_mean +  // real
+                raw_subject_deviation_from_overall_mean  // vector
+            );
+        }
+        model {
+            vector[N_OBSERVATIONS] raw_predicted;
+
+            // Sample parameters
+            raw_overall_mean ~ std_normal();
+            raw_between_subjects_sd ~ cauchy(0, 5);
+            raw_within_subject_sd ~ cauchy(0, 5);
+            raw_subject_deviation_from_overall_mean ~ normal(
+                0, raw_between_subjects_sd);
+
+            // Conceptually, raw_subject_mean is calculated at this point.
+
+            // Calculate the per-subject mean for each observation:
+            for (i in 1:N_OBSERVATIONS) {
+                raw_predicted[i] = raw_subject_mean[subject[i]];
             }
-            parameters {
-                real raw_overall_mean;
-                real<lower=0> raw_between_subjects_sd;
-                real<lower=0> raw_within_subject_sd;
 
-                vector[N_SUBJECTS] raw_subject_deviation_from_overall_mean;
-            }
-            transformed parameters {
-                vector[N_SUBJECTS] raw_subject_mean = (
-                    raw_overall_mean +  // real
-                    raw_subject_deviation_from_overall_mean  // vector
-                );
-            }
-            model {
-                vector[N_OBSERVATIONS] raw_predicted;
+            // Fit to data:
+            //      y ~ exp(normal(...)), or
+            //      log(y) ~ normal(...), or
+            //      y ~ lognormal(...):
+            y ~ lognormal(raw_predicted, raw_within_subject_sd);
+        }
+        generated quantities {
+            real transformed_overall_mean = exp(raw_overall_mean);
+            real mean_of_transformed_subject_means = mean(
+                exp(raw_subject_mean)
+            );
+        }
+    '
+    fit <- rstan::stan(
+        model_code = model_code,
+        model_name = "Test model",
+        data = standata
+    )
+    print(fit)
 
-                // Sample parameters
-                raw_overall_mean ~ std_normal();
-                raw_between_subjects_sd ~ cauchy(0, 5);
-                raw_within_subject_sd ~ cauchy(0, 5);
-                raw_subject_deviation_from_overall_mean ~ normal(
-                    0, raw_between_subjects_sd);
-
-                // Conceptually, raw_subject_mean is calculated at this point.
-
-                // Calculate the per-subject mean for each observation:
-                for (i in 1:N_OBSERVATIONS) {
-                    raw_predicted[i] = raw_subject_mean[subject[i]];
-                }
-
-                // Fit to data:
-                //      y ~ exp(normal(...)), or
-                //      log(y) ~ normal(...), or
-                //      y ~ lognormal(...):
-                y ~ lognormal(raw_predicted, raw_within_subject_sd);
-            }
-            generated quantities {
-                real transformed_overall_mean = exp(raw_overall_mean);
-                real mean_of_transformed_subject_means = mean(
-                    exp(raw_subject_mean)
-                );
-            }
-        '
-        fit <- rstan::stan(
-            model_code = model_code,
-            model_name = "Test model",
-            data = standata
-        )
-        print(fit)
-
-        # Means from Stan:
-        # - raw_overall_mean = 0.98 (95% HDI 0.87-1.07), accurate
-        # - raw_between_subjects_sd = 0.48 (HDI 0.42-0.56), accurate
-        # - raw_within_subjects_sd = 0.20 (HDI 0.20-0.21), accurate
-        # - transformed_overall_mean = 2.68 (HDI 2.38-2.90)
-        #   ... relevant (estimates exp(RAW_OVERALL_MEAN)), but NOT mean(y)
-        # - mean_of_transformed_subject_means = 3.00 (HDI 2.99-3.02)
-        #   ... potentially also of interest.
-        #
-        # Compare to values from R:
-        print(mean(raw_y))  # 0.980
-        print(sd(raw_subject_deviation_from_overall_mean))  # 0.479
-        print(sd(error))  # 0.202
-        print(exp(RAW_OVERALL_MEAN))  # 2.718
-        print(mean(y))  # 3.06
-        # ... noting that if all subjects don't have the same number of
-        #     observations, a different calculation would be required to
-        #     match mean_of_transformed_subject_means.
+    # Means from Stan:
+    # - raw_overall_mean = 0.98 (95% HDI 0.87-1.07), accurate
+    # - raw_between_subjects_sd = 0.48 (HDI 0.42-0.56), accurate
+    # - raw_within_subjects_sd = 0.20 (HDI 0.20-0.21), accurate
+    # - transformed_overall_mean = 2.68 (HDI 2.38-2.90)
+    #   ... relevant (estimates exp(RAW_OVERALL_MEAN)), but NOT mean(y)
+    # - mean_of_transformed_subject_means = 3.00 (HDI 2.99-3.02)
+    #   ... potentially also of interest.
+    #
+    # Compare to values from R:
+    print(mean(raw_y))  # 0.980
+    print(sd(raw_subject_deviation_from_overall_mean))  # 0.479
+    print(sd(error))  # 0.202
+    print(exp(RAW_OVERALL_MEAN))  # 2.718
+    print(mean(y))  # 3.06
+    # ... noting that if all subjects don't have the same number of
+    #     observations, a different calculation would be required to
+    #     match mean_of_transformed_subject_means.
 
 In this case, the point to emphasize is that "mean(exp(raw_overall_mean))" is
 not the same as "mean(exp(raw_overall_mean + a normally distributed deviation
