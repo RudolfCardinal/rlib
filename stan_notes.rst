@@ -499,8 +499,8 @@ example, using a subjects-within-groups design:
 
 **Advantages:**
 
--   Convergence, in this case. Took maximum :math:`\^{R}` from ~160 to ~1,
-    where other measures hadn't helped (models here: 12 Romeu, 16 direct).
+-   Convergence, in one example of mine. Took maximum :math:`\^{R}` from ~160
+    to ~1, where other measures hadn't helped.
 
     Why? Initialization parameters were at 0 (raw), meaning that bounded
     parameters start at the middle of the range, since (for bounded parameters)
@@ -1256,3 +1256,10 @@ Docker example
 ~~~~~~~~~~~~~~
 
 See the ``Dockerfile`` in this directory.
+
+
+A private bare-metal server
+---------------------------
+
+- ``tsp`` is a good lightweight job control system. You just need to set up
+  ``postfix`` so it can e-mail you.
