@@ -68,7 +68,7 @@
             Assumes an inverse temperature of 1.
 
         NOTES:
-            A softmax function takes several inputs and normalizes them so 
+            A softmax function takes several inputs and normalizes them so
             that:
                 - the outputs are in the same relative order as the inputs
                 - the outputs sum to 1.
@@ -166,7 +166,7 @@
         // If you were to transform x so as to be a logit giving the same
         // result via the standard logistic function, 1 / (1 + exp(-x)), for
         // L = 1, you want this logit:
-        //      k * (x - x0) 
+        //      k * (x - x0)
     }
 
     // For the standard logistic (with x0 = 0, k = 1, L = 1), use Stan's
@@ -237,7 +237,7 @@
 
     vector except_V_V(vector v, int except)
     {
-        // Returns a vector that is the original without the element at index 
+        // Returns a vector that is the original without the element at index
         // "except".
 
         int n = num_elements(v);
@@ -2343,7 +2343,7 @@
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Categorical logit distribution
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    // y is in {1, ..., K} and beta is a K-vector of (log odds) in the range 
+    // y is in {1, ..., K} and beta is a K-vector of (log odds) in the range
     // [-inf, +inf]; theta = softmax(beta) as above.
 
     void sampleCategoricalLogit_IV_lp(int y, vector beta)
