@@ -302,10 +302,10 @@ _ = """
     // ------------------------------------------------------------------------
     // Simple functions: softmax
     // ------------------------------------------------------------------------
-    
+
     /*
         What about the logit domain?
-        
+
         For a probability p:
             odds = p / (1 - p)
             x = logit(p) = log(odds) = log(p) - log(1 - p) = -log((1/p) - 1)
@@ -318,44 +318,44 @@ _ = """
         p + q + r = 1. There is no simple additive or multiplicative 
         relationship for log odds. (For two events, p + q = 1 and x = -y.)
         A simple example in R:
-       
+
             logit <- function(p) { -log((1 / p) - 1) }
             logistic <- function(x) { 1 / (1 + exp(-x)) }
             logit(c(0.01, 0.01, 0.98))  # -4.59512 -4.59512  3.89182
 
         More generally, re combining multiple value scales:
-        
+
         We've been doing this:
         ----------------------
         Probability method 1:
             inputvec = k1 * values1 + k2 * values2 + ...;  // arbitrary range
             p = softmaxNth(inputvec, index);  // 0-1
             choices ~ bernoulli(p);
-            
+
         Logit method 1:
             inputvec = k1 * values1 + k2 * values2 + ...; // arbitrary range
             p = softmaxNth(inputvec, index);  // 0-1
             x = logit(p);   // arbitrary range
             choices ~ bernoulli_logit(x);
             // logically equivalent to probability method 1
-            
+
         OK as long as input values are positive:
         ----------------------------------------
         Probability method 2:
             inputvec = k1 * values1 + k2 * values2 + ...; // must constrain >0
             proportion_of_total = inputvec[index] / sum(inputvec);  // 0-1 as long as input values > 0
             choices ~ bernoulli(proportion_of_total);
-            
+
         Logit method 2:
             inputvec = k1 * values1 + k2 * values2 + ...; // must constrain >0
             proportion_of_total = inputvec[index] / sum(inputvec);  // 0-1 as long as input values > 0
             x = logit(proportion_of_total);
             choices ~ bernoulli_logit(x);
             // logically equivalent to probability method 2
-            
+
         Arbitrary:
         ----------
-        
+
             inputvec = k1 * values1 + k2 * values2 + ...;  // arbitrary range
             x = someFunction(inputvec, index);  // arbitrary range
             // ... the sum of logistic(x) across all indices should be 1
@@ -401,9 +401,9 @@ _ = """
             - Note:
                 softmax(y) = exp(y) / sum(exp(y))
                 log_softmax(y) = log(softmax(y)) = y - log_sum_exp(y)
-                
+
             - R version:
-            
+
                 library(matrixStats)  # for logSumExp
                 logitSoftmaxNth <- function(x) {
                     lse <- logSumExp(x)
@@ -432,7 +432,7 @@ SIMPLE_FUNCTIONS = """
     // ------------------------------------------------------------------------
     // Softmax
     // ------------------------------------------------------------------------
-    
+
     real softmaxNth(vector softmax_inputs, int index)
     {
         /*
@@ -444,7 +444,7 @@ SIMPLE_FUNCTIONS = """
             that:
                 - the outputs are in the same relative order as the inputs
                 - the outputs sum to 1.
-            
+
             For softmax: see my miscstat.R; the important points for
             optimization are (1) that softmax is invariant to the addition/
             subtraction of a constant, and subtracting the mean makes the
@@ -453,17 +453,17 @@ SIMPLE_FUNCTIONS = """
             (preference for the right), so we don't have to waste time
             vector-calculating the preference for the left as well [that is:
             we don't have to calculate s_exp_products / sum(s_exp_products)].
-            
+
             The constant can be the mean, or the max; Stan uses the max, which
             is probably a little more efficient.
 
             Since Stan 2.0.0, the alternative is to use softmax(); see
             https://github.com/stan-dev/math/blob/develop/stan/math/prim/mat/fun/softmax.hpp
             The exact syntactic equivalence is:
-            
+
                 real result = softmaxNth(inputs, index);
                 real result = softmax(inputs)[index];
-                
+
             Stan's version is in stan/math/prim/mat/fun/softmax.hpp; it uses
             Eigen.
 
@@ -485,9 +485,9 @@ SIMPLE_FUNCTIONS = """
     {
         /*
             Version of softmaxNth allowing you to specify the inverse temp.
-            
+
             The direct Stan equivalent is:
-            
+
                 real result = softmaxNthInvTemp(inputs, invtemp, index);
                 real result = softmax(inputs * invtemp)[index];
         */
@@ -502,7 +502,7 @@ SIMPLE_FUNCTIONS = """
 
         // METHOD 1 (fewer calculations involved and empirically faster):
         real log_p = inputs[index] - log_sum_exp(inputs);
-        
+
         // METHOD 2 (empirically slower):
         // real log_p = log_softmax(inputs)[index];
 
@@ -518,13 +518,13 @@ SIMPLE_FUNCTIONS = """
 
         return log_p - log1m_exp(log_p);
     }
-    
+
     // ------------------------------------------------------------------------
     // Logistic function
     // ------------------------------------------------------------------------
 
     // For the logit function, use Stan's built-in logit().
-    
+
     real logistic(real x, real x0, real k, real L)
     {
         // Returns x transformed through a logistic function.
@@ -534,13 +534,13 @@ SIMPLE_FUNCTIONS = """
         // L: maximum (usually 1)
 
         return L / (1 + exp(-k * (x - x0)));
-        
+
         // If you were to transform x so as to be a logit giving the same
         // result via the standard logistic function, 1 / (1 + exp(-x)), for
         // L = 1, you want this logit:
         //      k * (x - x0) 
     }
-    
+
     // For the standard logistic (with x0 = 0, k = 1, L = 1), use Stan's
     // inv_logit(). 
 
@@ -586,7 +586,7 @@ SIMPLE_FUNCTIONS = """
         // but not with
         //      vector[ncols] y = x[row];
         // so this function does that.
-        
+
         int ncols = dims(x)[2];
         vector[ncols] v;
         for (i in 1:ncols) {
@@ -594,11 +594,11 @@ SIMPLE_FUNCTIONS = """
         }
         return v;
     }
-    
+
     vector vector_from_int_array_row(int[,] x, int row)
     {
         // As above, but for an int array.
-        
+
         int ncols = dims(x)[2];
         vector[ncols] v;
         for (i in 1:ncols) {
@@ -606,12 +606,12 @@ SIMPLE_FUNCTIONS = """
         }
         return v;
     }
-    
+
     vector except_V_V(vector v, int except)
     {
         // Returns a vector that is the original without the element at index 
         // "except".
-        
+
         int n = num_elements(v);
         vector[n - 1] result;
         int r = 1;  // indexes result
@@ -624,12 +624,12 @@ SIMPLE_FUNCTIONS = """
         }
         return result;
     }
-    
+
     int except_I_I(int x, int except)
     {
         // The argument is an index to a vector v; the result is the equivalent
         // index to the vector returned by except_V_V(v, except).
-        
+
         if (x < 1) {
             reject("Argument x is a Stan index so must be >= 1");
         }
@@ -641,7 +641,7 @@ SIMPLE_FUNCTIONS = """
         }
         return x - 1;
     }
-    
+
     // ------------------------------------------------------------------------
     // Simple functions: matrix calculations
     // ------------------------------------------------------------------------
@@ -651,7 +651,7 @@ SIMPLE_FUNCTIONS = """
     //      dot_product(vector, row vector)
     //      dot_product(row vector, vector)
     //      dot_product(real[], real[])
-    
+
     vector dot_product_MV_V(matrix x, vector y)
     {
         // Dot product between a matrix (2 dimensions) and a vector (1
@@ -765,7 +765,7 @@ SIMPLE_FUNCTIONS = """
         }
         return z;
     }
-    
+
     real dot_product_AA_R(real[] x, real[] y)
     {
         // Dot product of two arrays.
@@ -780,7 +780,7 @@ SIMPLE_FUNCTIONS = """
         }
         return z;
     }
-    
+
     real dot_product_iAV_R(int[] x, vector y)
     {
         int n = num_elements(x);
@@ -793,7 +793,7 @@ SIMPLE_FUNCTIONS = """
         }
         return z;
     }
-    
+
     matrix tensordot_A3_M(real[] x, real[,,] y)
     {
         // Equivalent to Numpy's tensordot(x, y, axes=1), for:
@@ -811,7 +811,7 @@ SIMPLE_FUNCTIONS = """
         //                 [k', l', m', n'] ]
         //         
         //      (1, 2) ⋅ (2, 3, 4)            = (3, 4)
-        
+
         int dimensions[3] = dims(y);
         int p = dimensions[1];
         int q = dimensions[2];
@@ -837,7 +837,7 @@ SIMPLE_FUNCTIONS = """
     real[,] tensordot_A3_2(real[] x, real[,,] y)
     {
         // As for tensordot_A3_M(), but returning an array.
-        
+
         int dimensions[3] = dims(y);
         int p = dimensions[1];
         int q = dimensions[2];

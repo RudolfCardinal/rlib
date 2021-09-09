@@ -60,7 +60,7 @@
     // ------------------------------------------------------------------------
     // Softmax
     // ------------------------------------------------------------------------
-    
+
     real softmaxNth(vector softmax_inputs, int index)
     {
         /*
@@ -72,7 +72,7 @@
             that:
                 - the outputs are in the same relative order as the inputs
                 - the outputs sum to 1.
-            
+
             For softmax: see my miscstat.R; the important points for
             optimization are (1) that softmax is invariant to the addition/
             subtraction of a constant, and subtracting the mean makes the
@@ -81,17 +81,17 @@
             (preference for the right), so we don't have to waste time
             vector-calculating the preference for the left as well [that is:
             we don't have to calculate s_exp_products / sum(s_exp_products)].
-            
+
             The constant can be the mean, or the max; Stan uses the max, which
             is probably a little more efficient.
 
             Since Stan 2.0.0, the alternative is to use softmax(); see
             https://github.com/stan-dev/math/blob/develop/stan/math/prim/mat/fun/softmax.hpp
             The exact syntactic equivalence is:
-            
+
                 real result = softmaxNth(inputs, index);
                 real result = softmax(inputs)[index];
-                
+
             Stan's version is in stan/math/prim/mat/fun/softmax.hpp; it uses
             Eigen.
 
@@ -113,9 +113,9 @@
     {
         /*
             Version of softmaxNth allowing you to specify the inverse temp.
-            
+
             The direct Stan equivalent is:
-            
+
                 real result = softmaxNthInvTemp(inputs, invtemp, index);
                 real result = softmax(inputs * invtemp)[index];
         */
@@ -130,7 +130,7 @@
 
         // METHOD 1 (fewer calculations involved and empirically faster):
         real log_p = inputs[index] - log_sum_exp(inputs);
-        
+
         // METHOD 2 (empirically slower):
         // real log_p = log_softmax(inputs)[index];
 
@@ -146,13 +146,13 @@
 
         return log_p - log1m_exp(log_p);
     }
-    
+
     // ------------------------------------------------------------------------
     // Logistic function
     // ------------------------------------------------------------------------
 
     // For the logit function, use Stan's built-in logit().
-    
+
     real logistic(real x, real x0, real k, real L)
     {
         // Returns x transformed through a logistic function.
@@ -162,13 +162,13 @@
         // L: maximum (usually 1)
 
         return L / (1 + exp(-k * (x - x0)));
-        
+
         // If you were to transform x so as to be a logit giving the same
         // result via the standard logistic function, 1 / (1 + exp(-x)), for
         // L = 1, you want this logit:
         //      k * (x - x0) 
     }
-    
+
     // For the standard logistic (with x0 = 0, k = 1, L = 1), use Stan's
     // inv_logit(). 
 
@@ -214,7 +214,7 @@
         // but not with
         //      vector[ncols] y = x[row];
         // so this function does that.
-        
+
         int ncols = dims(x)[2];
         vector[ncols] v;
         for (i in 1:ncols) {
@@ -222,11 +222,11 @@
         }
         return v;
     }
-    
+
     vector vector_from_int_array_row(int[,] x, int row)
     {
         // As above, but for an int array.
-        
+
         int ncols = dims(x)[2];
         vector[ncols] v;
         for (i in 1:ncols) {
@@ -234,12 +234,12 @@
         }
         return v;
     }
-    
+
     vector except_V_V(vector v, int except)
     {
         // Returns a vector that is the original without the element at index 
         // "except".
-        
+
         int n = num_elements(v);
         vector[n - 1] result;
         int r = 1;  // indexes result
@@ -252,12 +252,12 @@
         }
         return result;
     }
-    
+
     int except_I_I(int x, int except)
     {
         // The argument is an index to a vector v; the result is the equivalent
         // index to the vector returned by except_V_V(v, except).
-        
+
         if (x < 1) {
             reject("Argument x is a Stan index so must be >= 1");
         }
@@ -269,7 +269,7 @@
         }
         return x - 1;
     }
-    
+
     // ------------------------------------------------------------------------
     // Simple functions: matrix calculations
     // ------------------------------------------------------------------------
@@ -279,7 +279,7 @@
     //      dot_product(vector, row vector)
     //      dot_product(row vector, vector)
     //      dot_product(real[], real[])
-    
+
     vector dot_product_MV_V(matrix x, vector y)
     {
         // Dot product between a matrix (2 dimensions) and a vector (1
@@ -393,7 +393,7 @@
         }
         return z;
     }
-    
+
     real dot_product_AA_R(real[] x, real[] y)
     {
         // Dot product of two arrays.
@@ -408,7 +408,7 @@
         }
         return z;
     }
-    
+
     real dot_product_iAV_R(int[] x, vector y)
     {
         int n = num_elements(x);
@@ -421,7 +421,7 @@
         }
         return z;
     }
-    
+
     matrix tensordot_A3_M(real[] x, real[,,] y)
     {
         // Equivalent to Numpy's tensordot(x, y, axes=1), for:
@@ -439,7 +439,7 @@
         //                 [k', l', m', n'] ]
         //         
         //      (1, 2) ⋅ (2, 3, 4)            = (3, 4)
-        
+
         int dimensions[3] = dims(y);
         int p = dimensions[1];
         int q = dimensions[2];
@@ -465,7 +465,7 @@
     real[,] tensordot_A3_2(real[] x, real[,,] y)
     {
         // As for tensordot_A3_M(), but returning an array.
-        
+
         int dimensions[3] = dims(y);
         int p = dimensions[1];
         int q = dimensions[2];
