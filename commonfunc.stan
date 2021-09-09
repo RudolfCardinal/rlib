@@ -58,7 +58,7 @@
     */
 
     // ------------------------------------------------------------------------
-    // Simple functions: softmax
+    // Softmax
     // ------------------------------------------------------------------------
     
     real softmaxNth(vector softmax_inputs, int index)
@@ -148,7 +148,7 @@
     }
     
     // ------------------------------------------------------------------------
-    // Simple functions: logistic
+    // Logistic function
     // ------------------------------------------------------------------------
 
     // For the logit function, use Stan's built-in logit().
@@ -173,7 +173,7 @@
     // inv_logit(). 
 
     // ------------------------------------------------------------------------
-    // Simple functions: boundaries (min, max)
+    // Boundaries (min, max)
     // ------------------------------------------------------------------------
 
     real bound(real x, real min_value, real max_value)
@@ -202,7 +202,7 @@
     }
 
     // ------------------------------------------------------------------------
-    // Simple functions: data manipulation
+    // Basic data manipulation
     // ------------------------------------------------------------------------
 
     vector vector_from_real_array_row(real[,] x, int row)
@@ -489,7 +489,7 @@
     }
 
     // ------------------------------------------------------------------------
-    // Simple functions: pairwise differences in matrix format
+    // Pairwise differences in matrix format
     // ------------------------------------------------------------------------
     // Two functions with different signatures can't have the same name...
 
@@ -555,7 +555,7 @@
     }
 
     // ------------------------------------------------------------------------
-    // Simple functions: pairwise comparisons in vector format
+    // Pairwise comparisons in vector format
     // ------------------------------------------------------------------------
 
     int factorial(int x);  // necessary for self-recursion
@@ -646,6 +646,99 @@
             }
         }
         return differences;
+    }
+
+    // ------------------------------------------------------------------------
+    // AUROC (area under the receiver operating characteristic curve)
+    // ------------------------------------------------------------------------
+
+    real aurocAV(int[] binary_outcome, vector probability)
+    {
+        /*
+
+            Calculates AUROC for a binary dependent variable "outcome" from the
+            predictor "probability", range [0, 1], where this is the calculated
+            probability of the binary variable being 1.
+
+            CONCEPT
+
+            See:
+
+            - https://stats.stackexchange.com/questions/145566/how-to-calculate-area-under-the-curve-auc-or-the-c-statistic-by-hand
+            - https://www.r-bloggers.com/2016/11/calculating-auc-the-area-under-a-roc-curve/
+            - https://blog.revolutionanalytics.com/2016/11/calculating-auc.html
+
+            We will use the following method in principle:
+
+            - For every unique pair of actual values (one is 0, the other is 1):
+            - If p_for_outcome_one > p_for_outcome_zero, that's a win (score 1);
+              if p_for_outcome_one < p_for_outcome_zero, that's a loss (score 0);
+              if p_for_outcome_one = p_for_outcome_zero, that's a tie (score 0.5).
+            - Take the mean of those scores; that is the AUROC.
+
+            This follows Hanley & McNeil (1982, PMID 7063747), section III.
+
+            If the outcome doesn't have both ones and zeros, we fail, as in R:
+                library(pROC)
+                roc(response = c(1, 1, 1, 1), predictor = c(0.1, 0.2, 0.3, 0.4))
+
+            General speedup techniques:
+                https://mc-stan.org/docs/2_27/stan-users-guide/vectorization.html
+
+            However, see this algorithm:
+
+            - https://stephanosterburg.gitbook.io/scrapbook/data-science/ds-cheatsheets/machine-learning/fast-computation-of-auc-roc-score
+
+            ALGORITHM
+
+            After:
+            - https://stephanosterburg.gitbook.io/scrapbook/data-science/ds-cheatsheets/machine-learning/fast-computation-of-auc-roc-score
+            - https://github.com/jfpuget/metrics/blob/master/auc.ipynb
+
+            "Let's first define some entities.
+
+            - pos is the set of examples with target 1. These are the positive
+              examples.
+            - neg is the set of examples with target 0. These are the negative
+              examples.
+            - p(i) is the prediction for example i. p(i) is a number between 0
+              and 1.
+            - A pair of examples (i, j) is labelled the right way if i is a
+              positive example, j is a negative example, and the prediction for
+              i is higher than the prediction for j.
+            - | s | is the number of elements in set s.
+
+            Then AUC-ROC is the count of pairs labelled the right way divided
+            by the number of pairs:
+
+                AUC-ROC = | {(i,j), i in pos, j in neg, p(i) > p(j)} | / (| pos | * | neg |)
+
+            A naive code to compute this would be to consider each possible
+            pair and count those labelled the right way. A much better way is
+            to sort the predictions first, then visit the examples in
+            increasing order of predictions. Each time we see a positive
+            example we add the number of negative examples we've seen so far."
+
+            ~~~
+
+            RNC: Accuracy verified against R's pROC::roc(); see
+            rlib/tests/auroc/test_auroc_algorithm.R.
+        */
+
+        int n = num_elements(binary_outcome);
+        // Sort the binary outcome by ascending probability:
+        int y[n] = binary_outcome[sort_indices_asc(probability)];
+        int n_false = 0;
+        int current_y;
+        real total = 0.0;
+        for (i in 1:n) {
+            current_y = y[i];
+            n_false += 1 - current_y;  // add 1 if false; unchanged if true
+            total += current_y * n_false;
+            // ... if we are seeing a positive example, add the number of
+            // negative examples so far.
+        }
+        return total / (n_false * (n - n_false));
     }
 
 
@@ -1625,7 +1718,12 @@
 
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Beta distribution
-    // - in R, alpha is called scale1, and beta is called scale2
+    // - In R, alpha is called scale1, and beta is called scale2.
+    // - Its distribution is confined to the range [0, 1]. See
+    //   https://en.wikipedia.org/wiki/Beta_distribution. In R, try:
+    //
+    //   curve(dbeta(x, shape1 = 1.2, shape2 = 1.2), -0.1, 1.1, ylab = "density")
+    //
     // - Stan 2.16.0 manual p532; R ?dbeta;
     //   https://www.rdocumentation.org/packages/visualize/versions/4.3.0/topics/visualize.beta
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
