@@ -314,8 +314,8 @@ _ = """
         Now, the softmax of a bunch of values can be used as a probability,
         since softmax outputs sum to 1.
 
-        For three events, of which exactly one must happen, probabilities 
-        p + q + r = 1. There is no simple additive or multiplicative 
+        For three events, of which exactly one must happen, probabilities
+        p + q + r = 1. There is no simple additive or multiplicative
         relationship for log odds. (For two events, p + q = 1 and x = -y.)
         A simple example in R:
 
@@ -365,12 +365,12 @@ _ = """
 
     real logitSoftmaxNth(vector inputs, int index)
     {
-        // Returns a number suitable for use as a logit, by rescaling the 
+        // Returns a number suitable for use as a logit, by rescaling the
         // inputs via a softmax function.
         /*
             NOTES:
-            - Across all inputs, the sum of the logistic of the output from 
-              this function will be 1 (the inputs represent all possible 
+            - Across all inputs, the sum of the logistic of the output from
+              this function will be 1 (the inputs represent all possible
               events, and are mutually exclusive).  
             - The output range is arbitrary.
             - Note some things that don't work:
@@ -380,7 +380,7 @@ _ = """
                     proportions = x / sum(x)
                     // ... for positive x, this means that sum(proportions) = 1
                     // ... and if length(x) == 2, then mean(proportions) = 0.5
-                    // ... so this function is equivalent, in that special 
+                    // ... so this function is equivalent, in that special
                     //     case, to -0.5 + proportions[i]
               but what's below generalizes to arbitrary numbers.
             - We cannot use (x - mean(x)) / sd(x), i.e. standardization, 
@@ -388,13 +388,13 @@ _ = """
               which case the SD is zero.
             - We cannot use (x - mean(x)) / sum(x), since it's also possible
               that all values sum to zero (e.g. -1, +1).
-                - For two positive inputs, these last two methods are 
+                - For two positive inputs, these last two methods are
                   equivalent to:
                         proportions = x / sum(x)
                         // ... proportions sum to 1
                         // ... mean of the two proportions is 0.5
                         return -0.5 + proportions[i];
-            - However, we cannot use (x - mean(x)) since then logits can 
+            - However, we cannot use (x - mean(x)) since then logits can
               transform to nonsensical probabilities (e.g. two probabilities
               >0.5 in a set of three).
             - So we return to the softmax concept.
@@ -440,7 +440,7 @@ SIMPLE_FUNCTIONS = """
             Assumes an inverse temperature of 1.
 
         NOTES:
-            A softmax function takes several inputs and normalizes them so 
+            A softmax function takes several inputs and normalizes them so
             that:
                 - the outputs are in the same relative order as the inputs
                 - the outputs sum to 1.
@@ -538,7 +538,7 @@ SIMPLE_FUNCTIONS = """
         // If you were to transform x so as to be a logit giving the same
         // result via the standard logistic function, 1 / (1 + exp(-x)), for
         // L = 1, you want this logit:
-        //      k * (x - x0) 
+        //      k * (x - x0)
     }
 
     // For the standard logistic (with x0 = 0, k = 1, L = 1), use Stan's
@@ -609,7 +609,7 @@ SIMPLE_FUNCTIONS = """
 
     vector except_V_V(vector v, int except)
     {
-        // Returns a vector that is the original without the element at index 
+        // Returns a vector that is the original without the element at index
         // "except".
 
         int n = num_elements(v);
@@ -2416,7 +2416,7 @@ SAMPLE_CATEGORICAL = """
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Categorical logit distribution
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    // y is in {1, ..., K} and beta is a K-vector of (log odds) in the range 
+    // y is in {1, ..., K} and beta is a K-vector of (log odds) in the range
     // [-inf, +inf]; theta = softmax(beta) as above.
 
     void sampleCategoricalLogit_IV_lp(int y, vector beta)
