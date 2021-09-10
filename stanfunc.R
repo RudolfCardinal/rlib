@@ -28,6 +28,11 @@ stanfunc$DEFAULT_ITER <- 2000
 stanfunc$DEFAULT_INIT <- "0"  # the Stan default, "random", uses the range -2 to +2
 stanfunc$DEFAULT_SEED <- 1234  # for consistency across runs
 
+stanfunc$DEFAULT_HIGH_RHAT_THRESHOLD <- 1.1
+    #   If this threshold for R-hat is exceeded, warnings are shown. A value
+    #   of 1.2 is a typical threshold and 1.1 is a stringent criterion (Brooks
+    #   and Gelman 1998, doi:10.1080/10618600.1998.10474787, p. 444).
+
 
 #==============================================================================
 # Core functions for e.g. rstan 2.16.2:
@@ -476,10 +481,12 @@ stanfunc$quickrun <- function(
 }
 
 
-stanfunc$compare_model_evidence <- function(bridgesample_list_list,
-                                            priors = NULL,
-                                            detail = FALSE,
-                                            rhat_warning_threshold = 1.1)
+stanfunc$compare_model_evidence <- function(
+        bridgesample_list_list,
+        priors = NULL,
+        detail = FALSE,
+        rhat_warning_threshold = stanfunc$DEFAULT_HIGH_RHAT_THRESHOLD,
+        rhat_par_exclude_regex = NULL)
 {
     # CHECK THE OUTPUT AGAINST, e.g.:
     # bridgesampling::post_prob(b1, b2, b3, b4, b5, b6, model_names = paste("Model", 1:6))
@@ -507,6 +514,9 @@ stanfunc$compare_model_evidence <- function(bridgesample_list_list,
     #   of 1.2 is a typical threshold and 1.1 is a stringent criterion (Brooks
     #   and Gelman 1998, doi:10.1080/10618600.1998.10474787, p. 444).
     #
+    # rhat_par_exclude_regex:
+    #   Regex for parameters to exclude from R-hat calculation.
+    #
     # Note:
     # - "marginal likelihood" is the same as "evidence" (e.g. Kruschke 2011
     #   p57-58)
@@ -523,7 +533,10 @@ stanfunc$compare_model_evidence <- function(bridgesample_list_list,
                         max_rhat <- NA_real_
                     } else {
                         fit <- item$stanfit
-                        max_rhat <- stanfunc$max_rhat(fit)
+                        max_rhat <- stanfunc$max_rhat(
+                            fit,
+                            par_exclude_regex = rhat_par_exclude_regex
+                        )
                     }
                     return(c(
                         i,  # index
@@ -716,36 +729,49 @@ stanfunc$summary_data_table <- function(fit, ...)
 }
 
 
-stanfunc$params_with_high_rhat <- function(fit, threshold = 1.1)
+stanfunc$summary_by_par_regex <- function(fit,
+                                          pars = NULL,
+                                          par_regex = NULL,
+                                          par_exclude_regex = NULL,
+                                          ...)
 {
-    s <- stanfunc$summary_data_table(fit)
+    # Extracting parameters can be slow, so we filter parameter names before
+    # asking rstan to extract parameters.
+    if (is.null(pars)) {
+        pars <- names(fit)  # all parameter names; this is quick
+    }
+    # Apply inclusion regex:
+    if (!is.null(par_regex)) {
+        pars <- pars[grepl(par_regex, pars)]
+    }
+    if (!is.null(par_exclude_regex)) {
+        pars <- pars[!grepl(par_exclude_regex, pars)]
+    }
+    if (length(pars) == 0) {
+        stop("No parameters selected")
+    }
+
+    s <- stanfunc$summary_data_table(fit, pars = pars, ...)
+    return(s)
+}
+
+
+stanfunc$params_with_high_rhat <- function(
+        fit,
+        threshold = stanfunc$DEFAULT_HIGH_RHAT_THRESHOLD,
+        par_exclude_regex = NULL)
+{
+    s <- stanfunc$summary_by_par_regex(fit,
+                                       par_exclude_regex = par_exclude_regex)
     return(s[Rhat >= threshold])
 }
 
 
-stanfunc$max_rhat <- function(fit)
+stanfunc$max_rhat <- function(fit, par_exclude_regex = NULL)
 {
-    s <- stanfunc$summary_data_table(fit)
+    s <- stanfunc$summary_by_par_regex(fit,
+                                       par_exclude_regex = par_exclude_regex)
     return(max(s$Rhat))
-}
-
-
-stanfunc$summary_by_par_regex <- function(fit, pars = NULL,
-                                          par_regex = NULL, ...)
-{
-    if (is.null(pars)) {
-        s <- stanfunc$summary_data_table(fit, ...)
-    } else {
-        s <- stanfunc$summary_data_table(fit, pars = pars, ...)
-    }
-    # Optionally, filter on a regex
-    if (!is.null(par_regex)) {
-        s <- s[grepl(par_regex, s$parameter), ]
-        if (nrow(s) == 0) {
-            stop(paste0("No parameters match regex: ", par_regex))
-        }
-    }
-    return(s)
 }
 
 
