@@ -1931,9 +1931,14 @@ stanfunc$scatterplot_params <- function(fit, parnames = NULL, parlabels = NULL,
 }
 
 
-stanfunc$summarize_fit <- function(fit, par_regex = NULL, vb = FALSE)
+stanfunc$summarize_fit <- function(fit,
+                                   par_regex = NULL,
+                                   par_exclude_regex = NULL,
+                                   vb = FALSE)
 {
-    s <- stanfunc$summary_by_par_regex(fit, par_regex = par_regex)
+    s <- stanfunc$summary_by_par_regex(fit,
+                                       par_regex = par_regex,
+                                       par_exclude_regex = par_exclude_regex)
     f <- function(x) {
         y <- sprintf("%.3f", x)
         y <- gsub("-", "–", y)
