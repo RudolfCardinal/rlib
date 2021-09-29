@@ -56,6 +56,22 @@ miscmath$log_sequence <- function(pow10low, pow10high,
 
 
 # =============================================================================
+# Probability
+# =============================================================================
+
+miscmath$odds_from_probability <- function(p) {
+    # Returns odds, given a probability.
+    return(p / (1 - p))
+}
+
+
+miscmath$ln_odds_from_probability <- function(p) {
+    # Returns (natural) log odds, given a probability.
+    return(log(miscmath$odds_from_probability(p)))
+}
+
+
+# =============================================================================
 # Formatting numbers
 # =============================================================================
 
