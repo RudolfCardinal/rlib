@@ -1243,6 +1243,12 @@ stanfunc$interval_includes <- function(interval, testval,
                                        lower_inclusive = TRUE,
                                        upper_inclusive = TRUE)
 {
+    # Does the interval, specified as a 2-tuple such as c(0, 1), include the
+    # test value?
+    #
+    # The lower_inclusive and upper_inclusive parameters determine whether the
+    # interval's boundaries are treated as inclusive or exclusive.
+
     # Ensure ordered from low to high:
     if (interval[2] < interval[1]) {
         interval <- c(interval[2], interval[1])
@@ -1261,6 +1267,11 @@ stanfunc$interval_excludes <- function(interval, testval,
                                        lower_inclusive = TRUE,
                                        upper_inclusive = TRUE)
 {
+    # Does the interval, specified as a 2-tuple such as c(0, 1), exclude the
+    # test value?
+    #
+    # The lower_inclusive and upper_inclusive parameters determine whether the
+    # interval's boundaries are treated as inclusive or exclusive.
     !stanfunc$interval_includes(interval, testval,
                                 lower_inclusive = lower_inclusive,
                                 upper_inclusive = upper_inclusive)
@@ -1270,21 +1281,26 @@ stanfunc$interval_excludes <- function(interval, testval,
 stanfunc$hdi_proportion_excluding_test_value <- function(
         x, test_value = 0, largest_such_interval = TRUE, debug = FALSE)
 {
-    # cruddy method!
+    # cruddy method! (Inefficient.)
 
     # NOTE ALSO: neither the lower bound nor the upper bound of an HDI
     # move monotonically as the HDI proportion is changed (because the
-    # distribution can be asymmetrical).
+    # distribution can be asymmetrical). Thus, an ascending approach and a
+    # descending approach can give different answers; the largest_such_interval
+    # parameter determines the direction of search.
 
     width_accuracy <- 0.001  # 0.1%
 
     if (largest_such_interval) {
+        # Work from 1 (100% HDI) down to 0 (0% HDI) and stop when the HDI
+        # no longer includes the value.
         startval <- 1
         endval <- 0
         width_accuracy <- -width_accuracy
         stoptest <- interval_excludes
-    }
-    else {
+    } else {
+        # Work from 0 (0% HDI) up to 1 (100% HDI) and stop when the HDI
+        # includes the value.
         startval <- 0
         endval <- 1
         stoptest <- interval_includes
