@@ -39,19 +39,20 @@
 
             x = a ? b : c;
 
-          Simpler C++ statements (e.g. with the ternary operator) translate
-          to fewer C++ statements.
+        - Simpler Stan statements (e.g. with the ternary operator) translate
+          to fewer C++ statements and faster code (particularly as Stan inserts
+          debugging code around the translated C++ statements).
 
         Reminders -- Stan, other:
         -----------------------------------------------------------------------
+
+        - Array/vector indexing is 1-based.
 
         - OUTDATED: previously, size() didn't work on a plain "vector" and one
           should have used num_elements(). This is fixed as of Stan ~2.24: see
           https://discourse.mc-stan.org/t/option-to-keep-constant-terms-in-log-probability-via-standard-sampling-syntax/20278/2.
           But remember that size() is "top-level" size (e.g. the first
           dimension of an array), whereas num_elements() counts all elements.
-
-        - Array/vector indexing is 1-based.
 
         - Can't define constants in a functions{} block.
 
@@ -67,7 +68,11 @@
             Returns the nth value (at "index") of the softmax of the inputs.
             Assumes an inverse temperature of 1.
 
-        NOTES:
+            FOR AN EXPLICIT INVERSE TEMPERATURE, see softmaxNthInvTemp().
+            FOR A LOGIT (LOG ODDS) VERSION, see logitSoftmaxNth().
+
+            NOTES:
+
             A softmax function takes several inputs and normalizes them so
             that:
                 - the outputs are in the same relative order as the inputs
@@ -76,9 +81,9 @@
             For softmax: see my miscstat.R; the important points for
             optimization are (1) that softmax is invariant to the addition/
             subtraction of a constant, and subtracting the mean makes the
-            numbers less likely to fall over computationally; (2) we only
+            numbers less likely to fall over computationally; (2) we often only
             need the final part of the computation for a single number
-            (preference for the right), so we don't have to waste time
+            (preference for one option), so here we don't waste time
             vector-calculating the preference for the left as well [that is:
             we don't have to calculate s_exp_products / sum(s_exp_products)].
 
@@ -89,24 +94,20 @@
             https://github.com/stan-dev/math/blob/develop/stan/math/prim/mat/fun/softmax.hpp
             The exact syntactic equivalence is:
 
-                real result = softmaxNth(inputs, index);
-                real result = softmax(inputs)[index];
-
-            Stan's version is in stan/math/prim/mat/fun/softmax.hpp; it uses
-            Eigen.
+                real result = softmaxNth(inputs, index);  // this
+                real result = softmax(inputs)[index];  // Stan
 
             This "homebrew" version is faster than using Stan's built-in
-            softmax(), surprisingly. See
-            tests/profile_stan_softmax/profile_softmax.stan.
+            softmax() (our speed comparison is in
+            rlib/tests/profile_stan_softmax/profile_softmax.stan), presumably
+            because Stan calculates the result for all elements of the input,
+            and we only bother with the element we care about.
         */
 
         int length = num_elements(softmax_inputs);
         real constant = max(softmax_inputs);
         vector[length] s_exp_products = exp(softmax_inputs - constant);
         return s_exp_products[index] / sum(s_exp_products);
-
-        // The alternative (slower, surprisingly) would be:
-        // return softmax(softmax_inputs)[index];  // Use Stan's built-in version.
     }
 
     real softmaxNthInvTemp(vector softmax_inputs, real inverse_temp, int index)
@@ -114,10 +115,12 @@
         /*
             Version of softmaxNth allowing you to specify the inverse temp.
 
-            The direct Stan equivalent is:
+            These are equivalent:
 
                 real result = softmaxNthInvTemp(inputs, invtemp, index);
-                real result = softmax(inputs * invtemp)[index];
+                real result = softmax(inputs * invtemp)[index];  // Stan
+
+            See softmaxNth() above for speed comparisons.
         */
 
         return softmaxNth(softmax_inputs * inverse_temp, index);
@@ -126,7 +129,47 @@
 
     real logitSoftmaxNth(vector inputs, int index)
     {
-        // Returns logit(softmax(inputs))[index].
+        /*
+            Returns
+                logit(softmax(inputs))[index];
+            that is, the log odds for a probability from a softmax function.
+
+            Recall that:
+
+            - odds = p / (1 - p)
+            - x = logit(p) = log(odds) = log(p) - log(1 - p) = -log((1/p) - 1)
+            - p = logistic(x) = 1 / (1 + exp(-x)) = exp(x) / (exp(x) + 1)
+            - softmax(v, i) = exp(v[i]) / sum(exp(v))
+            - log_softmax(v, i) = v[i] - log(sum(exp(v))
+            - Stan provides log_sum_exp(), log_softmax(), log1m_exp().
+
+            A fully vectorized version in R:
+
+                library(matrixStats)  # for logSumExp
+                logitSoftmax <- function(x, debug = FALSE) {
+                    log_sum_exp_x <- logSumExp(x)
+                    log_p <- x - log_sum_exp_x  # = log(softmax(x))
+                    log_1mp = log(1 - exp(log_p))
+                    logit <- log_p - log_1mp
+                    if (debug) {
+                        cat("log_sum_exp_x:
+"); print(log_sum_exp_x)
+                        cat("log_p:
+"); print(log_p)
+                        p <- exp(log_p)
+                        cat("p:
+"); print(p)
+                        stopifnot(all.equal(sum(p), 1))  # check with tolerance
+                        cat("log_1mp:
+"); print(log_1mp)
+                        cat("logit:
+"); print(logit)
+                    }
+                    return(logit)
+                }
+                logitSoftmax(c(1, 2, 3), debug = TRUE)  # demonstration
+
+        */
 
         // METHOD 1 (fewer calculations involved and empirically faster):
         real log_p = inputs[index] - log_sum_exp(inputs);
@@ -151,26 +194,36 @@
     // Logistic function
     // ------------------------------------------------------------------------
 
-    // For the logit function, use Stan's built-in logit().
+    // - For the logit function, use Stan's built-in logit().
+    // - For the standard logistic (with x0 = 0, k = 1, L = 1), use Stan's
+    //   inv_logit().
 
     real logistic(real x, real x0, real k, real L)
     {
-        // Returns x transformed through a logistic function.
-        // Notation as per https://en.wikipedia.org/wiki/Logistic_function
-        // x0: centre
-        // k: steepness
-        // L: maximum (usually 1)
+        /*
+            Returns x transformed through a logistic function, yielding a
+            result in the range (0, L).
+
+            Notation as per https://en.wikipedia.org/wiki/Logistic_function:
+            - x0: centre
+            - k: steepness
+            - L: maximum (usually 1)
+
+            The standard logistic function, the inverse of the logit function,
+                p = logistic(x) = sigmoid(x) = expit(x) = 1 / (1 + exp(-x))
+            where x is a logit (log odds) and p is the resulting probability,
+            is a special case where L = 1, k = 1, x0 = 0. However, for that
+            you should use Stan's inv_logit().
+
+            Therefore, if you were to transform x so as to be a logit giving
+            the same result via the standard logistic function, 1 / (1 +
+            exp(-x)), for L = 1, you want this logit:
+
+                x' = k * (x - x0)
+        */
 
         return L / (1 + exp(-k * (x - x0)));
-
-        // If you were to transform x so as to be a logit giving the same
-        // result via the standard logistic function, 1 / (1 + exp(-x)), for
-        // L = 1, you want this logit:
-        //      k * (x - x0)
     }
-
-    // For the standard logistic (with x0 = 0, k = 1, L = 1), use Stan's
-    // inv_logit(). 
 
     // ------------------------------------------------------------------------
     // Boundaries (min, max)
@@ -652,82 +705,84 @@
     // AUROC (area under the receiver operating characteristic curve)
     // ------------------------------------------------------------------------
 
-    real aurocAV(int[] binary_outcome, vector probability)
+    /*
+
+        Calculates AUROC for a binary dependent variable "outcome" from the
+        predictor "probability", which is continuous.
+
+        For example, you could use a calculated probability as a predictor,
+        or log odds.
+
+        CONCEPT
+
+        See:
+
+        - https://stats.stackexchange.com/questions/145566/how-to-calculate-area-under-the-curve-auc-or-the-c-statistic-by-hand
+        - https://www.r-bloggers.com/2016/11/calculating-auc-the-area-under-a-roc-curve/
+        - https://blog.revolutionanalytics.com/2016/11/calculating-auc.html
+
+        We will use the following method in principle:
+
+        - For every unique pair of actual values (one is 0, the other is 1):
+        - If p_for_outcome_one > p_for_outcome_zero, that's a win (score 1);
+          if p_for_outcome_one < p_for_outcome_zero, that's a loss (score 0);
+          if p_for_outcome_one = p_for_outcome_zero, that's a tie (score 0.5).
+        - Take the mean of those scores; that is the AUROC.
+
+        This follows Hanley & McNeil (1982, PMID 7063747), section III.
+
+        If the outcome doesn't have both ones and zeros, we fail, as in R:
+            library(pROC)
+            roc(response = c(1, 1, 1, 1), predictor = c(0.1, 0.2, 0.3, 0.4))
+
+        General speedup techniques:
+            https://mc-stan.org/docs/2_27/stan-users-guide/vectorization.html
+
+        However, see this algorithm:
+
+        - https://stephanosterburg.gitbook.io/scrapbook/data-science/ds-cheatsheets/machine-learning/fast-computation-of-auc-roc-score
+
+        ALGORITHM
+
+        After:
+        - https://stephanosterburg.gitbook.io/scrapbook/data-science/ds-cheatsheets/machine-learning/fast-computation-of-auc-roc-score
+        - https://github.com/jfpuget/metrics/blob/master/auc.ipynb
+
+        "Let's first define some entities.
+
+        - pos is the set of examples with target 1. These are the positive
+          examples.
+        - neg is the set of examples with target 0. These are the negative
+          examples.
+        - p(i) is the prediction for example i. p(i) is a number between 0
+          and 1.
+        - A pair of examples (i, j) is labelled the right way if i is a
+          positive example, j is a negative example, and the prediction for
+          i is higher than the prediction for j.
+        - | s | is the number of elements in set s.
+
+        Then AUC-ROC is the count of pairs labelled the right way divided
+        by the number of pairs:
+
+            AUC-ROC = | {(i,j), i in pos, j in neg, p(i) > p(j)} | / (| pos | * | neg |)
+
+        A naive code to compute this would be to consider each possible
+        pair and count those labelled the right way. A much better way is
+        to sort the predictions first, then visit the examples in
+        increasing order of predictions. Each time we see a positive
+        example we add the number of negative examples we've seen so far."
+
+        ~~~
+
+        RNC: Accuracy verified against R's pROC::roc(); see
+        rlib/tests/auroc/test_auroc_algorithm.R.
+    */
+
+    real aurocAV(int[] binary_outcome, vector predictor)
     {
-        /*
-
-            Calculates AUROC for a binary dependent variable "outcome" from the
-            predictor "probability", range [0, 1], where this is the calculated
-            probability of the binary variable being 1.
-
-            CONCEPT
-
-            See:
-
-            - https://stats.stackexchange.com/questions/145566/how-to-calculate-area-under-the-curve-auc-or-the-c-statistic-by-hand
-            - https://www.r-bloggers.com/2016/11/calculating-auc-the-area-under-a-roc-curve/
-            - https://blog.revolutionanalytics.com/2016/11/calculating-auc.html
-
-            We will use the following method in principle:
-
-            - For every unique pair of actual values (one is 0, the other is 1):
-            - If p_for_outcome_one > p_for_outcome_zero, that's a win (score 1);
-              if p_for_outcome_one < p_for_outcome_zero, that's a loss (score 0);
-              if p_for_outcome_one = p_for_outcome_zero, that's a tie (score 0.5).
-            - Take the mean of those scores; that is the AUROC.
-
-            This follows Hanley & McNeil (1982, PMID 7063747), section III.
-
-            If the outcome doesn't have both ones and zeros, we fail, as in R:
-                library(pROC)
-                roc(response = c(1, 1, 1, 1), predictor = c(0.1, 0.2, 0.3, 0.4))
-
-            General speedup techniques:
-                https://mc-stan.org/docs/2_27/stan-users-guide/vectorization.html
-
-            However, see this algorithm:
-
-            - https://stephanosterburg.gitbook.io/scrapbook/data-science/ds-cheatsheets/machine-learning/fast-computation-of-auc-roc-score
-
-            ALGORITHM
-
-            After:
-            - https://stephanosterburg.gitbook.io/scrapbook/data-science/ds-cheatsheets/machine-learning/fast-computation-of-auc-roc-score
-            - https://github.com/jfpuget/metrics/blob/master/auc.ipynb
-
-            "Let's first define some entities.
-
-            - pos is the set of examples with target 1. These are the positive
-              examples.
-            - neg is the set of examples with target 0. These are the negative
-              examples.
-            - p(i) is the prediction for example i. p(i) is a number between 0
-              and 1.
-            - A pair of examples (i, j) is labelled the right way if i is a
-              positive example, j is a negative example, and the prediction for
-              i is higher than the prediction for j.
-            - | s | is the number of elements in set s.
-
-            Then AUC-ROC is the count of pairs labelled the right way divided
-            by the number of pairs:
-
-                AUC-ROC = | {(i,j), i in pos, j in neg, p(i) > p(j)} | / (| pos | * | neg |)
-
-            A naive code to compute this would be to consider each possible
-            pair and count those labelled the right way. A much better way is
-            to sort the predictions first, then visit the examples in
-            increasing order of predictions. Each time we see a positive
-            example we add the number of negative examples we've seen so far."
-
-            ~~~
-
-            RNC: Accuracy verified against R's pROC::roc(); see
-            rlib/tests/auroc/test_auroc_algorithm.R.
-        */
-
         int n = num_elements(binary_outcome);
-        // Sort the binary outcome by ascending probability:
-        int y[n] = binary_outcome[sort_indices_asc(probability)];
+        // Sort the binary outcome by ascending predictor:
+        int y[n] = binary_outcome[sort_indices_asc(predictor)];
         int n_false = 0;
         int current_y;
         real total = 0.0;
@@ -737,6 +792,22 @@
             total += current_y * n_false;
             // ... if we are seeing a positive example, add the number of
             // negative examples so far.
+        }
+        return total / (n_false * (n - n_false));
+    }
+
+    real aurocAA(int[] binary_outcome, real[] predictor)
+    {
+        // For comments, see aurocAV.
+        int n = num_elements(binary_outcome);
+        int y[n] = binary_outcome[sort_indices_asc(predictor)];
+        int n_false = 0;
+        int current_y;
+        real total = 0.0;
+        for (i in 1:n) {
+            current_y = y[i];
+            n_false += 1 - current_y;
+            total += current_y * n_false;
         }
         return total / (n_false * (n - n_false));
     }

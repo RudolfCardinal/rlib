@@ -279,11 +279,14 @@ HEADER = """
 
             x = a ? b : c;
 
-          Simpler C++ statements (e.g. with the ternary operator) translate
-          to fewer C++ statements.
+        - Simpler Stan statements (e.g. with the ternary operator) translate
+          to fewer C++ statements and faster code (particularly as Stan inserts
+          debugging code around the translated C++ statements).
 
         Reminders -- Stan, other:
         -----------------------------------------------------------------------
+
+        - Array/vector indexing is 1-based.
 
         - OUTDATED: previously, size() didn't work on a plain "vector" and one
           should have used num_elements(). This is fixed as of Stan ~2.24: see
@@ -291,142 +294,11 @@ HEADER = """
           But remember that size() is "top-level" size (e.g. the first
           dimension of an array), whereas num_elements() counts all elements.
 
-        - Array/vector indexing is 1-based.
-
         - Can't define constants in a functions{} block.
 
     */
 """
 
-_ = """
-    // ------------------------------------------------------------------------
-    // Simple functions: softmax
-    // ------------------------------------------------------------------------
-
-    /*
-        What about the logit domain?
-
-        For a probability p:
-            odds = p / (1 - p)
-            x = logit(p) = log(odds) = log(p) - log(1 - p) = -log((1/p) - 1)
-        The logistic function is the inverse of the logit function:
-            p = logistic(x) = 1 / (1 + exp(-x)) = exp(x) / (exp(x) + 1)
-        Now, the softmax of a bunch of values can be used as a probability,
-        since softmax outputs sum to 1.
-
-        For three events, of which exactly one must happen, probabilities
-        p + q + r = 1. There is no simple additive or multiplicative
-        relationship for log odds. (For two events, p + q = 1 and x = -y.)
-        A simple example in R:
-
-            logit <- function(p) { -log((1 / p) - 1) }
-            logistic <- function(x) { 1 / (1 + exp(-x)) }
-            logit(c(0.01, 0.01, 0.98))  # -4.59512 -4.59512  3.89182
-
-        More generally, re combining multiple value scales:
-
-        We've been doing this:
-        ----------------------
-        Probability method 1:
-            inputvec = k1 * values1 + k2 * values2 + ...;  // arbitrary range
-            p = softmaxNth(inputvec, index);  // 0-1
-            choices ~ bernoulli(p);
-
-        Logit method 1:
-            inputvec = k1 * values1 + k2 * values2 + ...; // arbitrary range
-            p = softmaxNth(inputvec, index);  // 0-1
-            x = logit(p);   // arbitrary range
-            choices ~ bernoulli_logit(x);
-            // logically equivalent to probability method 1
-
-        OK as long as input values are positive:
-        ----------------------------------------
-        Probability method 2:
-            inputvec = k1 * values1 + k2 * values2 + ...; // must constrain >0
-            proportion_of_total = inputvec[index] / sum(inputvec);  // 0-1 as long as input values > 0
-            choices ~ bernoulli(proportion_of_total);
-
-        Logit method 2:
-            inputvec = k1 * values1 + k2 * values2 + ...; // must constrain >0
-            proportion_of_total = inputvec[index] / sum(inputvec);  // 0-1 as long as input values > 0
-            x = logit(proportion_of_total);
-            choices ~ bernoulli_logit(x);
-            // logically equivalent to probability method 2
-
-        Arbitrary:
-        ----------
-
-            inputvec = k1 * values1 + k2 * values2 + ...;  // arbitrary range
-            x = someFunction(inputvec, index);  // arbitrary range
-            // ... the sum of logistic(x) across all indices should be 1
-            choices ~ bernoulli_logit(x);
-
-    */
-
-    real logitSoftmaxNth(vector inputs, int index)
-    {
-        // Returns a number suitable for use as a logit, by rescaling the
-        // inputs via a softmax function.
-        /*
-            NOTES:
-            - Across all inputs, the sum of the logistic of the output from
-              this function will be 1 (the inputs represent all possible
-              events, and are mutually exclusive).  
-            - The output range is arbitrary.
-            - Note some things that don't work:
-            - If "inputs" is a set of proportions (all values in range 0-1 and
-              sum of 1) and there are two of them, then mean=0.5 and sum=1 and
-              then
-                    proportions = x / sum(x)
-                    // ... for positive x, this means that sum(proportions) = 1
-                    // ... and if length(x) == 2, then mean(proportions) = 0.5
-                    // ... so this function is equivalent, in that special
-                    //     case, to -0.5 + proportions[i]
-              but what's below generalizes to arbitrary numbers.
-            - We cannot use (x - mean(x)) / sd(x), i.e. standardization, 
-              because it is entirely possible that all x values are equal, in
-              which case the SD is zero.
-            - We cannot use (x - mean(x)) / sum(x), since it's also possible
-              that all values sum to zero (e.g. -1, +1).
-                - For two positive inputs, these last two methods are
-                  equivalent to:
-                        proportions = x / sum(x)
-                        // ... proportions sum to 1
-                        // ... mean of the two proportions is 0.5
-                        return -0.5 + proportions[i];
-            - However, we cannot use (x - mean(x)) since then logits can
-              transform to nonsensical probabilities (e.g. two probabilities
-              >0.5 in a set of three).
-            - So we return to the softmax concept.
-            - Note:
-                softmax(y) = exp(y) / sum(exp(y))
-                log_softmax(y) = log(softmax(y)) = y - log_sum_exp(y)
-
-            - R version:
-
-                library(matrixStats)  # for logSumExp
-                logitSoftmaxNth <- function(x) {
-                    lse <- logSumExp(x)
-                    log_p <- x - lse
-                    log_1mp = log(1 - exp(log_p))
-                    logit <- log_p - log_1mp
-                    cat("lse:\n"); print(lse)
-                    cat("log_p:\n"); print(log_p)
-                    cat("p:\n"); print(exp(log_p))
-                    cat("log_1mp:\n"); print(log_1mp)
-                    cat("logit:\n"); print(logit)
-                    return(logit)
-                }
-                logitSoftmaxNth(x)
-        */
-        real target_input = inputs[index];        
-        real lse = log_sum_exp(inputs);
-        real log_p = target_input - lse;  // = log_softmax(inputs)[index]
-        real log_1mp = log1m_exp(log_p_target);  // = log(1 - exp(log_p));
-        real logit = log_p - log_1mp;
-        return logit;
-    }
-"""  # noqa
 
 SIMPLE_FUNCTIONS = """
     // ------------------------------------------------------------------------
@@ -439,7 +311,11 @@ SIMPLE_FUNCTIONS = """
             Returns the nth value (at "index") of the softmax of the inputs.
             Assumes an inverse temperature of 1.
 
-        NOTES:
+            FOR AN EXPLICIT INVERSE TEMPERATURE, see softmaxNthInvTemp().
+            FOR A LOGIT (LOG ODDS) VERSION, see logitSoftmaxNth().
+
+            NOTES:
+
             A softmax function takes several inputs and normalizes them so
             that:
                 - the outputs are in the same relative order as the inputs
@@ -448,9 +324,9 @@ SIMPLE_FUNCTIONS = """
             For softmax: see my miscstat.R; the important points for
             optimization are (1) that softmax is invariant to the addition/
             subtraction of a constant, and subtracting the mean makes the
-            numbers less likely to fall over computationally; (2) we only
+            numbers less likely to fall over computationally; (2) we often only
             need the final part of the computation for a single number
-            (preference for the right), so we don't have to waste time
+            (preference for one option), so here we don't waste time
             vector-calculating the preference for the left as well [that is:
             we don't have to calculate s_exp_products / sum(s_exp_products)].
 
@@ -461,24 +337,20 @@ SIMPLE_FUNCTIONS = """
             https://github.com/stan-dev/math/blob/develop/stan/math/prim/mat/fun/softmax.hpp
             The exact syntactic equivalence is:
 
-                real result = softmaxNth(inputs, index);
-                real result = softmax(inputs)[index];
-
-            Stan's version is in stan/math/prim/mat/fun/softmax.hpp; it uses
-            Eigen.
+                real result = softmaxNth(inputs, index);  // this
+                real result = softmax(inputs)[index];  // Stan
 
             This "homebrew" version is faster than using Stan's built-in
-            softmax(), surprisingly. See
-            tests/profile_stan_softmax/profile_softmax.stan.
+            softmax() (our speed comparison is in
+            rlib/tests/profile_stan_softmax/profile_softmax.stan), presumably
+            because Stan calculates the result for all elements of the input,
+            and we only bother with the element we care about.
         */
 
         int length = num_elements(softmax_inputs);
         real constant = max(softmax_inputs);
         vector[length] s_exp_products = exp(softmax_inputs - constant);
         return s_exp_products[index] / sum(s_exp_products);
-
-        // The alternative (slower, surprisingly) would be:
-        // return softmax(softmax_inputs)[index];  // Use Stan's built-in version.
     }
 
     real softmaxNthInvTemp(vector softmax_inputs, real inverse_temp, int index)
@@ -486,10 +358,12 @@ SIMPLE_FUNCTIONS = """
         /*
             Version of softmaxNth allowing you to specify the inverse temp.
 
-            The direct Stan equivalent is:
+            These are equivalent:
 
                 real result = softmaxNthInvTemp(inputs, invtemp, index);
-                real result = softmax(inputs * invtemp)[index];
+                real result = softmax(inputs * invtemp)[index];  // Stan
+
+            See softmaxNth() above for speed comparisons.
         */
 
         return softmaxNth(softmax_inputs * inverse_temp, index);
@@ -498,7 +372,42 @@ SIMPLE_FUNCTIONS = """
 
     real logitSoftmaxNth(vector inputs, int index)
     {
-        // Returns logit(softmax(inputs))[index].
+        /*
+            Returns
+                logit(softmax(inputs))[index];
+            that is, the log odds for a probability from a softmax function.
+
+            Recall that:
+
+            - odds = p / (1 - p)
+            - x = logit(p) = log(odds) = log(p) - log(1 - p) = -log((1/p) - 1)
+            - p = logistic(x) = 1 / (1 + exp(-x)) = exp(x) / (exp(x) + 1)
+            - softmax(v, i) = exp(v[i]) / sum(exp(v))
+            - log_softmax(v, i) = v[i] - log(sum(exp(v))
+            - Stan provides log_sum_exp(), log_softmax(), log1m_exp().
+
+            A fully vectorized version in R:
+
+                library(matrixStats)  # for logSumExp
+                logitSoftmax <- function(x, debug = FALSE) {
+                    log_sum_exp_x <- logSumExp(x)
+                    log_p <- x - log_sum_exp_x  # = log(softmax(x))
+                    log_1mp = log(1 - exp(log_p))
+                    logit <- log_p - log_1mp
+                    if (debug) {
+                        cat("log_sum_exp_x:\n"); print(log_sum_exp_x)
+                        cat("log_p:\n"); print(log_p)
+                        p <- exp(log_p)
+                        cat("p:\n"); print(p)
+                        stopifnot(all.equal(sum(p), 1))  # check with tolerance
+                        cat("log_1mp:\n"); print(log_1mp)
+                        cat("logit:\n"); print(logit)
+                    }
+                    return(logit)
+                }
+                logitSoftmax(c(1, 2, 3), debug = TRUE)  # demonstration
+
+        */
 
         // METHOD 1 (fewer calculations involved and empirically faster):
         real log_p = inputs[index] - log_sum_exp(inputs);
@@ -523,26 +432,36 @@ SIMPLE_FUNCTIONS = """
     // Logistic function
     // ------------------------------------------------------------------------
 
-    // For the logit function, use Stan's built-in logit().
+    // - For the logit function, use Stan's built-in logit().
+    // - For the standard logistic (with x0 = 0, k = 1, L = 1), use Stan's
+    //   inv_logit().
 
     real logistic(real x, real x0, real k, real L)
     {
-        // Returns x transformed through a logistic function.
-        // Notation as per https://en.wikipedia.org/wiki/Logistic_function
-        // x0: centre
-        // k: steepness
-        // L: maximum (usually 1)
+        /*
+            Returns x transformed through a logistic function, yielding a
+            result in the range (0, L).
+
+            Notation as per https://en.wikipedia.org/wiki/Logistic_function:
+            - x0: centre
+            - k: steepness
+            - L: maximum (usually 1)
+
+            The standard logistic function, the inverse of the logit function,
+                p = logistic(x) = sigmoid(x) = expit(x) = 1 / (1 + exp(-x))
+            where x is a logit (log odds) and p is the resulting probability,
+            is a special case where L = 1, k = 1, x0 = 0. However, for that
+            you should use Stan's inv_logit().
+
+            Therefore, if you were to transform x so as to be a logit giving
+            the same result via the standard logistic function, 1 / (1 +
+            exp(-x)), for L = 1, you want this logit:
+
+                x' = k * (x - x0)
+        */
 
         return L / (1 + exp(-k * (x - x0)));
-
-        // If you were to transform x so as to be a logit giving the same
-        // result via the standard logistic function, 1 / (1 + exp(-x)), for
-        // L = 1, you want this logit:
-        //      k * (x - x0)
     }
-
-    // For the standard logistic (with x0 = 0, k = 1, L = 1), use Stan's
-    // inv_logit(). 
 
     // ------------------------------------------------------------------------
     // Boundaries (min, max)
@@ -1028,7 +947,7 @@ SIMPLE_FUNCTIONS = """
 
         Calculates AUROC for a binary dependent variable "outcome" from the
         predictor "probability", which is continuous.
-        
+
         For example, you could use a calculated probability as a predictor,
         or log odds.
 
