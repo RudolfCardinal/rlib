@@ -43,6 +43,8 @@ miscmath$logistic <- function(x, x0, k, L = 1) {
 
 miscmath$log_sequence <- function(pow10low, pow10high,
                                   minimum = NA, maximum = NA) {
+    # Breaks for a logithmic graph axis -- for example:
+    #       1, 2, 3, ..., 9, 10, 20, 30, ..., 90, 100, 200, 300, ..., 1000
     # http://stackoverflow.com/questions/23901907
     x <- c(2:10 %o% 10^(pow10low:pow10high))
     if (!is.na(minimum)) {
@@ -68,6 +70,18 @@ miscmath$odds_from_probability <- function(p) {
 miscmath$ln_odds_from_probability <- function(p) {
     # Returns (natural) log odds, given a probability.
     return(log(miscmath$odds_from_probability(p)))
+}
+
+
+miscmath$probability_from_odds <- function(odds) {
+    # Returns probability, given odds.
+    return(odds / (1 + odds))
+}
+
+
+miscmath$probability_from_log_odds <- function(log_odds) {
+    # Returns probability, given log odds.
+    return(miscmath$probability_from_odds(exp(log_odds)))
 }
 
 
