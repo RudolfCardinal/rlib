@@ -152,18 +152,13 @@
                     log_1mp = log(1 - exp(log_p))
                     logit <- log_p - log_1mp
                     if (debug) {
-                        cat("log_sum_exp_x:
-"); print(log_sum_exp_x)
-                        cat("log_p:
-"); print(log_p)
+                        cat("log_sum_exp_x:\n"); print(log_sum_exp_x)
+                        cat("log_p:\n"); print(log_p)
                         p <- exp(log_p)
-                        cat("p:
-"); print(p)
+                        cat("p:\n"); print(p)
                         stopifnot(all.equal(sum(p), 1))  # check with tolerance
-                        cat("log_1mp:
-"); print(log_1mp)
-                        cat("logit:
-"); print(logit)
+                        cat("log_1mp:\n"); print(log_1mp)
+                        cat("logit:\n"); print(logit)
                     }
                     return(logit)
                 }
@@ -1789,8 +1784,8 @@
 
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     // Beta distribution
-    // - In R, alpha is called scale1, and beta is called scale2.
-    // - Its distribution is confined to the range [0, 1]. See
+    // - In R, alpha is called shape1, and beta is called shape2.
+    // - The beta distribution is confined to the range [0, 1]. See
     //   https://en.wikipedia.org/wiki/Beta_distribution. In R, try:
     //
     //   curve(dbeta(x, shape1 = 1.2, shape2 = 1.2), -0.1, 1.1, ylab = "density")
