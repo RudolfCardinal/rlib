@@ -1802,7 +1802,7 @@ stanfunc$plot_multiple_stanfit_parameters_vstack <- function(
                                    max_x + (EXTRASPACE) * x_range))
         + xlab(xlab)
         + ylab(ylab)
-        + scale_colour_manual(values = colourmap, guide = FALSE)
+        + scale_colour_manual(values = colourmap, guide = "none")
         + theme
         + ggtitle(title)
     )

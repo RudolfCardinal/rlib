@@ -2073,12 +2073,12 @@ cris$visualize_fixed_effects_from_preprocessed_lmer <- function(
         p <- (
             ggplot(data = d,
                    aes(y = effect, x = estimate, colour = factor(ci_excludes_zero)))
-            + scale_colour_manual(values = c("black", "red"), guide = FALSE)
+            + scale_colour_manual(values = c("black", "red"), guide = "none")
         )
     } else {
         p <- (
             ggplot(data = d, aes(y = effect, x = estimate))
-            + scale_fill_manual(values = c("white", "black"), guide = FALSE)
+            + scale_fill_manual(values = c("white", "black"), guide = "none")
         )
     }
     p <- (
@@ -2557,7 +2557,7 @@ cris$drug_mirror_plot <- function(MIRROR_SUMMARY, DRUGLIST = NA, corrected = FAL
             + geom_point(size = 5)
             + xlab("Change in admission days per year")
             + ylab("")
-            + scale_colour_manual(values = c("black", "red"), guide = FALSE)
+            + scale_colour_manual(values = c("black", "red"), guide = "none")
             + theme_bw()
             # + theme(axis.text.x = element_text(angle = 90, hjust = 1))
             + ggtitle(title)
@@ -2571,7 +2571,7 @@ cris$drug_mirror_plot <- function(MIRROR_SUMMARY, DRUGLIST = NA, corrected = FAL
                          mapping = aes(fill = factor(ci_excludes_zero)))
             + xlab("Change in admission days per year")
             + ylab("")
-            + scale_fill_manual(values = c("white", "black"), guide = FALSE)
+            + scale_fill_manual(values = c("white", "black"), guide = "none")
             + theme_bw()
             # + theme(axis.text.x = element_text(angle = 90, hjust = 1))
             + ggtitle(title)
