@@ -486,7 +486,8 @@ stanfunc$compare_model_evidence <- function(
         priors = NULL,
         detail = FALSE,
         rhat_warning_threshold = stanfunc$DEFAULT_HIGH_RHAT_THRESHOLD,
-        rhat_par_exclude_regex = NULL)
+        rhat_par_exclude_regex = NULL,
+        rhat_par_selected_regex = NULL)
 {
     # CHECK THE OUTPUT AGAINST, e.g.:
     # bridgesampling::post_prob(b1, b2, b3, b4, b5, b6, model_names = paste("Model", 1:6))
@@ -537,28 +538,44 @@ stanfunc$compare_model_evidence <- function(
                             fit,
                             par_exclude_regex = rhat_par_exclude_regex
                         )
+                        max_rhat_selected <- stanfunc$max_rhat(
+                            fit,
+                            par_regex = rhat_par_selected_regex,
+                            par_exclude_regex = rhat_par_exclude_regex
+                        )
                     }
                     return(c(
                         i,  # index
                         item$name,  # model_name
                         item$bridgesample$logml,  # log_marginal_likelihood
-                        max_rhat  # max_rhat
+                        max_rhat,  # max_rhat
+                        max_rhat_selected  # max_rhat_selected
                     ))
                 },
                 FUN.VALUE = c("index" = NA_integer_,
                               "model_name" = NA_character_,
                               "log_marginal_likelihood" = NA_real_,
-                              "max_rhat" = NA_real_),
+                              "max_rhat" = NA_real_,
+                              "max_rhat_selected" = NA_real_),
                 y = bridgesample_list_list
             )
         )
     )
     d[, index := as.numeric(index)]
     d[, log_marginal_likelihood := as.numeric(log_marginal_likelihood)]
+    rhat_bad_label <- "WARNING: HIGH R-HAT"
+    rhat_good_label <- "OK"
     d[, rhat_warning := ifelse(
         is.na(max_rhat),
         NA_character_,
-        ifelse(max_rhat > rhat_warning_threshold, "WARNING: HIGH R-HAT", "OK")
+        ifelse(max_rhat > rhat_warning_threshold,
+               rhat_bad_label, rhat_good_label)
+    )]
+    d[, rhat_selected_warning := ifelse(
+        is.na(max_rhat_selected),
+        NA_character_,
+        ifelse(max_rhat_selected > rhat_warning_threshold,
+               rhat_bad_label, rhat_good_label)
     )]
 
     d[, model_rank := frank(-log_marginal_likelihood,
@@ -767,9 +784,12 @@ stanfunc$params_with_high_rhat <- function(
 }
 
 
-stanfunc$max_rhat <- function(fit, par_exclude_regex = NULL)
+stanfunc$max_rhat <- function(fit,
+                              par_regex = NULL,
+                              par_exclude_regex = NULL)
 {
     s <- stanfunc$summary_by_par_regex(fit,
+                                       par_regex = par_regex,
                                        par_exclude_regex = par_exclude_regex)
     return(max(s$Rhat))
 }
