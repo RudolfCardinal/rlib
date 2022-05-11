@@ -69,16 +69,24 @@ rpm$demo.posterior.binomial <- function()
 # RPM APPLIED TO THE BINOMIAL BANDIT
 #------------------------------------------------------------------------------
 
-# In what follows:
-#   y = cumulative number of successes for each action
-#     = vector of length N_ACTIONS containing number of wins for each action
-#   n = cumulative number of trials for each action
-#     = vector of length N_ACTIONS containing number of trials for each action
-# (thus, number of losses = n - y)
-
-rpm$compute.probopt <- function(y, n)
+rpm$compute.probopt <- function(y, n, clip = TRUE)
 {
     # As per Scott (2010) p648.
+    #
+    #   y = cumulative number of successes for each action
+    #     = vector of length N_ACTIONS containing number of wins for each action
+    #
+    #   n = cumulative number of trials for each action
+    #     = vector of length N_ACTIONS containing number of trials for each action
+    #     ... n for NUMBER, not n for no!
+    #
+    # (thus, number of losses = n - y)
+    #
+    #   clip:
+    #       If TRUE (the default as of 2022-05-11), ensure the result is in the
+    #       range [0, 1]. Otherwise this function sometimes returns e.g. 1 +
+    #       2.22e-16. Added by RNC; not part of Scott's original.
+
     k <- length(y)  # k is the number of actions
     ans <- numeric(k)  # zero vector of length k
     for (i in 1:k) {  # for each action:
@@ -98,6 +106,11 @@ rpm$compute.probopt <- function(y, n)
         ans[i] <- integrate(f, 0, 1)$value
         # ... the integral from 0 to 1 of the function defined (equation 11
         # in Scott 2010)
+    }
+    if (clip) {
+        # Clip to range [0, 1].
+        # https://stackoverflow.com/questions/13868963/
+        ans <- ifelse(ans <= 0,  0, ifelse(ans >= 1, 1, ans))
     }
     return(ans)
 }
