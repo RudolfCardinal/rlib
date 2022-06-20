@@ -103,10 +103,11 @@ miscmath$format_dp <- function(x, dp) {
 
 miscmath$format_dp_unless_integer <- function(x, dp) {
     # http://stackoverflow.com/questions/3443687/formatting-decimal-places-in-r
-    if (miscmath$is_integer(x)) {
-        return(as.character(x))
-    }
-    format_dp(x, dp)
+    ifelse(
+        miscmath$is_integer(x),
+        as.character(x),
+        format_dp(x, dp)
+    )
 }
 
 
