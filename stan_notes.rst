@@ -782,6 +782,107 @@ inference), e.g. via ``rstan::vb()``, because it is much quicker. But it can be
 wrong; see e.g. Yao2018_.
 
 
+Per-trial values
+----------------
+
+Specimen single-subject, single-parameter task:
+
+.. code-block:: C++
+
+    data {
+        int<lower=1> N_TRIALS;
+        int<lower=0, upper=1> choice[N_TRIALS];
+        int<lower=0, upper=1> outcome[N_TRIALS];
+    }
+    transformed data {
+        int N_STIMULI = 2;
+    }
+    parameters {
+        real<lower=0, upper=1> alpha;  // learning rate
+    }
+    model {
+        // Calculated probability
+        vector[N_TRIALS] p_choose_second;
+
+        // Prior
+        alpha ~ (1.2, 1.2);
+
+        // Reinforcement learning model
+        {
+            vector[N_STIMULI] stimulus_value = rep_vector(0, N_STIMULI);
+            int chosen;
+            real prediction_error;
+            for (t in 1:N_TRIALS) {
+                // Choose
+                p_choose_second[t] = softmax(stimulus_value)[1];
+                // ... First option has index 0; second has index 1.
+                // ... Fixed inverse temp. of 1 in this very simple model.
+                // Learn
+                chosen = choice[t];
+                prediction_error = outcome[t] - stimulus_value[chosen];
+                stimulus_value[chosen] = stimulus_value[chosen] + prediction_error * alpha;
+            }
+        }
+
+        // Fit to behaviour
+        choice ~ bernoulli(p_choose_second);
+    }
+
+And the same thing recoded to extract a per-trial variable:
+
+.. code-block:: C++
+
+    data {
+        int<lower=1> N_TRIALS;
+        int<lower=0, upper=1> choice[N_TRIALS];
+        int<lower=0, upper=1> outcome[N_TRIALS];
+    }
+    transformed data {
+        int N_STIMULI = 2;
+    }
+    parameters {
+        real<lower=0, upper=1> alpha;  // learning rate
+    }
+    transformed parameters {
+        // Here we are aiming to extract prediction error, and nothing else.
+        // Will get e.g. N_TRIALS * 8000 values out (for 8 chains, 1000 samples
+        // per chain). Beware saving too much!
+
+        // We want this saved:
+        vector[N_TRIALS] prediction_error;
+
+        // We don't really want this, but we have to refer to it in the model:
+        // Calculated probability
+        vector[N_TRIALS] p_choose_second;
+
+        // Use braces to prevent other variables being saved.
+        // Put the RL calculations in here.
+        {
+            // Reinforcement learning model
+            vector[N_STIMULI] stimulus_value = rep_vector(0, N_STIMULI);
+            int chosen;
+            // Replaced with a per-trial version: // real prediction_error;
+            for (t in 1:N_TRIALS) {
+                // Choose
+                p_choose_second[t] = softmax(stimulus_value)[1];
+                // ... First option has index 0; second has index 1.
+                // ... Fixed inverse temp. of 1 in this very simple model.
+                // Learn
+                chosen = choice[t];
+                prediction_error[t] = outcome[t] - stimulus_value[chosen];
+                stimulus_value[chosen] = stimulus_value[chosen] + prediction_error[t] * alpha;
+            }
+        }
+    }
+    model {
+        // Prior
+        alpha ~ (1.2, 1.2);
+
+        // Fit to behaviour
+        choice ~ bernoulli(p_choose_second);
+    }
+
+
 Threads and processes
 ---------------------
 
@@ -883,6 +984,84 @@ Bridge sampling, generated quantities
 
   - therefore, you should consider temporarily disabling your GQ blocks during
     model comparison if :math:`(n − 1)g > t`.
+
+
+
+Leave-one-out (LOO) cross-validation and model selection
+--------------------------------------------------------
+
+- Bridge sampling (above) is based on Bayes factors/marginal likelihoods, and
+  you modify your Stan code to change ``depvar ~ dist(params)`` to ``target +=
+  dist_lpdf(depvar | params)``, correcting if required for boundaries imposed.
+  It runs a bit slower, but no more information is saved.
+
+- An alternative is leave-one-out (LOO) cross-validation and the LOO
+  Information Criterion (LOOIC), and related techniques. You modify your Stan
+  code, most efficiently in the "generated quantities" block, to declare a
+  log-likelihood variable, usually named ``log_lik``, and specify it; e.g. for
+  N data points sampled from a normal distribution, you might do
+
+  .. code-block:: C++
+
+    generated quantities {
+        vector[N] log_lik;
+        for (n in 1:N) {
+            log_lik[n] = normal_lpdf(y[n] | mu, sigma);
+        }
+
+        // ... though probably in this simple case you could shorten to:
+        // vector[N] log_lik = normal_lpdf(y | mu, sigma);
+    }
+
+  For a reinforcement learning model, this would be e.g.
+
+  .. code-block:: C++
+
+    generated quantities {
+        vector[N] log_lik = bernoulli_lpmf(chose_rhs | p_choose_rhs);
+    }
+
+  A downside: to do this in the "generated quantities" block, you need to save
+  the calculated probability (in the "transformed parameters" block), here
+  ``p_choose_rhs``, which will be of size N trials × e.g. 8000 samples per
+  variable (also: as for ``log_lik`` itself!). **But** there are other methods
+  for large data; see http://mc-stan.org/loo/articles/loo2-large-data.html.
+
+  The R ``loo`` package can compare models based on LOO metrics, and the R Stan
+  package has LOO methods for ``stanfit`` objects. You can compare with e.g.
+
+  .. code-block:: R
+
+    loo_comparison <- loo::loo_compare(
+        list(
+            model1 = rstan::loo(model1_fit),
+            model2 = rstan::loo(model2_fit),
+            model3 = rstan::loo(model3_fit)
+        )
+    )
+    print(loo_comparison, simplify = FALSE)
+
+- For LOO methods with Stan, see:
+
+  - https://mc-stan.org/rstanarm/reference/loo.stanreg.html
+  - http://mc-stan.org/loo/articles/
+  - http://mc-stan.org/loo/articles/loo2-large-data.html
+
+- For debate about the better way (or when each is better), see
+
+  - https://discourse.mc-stan.org/t/model-selection-with-loo-and-bridge-sampling/20861
+  - http://ritsokiguess.site/docs/2019/06/25/going-to-the-loo-using-stan-for-model-comparison/
+  - Vehtari (2017) https://doi.org/10.1007/s11222-016-9696-4, on LOO
+    cross-validation;
+
+    - Gronau (2019) https://doi.org/10.1007/s42113-018-0011-7, a critique;
+
+      - Vehtari (2019) https://doi.org/10.1007/s42113-018-0020-6, rejoinder,
+        including the importance of considering the M-open situation ("the best
+        model is not among those I tested") as well as the M-closed model ("the
+        best model must be one of these"). Their conclusion on marginal
+        likelihood-based model selection versus cross-validation methods:
+        "There is no simple answer."
 
 
 Troubleshooting run failures
