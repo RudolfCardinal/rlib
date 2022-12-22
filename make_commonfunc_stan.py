@@ -117,26 +117,45 @@ This is probably preferable - a script to make the .stan file.
 
 - Functions related to ``categorical`` and ``categorical_logit`` distributions.
 
+2022-12-21:
+
+- Additional probabity distribution functions, qbeta() and qgamma(), and their
+  support functions.
+
 """  # noqa
 
 import argparse
 from enum import Enum
 from typing import List, Tuple
+import os
+
+
+# =============================================================================
+# Paths
+# =============================================================================
+
+THIS_DIR = os.path.abspath(os.path.dirname(__file__))
+DISTFUNC_STANFILE = os.path.join(
+    THIS_DIR, "tests", "priors", "extra_distribution_functions.stan"
+)
 
 
 # =============================================================================
 # Stan variable types
 # =============================================================================
 
+
 class VarDescriptor(object):
-    def __init__(self,
-                 abbreviation: str,
-                 typedef: str,
-                 singleton: bool,
-                 dimensions: int,
-                 vector: bool,
-                 array: bool,
-                 name: str = None) -> None:
+    def __init__(
+        self,
+        abbreviation: str,
+        typedef: str,
+        singleton: bool,
+        dimensions: int,
+        vector: bool,
+        array: bool,
+        name: str = None,
+    ) -> None:
         self.abbreviation = abbreviation
         self.typedef = typedef
         self.singleton = singleton
@@ -162,7 +181,7 @@ class VarDescriptor(object):
             dimensions=self.dimensions,
             vector=self.vector,
             array=self.array,
-            name=self.name
+            name=self.name,
         )
 
     @property
@@ -176,7 +195,7 @@ REAL = VarDescriptor(
     singleton=True,
     dimensions=0,
     vector=False,
-    array=False
+    array=False,
 )
 ARRAY = VarDescriptor(
     abbreviation="A",
@@ -184,7 +203,7 @@ ARRAY = VarDescriptor(
     singleton=False,
     dimensions=1,
     vector=False,
-    array=True
+    array=True,
 )
 ARRAY_2D = VarDescriptor(
     abbreviation="2",
@@ -192,7 +211,7 @@ ARRAY_2D = VarDescriptor(
     singleton=False,
     dimensions=2,
     vector=False,
-    array=True
+    array=True,
 )
 ARRAY_3D = VarDescriptor(
     abbreviation="3",
@@ -200,7 +219,7 @@ ARRAY_3D = VarDescriptor(
     singleton=False,
     dimensions=3,
     vector=False,
-    array=True
+    array=True,
 )
 VECTOR = VarDescriptor(
     abbreviation="V",
@@ -208,7 +227,7 @@ VECTOR = VarDescriptor(
     singleton=False,
     dimensions=1,
     vector=True,
-    array=False
+    array=False,
 )
 
 ALL_TYPES = [REAL, ARRAY, ARRAY_2D, ARRAY_3D, VECTOR]
@@ -225,6 +244,7 @@ class SampleMethod(Enum):
 # Helper functions
 # =============================================================================
 
+
 def comment(x: str) -> str:
     return f"\n    // {x}\n"
 
@@ -232,6 +252,24 @@ def comment(x: str) -> str:
 def remove_blank_lines(x: str) -> str:
     lines = x.splitlines()
     return "\n".join(line for line in lines if line.strip())
+
+
+def get_excerpt(
+    filename: str,
+    start: str = "START_OF_EXCERPT_FOR_MAKE_COMMONFUNC",
+    end: str = "END_OF_EXCERPT_FOR_MAKE_COMMONFUNC",
+) -> str:
+    lines = []  # type: List[str]
+    capturing = False
+    with open(filename) as f:
+        for line in f:
+            if not capturing and start in line:
+                capturing = True
+            elif capturing and end in line:
+                capturing = False
+            elif capturing:
+                lines.append(line)
+    return "".join(lines)
 
 
 # =============================================================================
@@ -1052,6 +1090,8 @@ SIMPLE_FUNCTIONS = r"""
 
 """  # noqa
 
+EXTRA_PROBABILITY_DISTRIBUTION_FUNCTIONS = get_excerpt(DISTFUNC_STANFILE)
+
 DUFF_ANOVA_FUNCTIONS = r"""
     // ------------------------------------------------------------------------
     // ANOVA-type designs: DEPRECATED APPROACH
@@ -1459,13 +1499,16 @@ REPARAM_HEADER = r"""
 # Generic distribution
 # =============================================================================
 
-def sample_generic(name_caps: str,
-                   name_lower: str,
-                   y: VarDescriptor,
-                   distribution_params: List[VarDescriptor],
-                   method: SampleMethod,
-                   cdf_prefix: str = None,
-                   cdf_call_params: str = None) -> str:
+
+def sample_generic(
+    name_caps: str,
+    name_lower: str,
+    y: VarDescriptor,
+    distribution_params: List[VarDescriptor],
+    method: SampleMethod,
+    cdf_prefix: str = None,
+    cdf_call_params: str = None,
+) -> str:
     """
     Writes functions to sample from arbitrary Stan distributions, with
     - correction of the "target" special log-probability variable for
@@ -1475,8 +1518,9 @@ def sample_generic(name_caps: str,
     NOT YET (RE)IMPLEMENTED: multiple values for the distribution parameters.
     """
     if any(vd.dimensions > 0 for vd in distribution_params):
-        raise NotImplementedError("y={}, distribution_params={}".format(
-            y, distribution_params))
+        raise NotImplementedError(
+            "y={}, distribution_params={}".format(y, distribution_params)
+        )
     y.name = "y"
     call_params = [y] + distribution_params
     lower = REAL.clone()
@@ -1488,8 +1532,8 @@ def sample_generic(name_caps: str,
     lcdf_func = "{}_lcdf".format(cdf_prefix)
     lccdf_func = "{}_lccdf".format(cdf_prefix)
     if distribution_params:
-        pdf_call_params = (
-            " | " + ", ".join(vd.name for vd in distribution_params)
+        pdf_call_params = " | " + ", ".join(
+            vd.name for vd in distribution_params
         )
     else:
         pdf_call_params = ""
@@ -1520,9 +1564,11 @@ def sample_generic(name_caps: str,
         target += {lpdf_func}(y{pdf_call_params});
             """
 
-    elif method in [SampleMethod.LOWER,
-                    SampleMethod.UPPER,
-                    SampleMethod.RANGE]:
+    elif method in [
+        SampleMethod.LOWER,
+        SampleMethod.UPPER,
+        SampleMethod.RANGE,
+    ]:
         # Some sort of bridgesampling correction.
 
         # Define the correction PER SAMPLED VALUE.
@@ -1612,32 +1658,35 @@ def sample_generic(name_caps: str,
     funcname = "sample{name_caps}{funcname_extra}_{types}_lp".format(
         name_caps=name_caps,
         funcname_extra=funcname_extra,
-        types="".join(vd.abbreviation for vd in [y] + distribution_params)
+        types="".join(vd.abbreviation for vd in [y] + distribution_params),
     )
-    param_defs = ", ".join(
-        f"{vd.typedef} {vd.name}"
-        for vd in call_params
-    )
-    return f"""
+    param_defs = ", ".join(f"{vd.typedef} {vd.name}" for vd in call_params)
+    return (
+        f"""
     void {funcname}({param_defs})
     {{
         {code.strip()}
     }}
-    """.rstrip() + "\n"
+    """.rstrip()
+        + "\n"
+    )
 
 
-def sample_uniform(y: VarDescriptor, lower: VarDescriptor,
-                   upper: VarDescriptor) -> str:
+def sample_uniform(
+    y: VarDescriptor, lower: VarDescriptor, upper: VarDescriptor
+) -> str:
     """
     This one gets its own function because boundaries are an intrinsic part
     of uniform distributions (and so, also, no additional boundary corrections
     are required for bridgesampling).
     """
     distribution_params = [lower, upper]
-    if (y.dimensions > 1 and
-            any(vd.dimensions > 1 for vd in distribution_params)):
-        raise NotImplementedError("y={}, distribution_params={}".format(
-            y, distribution_params))
+    if y.dimensions > 1 and any(
+        vd.dimensions > 1 for vd in distribution_params
+    ):
+        raise NotImplementedError(
+            "y={}, distribution_params={}".format(y, distribution_params)
+        )
     y.name = "y"
     lower.name = "lower"
     upper.name = "upper"
@@ -1670,8 +1719,7 @@ def sample_uniform(y: VarDescriptor, lower: VarDescriptor,
         types="".join(vd.abbreviation for vd in call_params)
     )
     param_defs = ", ".join(
-        "{} {}".format(vd.typedef, vd.name)
-        for vd in call_params
+        "{} {}".format(vd.typedef, vd.name) for vd in call_params
     )
 
     return f"""
@@ -1686,6 +1734,7 @@ def sample_uniform(y: VarDescriptor, lower: VarDescriptor,
 # Normal distribution
 # =============================================================================
 
+
 def get_normal_distribution() -> str:
     code = r"""
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1696,7 +1745,9 @@ def get_normal_distribution() -> str:
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     """
 
-    supported_combinations = []  # type: List[Tuple[VarDescriptor, VarDescriptor, VarDescriptor]]  # noqa
+    supported_combinations = (
+        []
+    )  # type: List[Tuple[VarDescriptor, VarDescriptor, VarDescriptor]]  # noqa
     for y in ALL_TYPES:
         for mu in ALL_TYPES:
             for sigma in ALL_TYPES:
@@ -1704,10 +1755,12 @@ def get_normal_distribution() -> str:
                     continue
                 supported_combinations.append((y, mu, sigma))
 
-    def do_call(y_: VarDescriptor,
-                mu_: VarDescriptor,
-                sigma_: VarDescriptor,
-                method: SampleMethod):
+    def do_call(
+        y_: VarDescriptor,
+        mu_: VarDescriptor,
+        sigma_: VarDescriptor,
+        method: SampleMethod,
+    ):
         nonlocal code
         # Cloning necessary to prevent name overwriting:
         mu_ = mu_.clone()
@@ -1720,7 +1773,7 @@ def get_normal_distribution() -> str:
             name_lower="normal",
             y=y_,
             distribution_params=[mu_, sigma_],
-            method=method
+            method=method,
         )
 
     code += comment("Sampling")
@@ -1749,8 +1802,7 @@ def get_std_normal_distribution() -> str:
 
     supported_combinations = ALL_TYPES  # type: List[VarDescriptor]
 
-    def do_call(y_: VarDescriptor,
-                method: SampleMethod):
+    def do_call(y_: VarDescriptor, method: SampleMethod):
         nonlocal code
         # Cloning necessary to prevent name overwriting:
         y_ = y_.clone()
@@ -1761,7 +1813,7 @@ def get_std_normal_distribution() -> str:
             distribution_params=[],
             method=method,
             cdf_prefix="normal",
-            cdf_call_params=" | 0, 1"
+            cdf_call_params=" | 0, 1",
         )
 
     code += comment("Sampling")
@@ -1817,6 +1869,7 @@ STANDARD_NORMAL_SPECIALS = r"""
 # Cauchy distribution
 # =============================================================================
 
+
 def get_cauchy_distribution() -> str:
     code = r"""
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1825,7 +1878,9 @@ def get_cauchy_distribution() -> str:
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     """
 
-    supported_combinations = []  # type: List[Tuple[VarDescriptor, VarDescriptor, VarDescriptor]]  # noqa
+    supported_combinations = (
+        []
+    )  # type: List[Tuple[VarDescriptor, VarDescriptor, VarDescriptor]]  # noqa
     for y in ALL_TYPES:
         for mu in ALL_TYPES:
             for sigma in ALL_TYPES:
@@ -1833,10 +1888,12 @@ def get_cauchy_distribution() -> str:
                     continue
                 supported_combinations.append((y, mu, sigma))
 
-    def do_call(y_: VarDescriptor,
-                mu_: VarDescriptor,
-                sigma_: VarDescriptor,
-                method: SampleMethod):
+    def do_call(
+        y_: VarDescriptor,
+        mu_: VarDescriptor,
+        sigma_: VarDescriptor,
+        method: SampleMethod,
+    ):
         nonlocal code
         # Cloning necessary to prevent name overwriting:
         mu_ = mu_.clone()
@@ -1849,7 +1906,7 @@ def get_cauchy_distribution() -> str:
             name_lower="cauchy",
             y=y_,
             distribution_params=[mu_, sigma_],
-            method=method
+            method=method,
         )
 
     code += comment("Sampling")
@@ -1871,6 +1928,7 @@ def get_cauchy_distribution() -> str:
 # Beta distribution
 # =============================================================================
 
+
 def get_beta_distribution() -> str:
     code = r"""
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1886,7 +1944,9 @@ def get_beta_distribution() -> str:
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     """  # noqa
 
-    supported_combinations = []  # type: List[Tuple[VarDescriptor, VarDescriptor, VarDescriptor]]  # noqa
+    supported_combinations = (
+        []
+    )  # type: List[Tuple[VarDescriptor, VarDescriptor, VarDescriptor]]  # noqa
     for y in ALL_TYPES:
         for alpha in ALL_TYPES:
             for beta in ALL_TYPES:
@@ -1894,10 +1954,12 @@ def get_beta_distribution() -> str:
                     continue
                 supported_combinations.append((y, alpha, beta))
 
-    def do_call(y_: VarDescriptor,
-                alpha_: VarDescriptor,
-                beta_: VarDescriptor,
-                method: SampleMethod):
+    def do_call(
+        y_: VarDescriptor,
+        alpha_: VarDescriptor,
+        beta_: VarDescriptor,
+        method: SampleMethod,
+    ):
         nonlocal code
         # Cloning necessary to prevent name overwriting:
         alpha_ = alpha_.clone()
@@ -1910,7 +1972,7 @@ def get_beta_distribution() -> str:
             name_lower="beta",
             y=y_,
             distribution_params=[alpha_, beta_],
-            method=method
+            method=method,
         )
 
     code += comment("Sampling")
@@ -1932,6 +1994,7 @@ def get_beta_distribution() -> str:
 # Gamma distribution
 # =============================================================================
 
+
 def get_gamma_distribution() -> str:
     code = r"""
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1942,7 +2005,9 @@ def get_gamma_distribution() -> str:
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     """
 
-    supported_combinations = []  # type: List[Tuple[VarDescriptor, VarDescriptor, VarDescriptor]]  # noqa
+    supported_combinations = (
+        []
+    )  # type: List[Tuple[VarDescriptor, VarDescriptor, VarDescriptor]]  # noqa
     for y in ALL_TYPES:
         for alpha in ALL_TYPES:
             for beta in ALL_TYPES:
@@ -1950,10 +2015,12 @@ def get_gamma_distribution() -> str:
                     continue
                 supported_combinations.append((y, alpha, beta))
 
-    def do_call(y_: VarDescriptor,
-                alpha_: VarDescriptor,
-                beta_: VarDescriptor,
-                method: SampleMethod):
+    def do_call(
+        y_: VarDescriptor,
+        alpha_: VarDescriptor,
+        beta_: VarDescriptor,
+        method: SampleMethod,
+    ):
         nonlocal code
         # Cloning necessary to prevent name overwriting:
         alpha_ = alpha_.clone()
@@ -1966,7 +2033,7 @@ def get_gamma_distribution() -> str:
             name_lower="gamma",
             y=y_,
             distribution_params=[alpha_, beta_],
-            method=method
+            method=method,
         )
 
     code += comment("Sampling")
@@ -1988,6 +2055,7 @@ def get_gamma_distribution() -> str:
 # Uniform distribution
 # =============================================================================
 
+
 def get_uniform_distribution() -> str:
     code = r"""
     // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1997,22 +2065,27 @@ def get_uniform_distribution() -> str:
     // Simple; no extra work for the bridge sampler.
     """
 
-    supported_combinations = []  # type: List[Tuple[VarDescriptor, VarDescriptor, VarDescriptor]]  # noqa
+    supported_combinations = (
+        []
+    )  # type: List[Tuple[VarDescriptor, VarDescriptor, VarDescriptor]]  # noqa
     for y in ALL_TYPES:
         for lower in ALL_TYPES:
             for upper in ALL_TYPES:
                 if y == REAL and (lower != REAL or upper != REAL):
                     continue
-                if (y.array and y.dimensions > 1 and
-                        (lower != REAL or upper != REAL)):
+                if (
+                    y.array
+                    and y.dimensions > 1
+                    and (lower != REAL or upper != REAL)
+                ):
                     continue
                 if lower.dimensions > 1 or upper.dimensions > 1:
                     continue
                 supported_combinations.append((y, lower, upper))
 
-    def do_call(y_: VarDescriptor,
-                lower_: VarDescriptor,
-                upper_: VarDescriptor):
+    def do_call(
+        y_: VarDescriptor, lower_: VarDescriptor, upper_: VarDescriptor
+    ):
         nonlocal code
         # Cloning necessary to prevent name overwriting:
         lower_ = lower_.clone()
@@ -2128,18 +2201,21 @@ SAMPLE_CATEGORICAL = r"""
 # Reparameterized normal distribution
 # =============================================================================
 
-def make_reparam_normal(y: VarDescriptor,
-                        mu: VarDescriptor,
-                        sigma: VarDescriptor,
-                        method: SampleMethod) -> str:
+
+def make_reparam_normal(
+    y: VarDescriptor,
+    mu: VarDescriptor,
+    sigma: VarDescriptor,
+    method: SampleMethod,
+) -> str:
     """
     The reparameterization is to a standard (unit) normal distribution,
     N(0, 1). See get_reparamaterized_normal().
     """
-    if ((y.dimensions > 1 or y.singleton) and
-            (not mu.singleton or not sigma.singleton)):
-        raise NotImplementedError("y={}, mu={}, sigma={}".format(
-            y, mu, sigma))
+    if (y.dimensions > 1 or y.singleton) and (
+        not mu.singleton or not sigma.singleton
+    ):
+        raise NotImplementedError("y={}, mu={}, sigma={}".format(y, mu, sigma))
     y.name = "y_unit_normal"
     mu.name = "mu"
     sigma.name = "sigma"
@@ -2178,14 +2254,16 @@ def make_reparam_normal(y: VarDescriptor,
         constraints += ", lower_transformed"
         calc_transformed_1 = (
             "lower_transformed = (lower - mu{mu_i}) / sigma{sigma_i};".format(
-                mu_i=mu_i, sigma_i=sigma_i)
+                mu_i=mu_i, sigma_i=sigma_i
+            )
         )
     if using_upper:
         call_params += [upper]
         constraints += ", upper_transformed"
         calc_transformed_2 = (
             "upper_transformed = (upper - mu{mu_i}) / sigma{sigma_i};".format(
-                mu_i=mu_i, sigma_i=sigma_i)
+                mu_i=mu_i, sigma_i=sigma_i
+            )
         )
 
     # Variable declarations
@@ -2233,10 +2311,12 @@ def make_reparam_normal(y: VarDescriptor,
         if ({conditions}) {{
             reject("Incompatible arguments");
         }}
-            """.format(conditions=" || ".join(
-                "num_elements({}) != length".format(x.name)
-                for x in sized_dist_params
-            ))
+            """.format(
+                conditions=" || ".join(
+                    "num_elements({}) != length".format(x.name)
+                    for x in sized_dist_params
+                )
+            )
 
     # Sample, calculate result, etc.
     if y.singleton:
@@ -2267,7 +2347,7 @@ def make_reparam_normal(y: VarDescriptor,
             ya=y.abbreviation,
             constraints=constraints,
             mu_i=mu_i,
-            sigma_i=sigma_i
+            sigma_i=sigma_i,
         )
     elif y.dimensions == 2:
         code += """
@@ -2315,10 +2395,11 @@ def make_reparam_normal(y: VarDescriptor,
 
     funcname = "getReparameterizedNormal{funcname_extra}_{types}_lp".format(
         funcname_extra=funcname_extra,
-        types="".join(vd.abbreviation for vd in original_call_params)
+        types="".join(vd.abbreviation for vd in original_call_params),
     )
-    param_defs = ", ".join("{} {}".format(vd.typedef, vd.name)
-                           for vd in call_params)
+    param_defs = ", ".join(
+        "{} {}".format(vd.typedef, vd.name) for vd in call_params
+    )
 
     return """
     {rettype} {funcname}({param_defs})
@@ -2348,21 +2429,26 @@ def get_reparamaterized_normal() -> str:
     }
     """
 
-    supported_combinations = []  # type: List[Tuple[VarDescriptor, VarDescriptor, VarDescriptor]]  # noqa
+    supported_combinations = (
+        []
+    )  # type: List[Tuple[VarDescriptor, VarDescriptor, VarDescriptor]]  # noqa
     for y in ALL_TYPES:
         for lower in ALL_TYPES:
             for upper in ALL_TYPES:
-                if ((y == REAL or y.polydim_array) and
-                        (lower != REAL or upper != REAL)):
+                if (y == REAL or y.polydim_array) and (
+                    lower != REAL or upper != REAL
+                ):
                     continue
                 if lower.dimensions > 1 or upper.dimensions > 1:
                     continue
                 supported_combinations.append((y, lower, upper))
 
-    def do_call(y_: VarDescriptor,
-                mu_: VarDescriptor,
-                sigma_: VarDescriptor,
-                method: SampleMethod):
+    def do_call(
+        y_: VarDescriptor,
+        mu_: VarDescriptor,
+        sigma_: VarDescriptor,
+        method: SampleMethod,
+    ):
         nonlocal code
         # Cloning necessary to prevent name overwriting:
         mu_ = mu_.clone()
@@ -2389,18 +2475,21 @@ def get_reparamaterized_normal() -> str:
 # Reparameterized Cauchy distribution
 # =============================================================================
 
-def make_reparam_cauchy(y: VarDescriptor,
-                        mu: VarDescriptor,
-                        sigma: VarDescriptor,
-                        method: SampleMethod) -> str:
+
+def make_reparam_cauchy(
+    y: VarDescriptor,
+    mu: VarDescriptor,
+    sigma: VarDescriptor,
+    method: SampleMethod,
+) -> str:
     """
     The reparameterization is to a uniform distribution.
     See get_reparameterized_cauchy() for docs.
     """
-    if ((y.dimensions > 1 or y.singleton) and
-            (not mu.singleton or not sigma.singleton)):
-        raise NotImplementedError("y={}, mu={}, sigma={}".format(
-            y, mu, sigma))
+    if (y.dimensions > 1 or y.singleton) and (
+        not mu.singleton or not sigma.singleton
+    ):
+        raise NotImplementedError("y={}, mu={}, sigma={}".format(y, mu, sigma))
     y.name = "y_uniform"
     mu.name = "mu"
     sigma.name = "sigma"
@@ -2437,16 +2526,14 @@ def make_reparam_cauchy(y: VarDescriptor,
     if using_lower:
         call_params += [lower]
         constraints += ", lower_transformed"
-        calc_transformed_1 = (
-            "lower_transformed = atan((lower - mu{mu_i}) / sigma{sigma_i});".format(  # noqa
-                mu_i=mu_i, sigma_i=sigma_i)
+        calc_transformed_1 = "lower_transformed = atan((lower - mu{mu_i}) / sigma{sigma_i});".format(  # noqa
+            mu_i=mu_i, sigma_i=sigma_i
         )
     if using_upper:
         call_params += [upper]
         constraints += ", upper_transformed"
-        calc_transformed_2 = (
-            "upper_transformed = atan((upper - mu{mu_i}) / sigma{sigma_i});".format(  # noqa
-                mu_i=mu_i, sigma_i=sigma_i)
+        calc_transformed_2 = "upper_transformed = atan((upper - mu{mu_i}) / sigma{sigma_i});".format(  # noqa
+            mu_i=mu_i, sigma_i=sigma_i
         )
 
     # Variable declarations
@@ -2494,10 +2581,12 @@ def make_reparam_cauchy(y: VarDescriptor,
         if ({conditions}) {{
             reject("Incompatible arguments");
         }}
-            """.format(conditions=" || ".join(
-                "num_elements({}) != length".format(x.name)
-                for x in sized_dist_params
-            ))
+            """.format(
+                conditions=" || ".join(
+                    "num_elements({}) != length".format(x.name)
+                    for x in sized_dist_params
+                )
+            )
 
     lower_param = "lower_transformed" if using_lower else "-pi()/2"
     upper_param = "upper_transformed" if using_upper else "pi()/2"
@@ -2531,7 +2620,7 @@ def make_reparam_cauchy(y: VarDescriptor,
             lp=lower_param,
             up=upper_param,
             mu_i=mu_i,
-            sigma_i=sigma_i
+            sigma_i=sigma_i,
         )
     elif y.dimensions == 2:
         code += """
@@ -2579,10 +2668,11 @@ def make_reparam_cauchy(y: VarDescriptor,
 
     funcname = "getReparameterizedCauchy{funcname_extra}_{types}_lp".format(
         funcname_extra=funcname_extra,
-        types="".join(vd.abbreviation for vd in original_call_params)
+        types="".join(vd.abbreviation for vd in original_call_params),
     )
-    param_defs = ", ".join("{} {}".format(vd.typedef, vd.name)
-                           for vd in call_params)
+    param_defs = ", ".join(
+        "{} {}".format(vd.typedef, vd.name) for vd in call_params
+    )
 
     return """
     {rettype} {funcname}({param_defs})
@@ -2635,21 +2725,26 @@ def get_reparamaterized_cauchy() -> str:
     }
     """  # noqa
 
-    supported_combinations = []  # type: List[Tuple[VarDescriptor, VarDescriptor, VarDescriptor]]  # noqa
+    supported_combinations = (
+        []
+    )  # type: List[Tuple[VarDescriptor, VarDescriptor, VarDescriptor]]  # noqa
     for y in ALL_TYPES:
         for lower in ALL_TYPES:
             for upper in ALL_TYPES:
-                if ((y == REAL or y.polydim_array) and
-                        (lower != REAL or upper != REAL)):
+                if (y == REAL or y.polydim_array) and (
+                    lower != REAL or upper != REAL
+                ):
                     continue
                 if lower.dimensions > 1 or upper.dimensions > 1:
                     continue
                 supported_combinations.append((y, lower, upper))
 
-    def do_call(y_: VarDescriptor,
-                mu_: VarDescriptor,
-                sigma_: VarDescriptor,
-                method: SampleMethod):
+    def do_call(
+        y_: VarDescriptor,
+        mu_: VarDescriptor,
+        sigma_: VarDescriptor,
+        method: SampleMethod,
+    ):
         nonlocal code
         # Cloning necessary to prevent name overwriting:
         mu_ = mu_.clone()
@@ -2676,25 +2771,27 @@ def get_reparamaterized_cauchy() -> str:
 # Main
 # =============================================================================
 
+
 def get_code() -> str:
     return (
-        HEADER +
-        SIMPLE_FUNCTIONS +
-        LOG_PROB_HEADER +
-        LOG_PROB_HELPERS +
-        get_normal_distribution() +
-        get_std_normal_distribution() +
-        STANDARD_NORMAL_SPECIALS +
-        get_cauchy_distribution() +
-        get_beta_distribution() +
-        get_gamma_distribution() +
-        get_uniform_distribution() +
-        SAMPLE_BERNOULLI +
-        SAMPLE_CATEGORICAL +
-        REPARAM_HEADER +
-        get_reparamaterized_normal() +
-        get_reparamaterized_cauchy() +
-        DUFF_ANOVA_FUNCTIONS
+        HEADER
+        + SIMPLE_FUNCTIONS
+        + EXTRA_PROBABILITY_DISTRIBUTION_FUNCTIONS
+        + LOG_PROB_HEADER
+        + LOG_PROB_HELPERS
+        + get_normal_distribution()
+        + get_std_normal_distribution()
+        + STANDARD_NORMAL_SPECIALS
+        + get_cauchy_distribution()
+        + get_beta_distribution()
+        + get_gamma_distribution()
+        + get_uniform_distribution()
+        + SAMPLE_BERNOULLI
+        + SAMPLE_CATEGORICAL
+        + REPARAM_HEADER
+        + get_reparamaterized_normal()
+        + get_reparamaterized_cauchy()
+        + DUFF_ANOVA_FUNCTIONS
     )
 
 
@@ -2704,10 +2801,13 @@ def main() -> None:
         description="""
 Make a set of common functions for Stan programs.
 By Rudolf Cardinal. Created 2018-02-09.
-        """)
+        """,
+    )
     parser.add_argument(
-        "--filename", type=str, default="commonfunc.stan",
-        help="Output filename"
+        "--filename",
+        type=str,
+        default="commonfunc.stan",
+        help="Output filename",
     )
     args = parser.parse_args()
 
@@ -2717,5 +2817,5 @@ By Rudolf Cardinal. Created 2018-02-09.
     print("Written to {}".format(args.filename))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

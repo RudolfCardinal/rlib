@@ -138,7 +138,7 @@ General Stan/C++ coding
 
   In this context:
 
-    .. code-block::
+    .. code-block:: C++
 
         data {
             int N_TRIALS;
@@ -147,7 +147,7 @@ General Stan/C++ coding
 
   this method is slow:
 
-    .. code-block::
+    .. code-block:: C++
 
         model {
             real p_choose_rhs;
@@ -159,7 +159,7 @@ General Stan/C++ coding
 
   and this is faster, as it vectorizes the sampling statement:
 
-    .. code-block::
+    .. code-block:: C++
 
         model {
             vector[N_TRIALS] p_choose_rhs;
@@ -193,6 +193,88 @@ General Stan/C++ coding
   common, it turns out to be quicker (for a two-item softmax) to use this
   library's custom ``softmaxNth()`` function than Stan's built-in
   ``softmax()``. See ``tests/profile_stan_softmax/profile_softmax.stan``.
+
+- The other useful reformulation of softmax:
+
+  .. code-block:: none
+
+                P[i] =
+    softmax(X, β)[i] = exp(β⋅X[i]) / Σ_j{ exp(β⋅X[j]) }
+
+  For a two-stimulus version, with X_i and X_j being the "values":
+
+  .. code-block:: none
+
+    softmax(X, β)[i] = exp(β⋅X_i) / [ exp(β⋅X_i) + exp(β⋅X_j) ]
+
+    Divide top and bottom by exp(β⋅X_i):
+                     = 1          / [ 1          + exp(β⋅X_j)/exp(β⋅X_i) ]
+                     = 1 / [ 1 + exp(β⋅X_j - β⋅X_i) ]
+                     = 1 / [ 1 + exp(β⋅[X_j - X_i]) ]
+                     = 1 / [ 1 + exp(-β⋅[X_i - X_j]) ]
+
+  But since logit(p) = log(odds) = log(p / [1 - p]), we can derive (cheat):
+
+  .. code-block:: python
+
+    # Octave (pkg load symbolic; syms X Y; ...)?
+    # Maxima?
+    # SymPy? This is clearer than most! https://www.sympy.org/
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # SymPy method
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    from sympy import *
+    from sympy.abc import x
+
+    init_printing(use_unicode=True)  # optional!
+    # If you do "pip install ipython jupyterlab notebook" then you can run
+    # "jupyter notebook"  from a scratch directory, create a new notebook,
+    # and run this code; then expressions will be printed nicely via LaTeX.
+    # Don't use print() for this; just type the expression (e.g. "pn").
+
+    # Symbols:
+    beta = Symbol("beta", real=True)
+    p = Symbol("p", real=True)
+    X_i, X_j, X_k = symbols("X_i, X_j, X_k", real=True)
+    X = IndexedBase("X", real=True)  # a collection of reals that can be indexed
+    n = Symbol("n", integer=True, positive=True)
+    i = Idx("i")  # an index; do NOT specify (1, n) for range 1...n; see below
+    j = Idx("j")  # an index
+
+    # Functions:
+    odds = Lambda(p, p / (1 - p))
+    logit = Lambda(p, log(odds(p)))
+
+    # The two-choice situation:
+    p2 = exp(beta * X_i) / (exp(beta * X_i) + exp(beta * X_j))
+    print(simplify(logit(p2)))  # beta*(X_i - X_j)
+
+    # Some concrete numbers for the two-choice situation:
+    concrete2 = {beta:1.0, X_i:0.5, X_j:0.5}
+    print(p2.evalf(subs=concrete2))  # 0.5
+    print(logit(p2).evalf(subs=concrete2))  # 0
+
+    # A three-choice version:
+    p3 = exp(beta * X_i) / (exp(beta * X_i) + exp(beta * X_j) + exp(beta * X_k))
+    print(simplify(logit(p3)))  # X_i*beta - log(exp(X_j*beta) + exp(X_k*beta))
+
+    # The n-choice situation:
+    pn = exp(beta * Indexed(X, i)) / Sum(exp(beta * Indexed(X, j)), (j, 1, n))
+    print(simplify(logit(pn)))  # no simple expression
+    # ... beta*X[i] + log(1/(-exp(beta*X[i]) + Sum(exp(beta*X[j]), (j, 1, n))))
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Try to reduce from the general to the specific, to learn SymPy a little:
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    p2b = pn.subs(i, 1).subs(n, 2).doit()
+    # ... fails if j = Idx("j", (1, n)) rather than just j = Idx("j")
+    print(simplify(logit(p2b)))  # beta*(X[1] - X[2])
+
+    # Concrete instantiation of this derived two-choice situation:
+    concrete2b = {beta:1.0, X[1]:0.5, X[2]:0.5}
+    print(p2b.evalf(subs=concrete2b))  # 0.5
+    print(logit(p2b).evalf(subs=concrete2b))  # 0
 
 
 Parameterizing the model
@@ -270,7 +352,7 @@ the desired parameter "space". For example, Ahn2017_ (for the hBayesDM
 package), Haines2018_, and Romeu2020_ use a method that, when expressed in Stan
 syntax, is as follows:
 
--   an unconstrained parameter A is sampled like this:
+- an unconstrained parameter A is sampled like this:
 
     .. code-block:: C++
 
@@ -285,7 +367,7 @@ syntax, is as follows:
             A ~ normal(mu_A, sigma_A);
         }
 
--   a positive parameter B is sampled like this:
+- a positive parameter B is sampled like this:
 
     .. code-block:: C++
 
@@ -303,7 +385,7 @@ syntax, is as follows:
             raw_normal_B ~ normal(mu_B, sigma_B);
         }
 
--   a parameter C in the range [0, 1] is sampled like this:
+- a parameter C in the range [0, 1] is sampled like this:
 
     .. code-block:: C++
 
@@ -339,8 +421,8 @@ syntax, is as follows:
       https://mc-stan.org/docs/2_21/functions-reference/Phi-function.html and
       Bowling2009_).
 
--   a parameter D in the range [0, U], where U is an upper limit, is sampled
-    like this:
+- a parameter D in the range [0, U], where U is an upper limit, is sampledlike
+  this:
 
     .. code-block:: C++
 
@@ -357,6 +439,12 @@ syntax, is as follows:
             sigma_D ~ cauchy(0, 5);  // half-Cauchy because of <lower=0> limit
             raw_normal_D ~ normal(mu_D, sigma_D);
         }
+
+- **Beware:** the half-Cauchy(0, 5) prior for intersubject SDs may have been an
+    error and they appear to have replaced it (e.g. Romeu 2020, and later
+    versions of hBayesDM) with half-Normal(0, 0.2). See
+    ``tests/explore_priors.R``. (But I've still had convergence problems with
+    their technique and σ ~ N(0, 0.2).)
 
 
 **Practicalities**
@@ -902,6 +990,56 @@ I haven't gone down that route, because it's rare for me to be executing fewer
 chains than I have cores.
 
 See https://mc-stan.org/docs/2_26/stan-users-guide/parallelization-chapter.html.
+
+
+CmdStan
+-------
+
+To get started with CmdStan:
+
+- Download cmdstan from https://github.com/stan-dev/cmdstan/releases. For
+  example, ``cmdstan-2.31.0.tar.gz``.
+
+- Unzip it. I put the zip into ``~/dev`` so this gives e.g.
+  ``~/dev/cmdstan-2.31.0``.
+
+- Change into that cmdstan home directory. You may want to use the environment
+  variable CMDSTANHOME for convenience (some scripts here use that).
+
+- Run
+
+  .. code-block:: bash
+
+    make  # print help
+    make build  # do useful things
+
+- Change into its home directory.
+
+- Call your Stan program ``/MYPATH/MYPROG.stan``; it can be in any directory.
+
+- From the $CMDSTANHOME directory, run ``make /MYPATH/MYPROG`` (without the
+  ".stan" suffix).
+
+  This will create a program called "MYPROG" in the same directory as your Stan
+  source code, i.e. in ``/MYPATH``.
+
+- Run it from the code directory with:
+
+  .. code-block:: bash
+
+    ./MYPROG sample
+
+  It will write "output.csv".
+
+- You can then run
+
+  .. code-block:: bash
+
+    $CMDSTANHOME/bin/stansummary output.csv
+
+It may also write "profile.csv", if your code contains profiling statements.
+Inspect this and see
+https://mc-stan.org/docs/2_26/cmdstan-guide/stan-csv.html#profiling-csv-output-file
 
 
 GPU support

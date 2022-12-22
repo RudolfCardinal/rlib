@@ -1,0 +1,117 @@
+Steps for qbeta function:
+
+- R's qbeta() is implemented in
+  https://github.com/SurajGupta/r-source/blob/master/src/library/stats/R/distn.R
+  which calls either
+
+    .Call(C_qbeta, p, shape1, shape2, lower.tail, log.p)
+
+  or
+
+    .Call(C_qnbeta, p, shape1, shape2, ncp, lower.tail, log.p)
+
+  It uses qbeta() if the "ncp" (non-centrality parameter) is specified, and
+  qnbeta if it's missing.
+
+  From the help, ?qbeta:
+
+    Supplying ‘ncp = 0’ uses the algorithm for the non-central distribution, which
+    is not the same algorithm used if ‘ncp’ is omitted.  This is to give consistent
+    behaviour in extreme cases with values of ‘ncp’ very near zero.
+
+  We're always going to use the default, which is ncp = 0.
+  So, are there major differences between specifying "ncp = 0" and not specifying
+  it? Not at first glance.
+
+- These are in
+  https://github.com/SurajGupta/r-source/blob/master/src/nmath/qbeta.c
+  https://github.com/SurajGupta/r-source/blob/master/src/nmath/qnbeta.c
+
+- The qnbeta function is very much simpler. Both rely on other functions like
+  pbeta() and pnbeta(), but we have those in Stan.
+
+  ... https://github.com/SurajGupta/r-source/blob/master/src/nmath/pnbeta.c
+      https://www.rdocumentation.org/packages/DPQ/versions/0.4-4/topics/pnbeta
+      ?pbeta
+      pbeta
+  ... this is the distribution function, so in Stan it's beta_cdf().
+
+- Other algorithms are at https://arxiv.org/pdf/1611.03573.pdf
+
+~~~
+
+- qnbeta.c
+
+- clang-format for legibility
+
+- The Stan developers say there is no speed advantage to writing in C++ rather
+  than Stan
+  (https://cran.r-project.org/web/packages/rstan/vignettes/external.html), so
+  let's use Stan for now.
+
+- Translation:
+
+  - Use reject() for errors and bad input values.
+
+  - Use real not double.
+
+  - Use machine_precision() not DBL_EPSILON; see
+    https://mc-stan.org/docs/stan-users-guide/arithmetic-precision.html and
+    https://en.cppreference.com/w/cpp/types/numeric_limits/epsilon.
+
+  - For DBL_MIN: Stan says (same page): "The smallest number greater than zero
+    is roughly 0 + 10e−323".
+
+  - Some of the macros are in
+    https://github.com/SurajGupta/r-source/blob/master/src/nmath/dpq.h
+
+  - Replace
+        pnbeta(ux, a, b, ncp, TRUE /* lower_tail */, FALSE /* log_p */ )
+    with
+        beta_cdf(ux | a, b)
+
+  - Replace (1 - DBL_EPSILON) with a variable.
+
+  - Replace
+        fmin2(x, y)
+    with
+        (x < y) ? x : y
+    per
+        https://github.com/SurajGupta/r-source/blob/master/src/nmath/fmin2.c
+
+  - R_DT_qIv(p):
+    - for non-log versions this reduces to R_D_Lval(p)
+    - #define R_D_Lval(p)	(lower_tail ? (p) : (0.5 - (p) + 0.5))	/*  p  */
+    - ... so for lower_tail = false (as always for us) this becomes simply p.
+
+  - Otherwise, retain variable names as much as possible.
+
+  - Change
+        do {} while (continue_condition)
+    to
+        while (1) { ... if (!continue_condition) break; }
+    since Stan has no do/while statement.
+
+  - Change
+        for (init_statement; condition; iteration_expression) statement
+    to
+        init_statement;
+        while (condition) {
+            statement
+            iteration_expression;
+        }
+    Double-checked via https://en.cppreference.com/w/cpp/language/for.
+
+  - Use // not /* */ so block commenting is easier.
+
+  - Remove a bit of redundant debugging/#ifdef code and antique comments.
+
+- Then bugfixing:
+
+    - C++ DBL_MIN – minimum normalized positive value of double;
+    - C++ DBL_EPSILON – difference between 1.0 and the next representable
+      value of double. See above for Stan equivalents.
+    - I think Stan chokes if you use DBL_EPSILON or DBL_MIN as names;
+      though they're not in scope for user code, maybe they are at some
+      other point in compilation? Adding an "_X" or "_" suffix made the errors
+      go away. It was a linker error, not a compilation error.

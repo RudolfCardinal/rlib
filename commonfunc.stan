@@ -809,6 +809,500 @@
 
 
     // ------------------------------------------------------------------------
+    // Probability distribution functions not provided by Stan
+    // ------------------------------------------------------------------------
+    // See extra_distribution_functions.stan, which also implements tests.
+
+    // ========================================================================
+    // qbeta()
+    // ========================================================================
+
+    real qbeta(real p, real alpha, real beta)
+    {
+        // Quantile, or inverse cumulative distribution function (inverse CDF),
+        // for the beta distribution. Equivalent to qbeta() in R, or at least a
+        // less capable version of it. Implements the missing Stan function
+        // beta_qf().
+        //
+        // - The first parameter is a cumulative probability.
+        // - Distribution parameter shape1 (R) = alpha (Stan).
+        // - Distribution parameter shape2 (R) = beta (Stan).
+        // - The result is a value from the beta distribution.
+        //
+        // From
+        // https://github.com/SurajGupta/r-source/blob/master/src/nmath/qnbeta.c,
+        // modified as per qbeta_notes.txt. We are just implementing the
+        // version with lower_tail = false and log_p = false.
+
+        real DBL_EPSILON_X = machine_precision();
+        real ONE_M_DBL_EPSILON = 1 - DBL_EPSILON_X;  // precalculate
+        real DBL_MIN_ = 1e-323;
+        real accu = 1e-15;
+        real Eps = 1e-14;  // must be > accu
+
+        real ux, lx, nx, pp;
+
+        if (p < 0.0 || p > 1.0) {
+            reject("qbeta: bad parameter: p < 0 or p > 1");
+        }
+        if (alpha <= 0.0 || beta <= 0.0) {
+            reject("qbeta: bad parameter: alpha <= 0 or beta <= 0");
+        }
+
+        // p = R_DT_qIv(p);
+        // ... reduces to p for log_p = false and lower_tail = false.
+
+        // Invert pnbeta(.):
+        // 1. finding an upper and lower bound
+        if (p > ONE_M_DBL_EPSILON) {
+            return 1.0;
+        }
+
+        // pp = fmin2(ONE_M_DBL_EPSILON, p * (1 + Eps));
+        pp = ONE_M_DBL_EPSILON < p * (1 + Eps)
+            ? ONE_M_DBL_EPSILON
+            : p * (1 + Eps);
+
+        // Start ux at 0.5 and work it up (in big steps) while it's too low.
+        ux = 0.5;
+        while (ux < ONE_M_DBL_EPSILON && beta_cdf(ux | alpha, beta) < pp) {
+            ux = 0.5 * (1 + ux);
+        }
+        // ux is now 0.5 or higher
+
+        pp = p * (1 - Eps);
+
+        // Start lx at 0.5 and work it down (in big steps) while it's too high.
+        lx = 0.5;
+        while (lx > DBL_MIN_ && beta_cdf(lx | alpha, beta) > pp) {
+            lx *= 0.5;
+        }
+        // lx is now 0.5 or lower
+
+        // 2. interval (lx,ux) halving:
+        // Narrow down the gap to find the answer.
+        while (1) {
+            nx = 0.5 * (lx + ux);  // nx is the mean of lx and ux
+            if (beta_cdf(nx | alpha, beta) > p) {
+                ux = nx;  // nx too high; move down (shift the upper boundary down)
+            } else {
+                lx = nx;  // nx too low; move up (shift the lower boundary up)
+            }
+            if ((ux - lx) / nx <= accu) {
+                // Sufficiently accurate!
+                break;
+            }
+        }
+
+        return 0.5 * (ux + lx);
+    }
+
+    // ========================================================================
+    // qgamma(), and its support functions
+    // ========================================================================
+
+    real logcf(real x, real i, real d, real eps)
+    {
+        // eps: relative tolerance
+        // See https://github.com/SurajGupta/r-source/blob/master/src/nmath/pgamma.c
+        real c1 = 2 * d;
+        real c2 = i + d;
+        real c4 = c2 + d;
+        real a1 = c2;
+        real b1 = i * (c2 - i * x);
+        real b2 = d * d * x;
+        real a2 = c4 * c2 - b2;
+        real scalefactor = pow(2.0, 256.0);
+        // = ((4294967296.0^2)^2)^2 = (2^32)^8 = 2^256 = 1.157921e+77
+        real c3;
+
+        b2 = c4 * b1 - i * b2;
+
+        while (abs(a2 * b1 - a1 * b2) > abs(eps * b1 * b2)) {
+            c3 = c2*c2*x;
+            c2 += d;
+            c4 += d;
+            a1 = c4 * a2 - c3 * a1;
+            b1 = c4 * b2 - c3 * b1;
+
+            c3 = c1 * c1 * x;
+            c1 += d;
+            c4 += d;
+            a2 = c4 * a1 - c3 * a2;
+            b2 = c4 * b1 - c3 * b2;
+
+            if (abs (b2) > scalefactor) {
+                a1 /= scalefactor;
+                b1 /= scalefactor;
+                a2 /= scalefactor;
+                b2 /= scalefactor;
+            } else if (abs (b2) < 1 / scalefactor) {
+                a1 *= scalefactor;
+                b1 *= scalefactor;
+                a2 *= scalefactor;
+                b2 *= scalefactor;
+            }
+        }
+
+        return a2 / b2;
+    }
+
+    real log1pmx(real x)
+    {
+        // Accurate calculation of log(1+x)-x, particularly for small x.
+        // See https://github.com/SurajGupta/r-source/blob/master/src/nmath/pgamma.c
+        real minLog1Value = -0.79149064;
+
+        if (x > 1 || x < minLog1Value) {
+            return log1p(x) - x;
+        } else {
+            real r = x / (2 + x), y = r * r;
+            if (abs(x) < 1e-2) {
+                real two = 2;
+                return r * ((((two / 9 * y + two / 7) * y + two / 5) * y +
+                        two / 3) * y - x);
+            } else {
+                real tol_logcf = 1e-14;
+                return r * (2 * y * logcf (y, 3, 2, tol_logcf) - x);
+            }
+        }
+    }
+
+    real lgamma1p(real a)
+    {
+        // Compute  log(gamma(a+1))  accurately also for small a (0 < a < 0.5).
+        // See https://github.com/SurajGupta/r-source/blob/master/src/nmath/pgamma.c
+        real eulers_const =	 0.5772156649015328606065120900824024;
+
+        // coeffs[i] holds (zeta(i+2)-1)/(i+2) , i = 0:(N-1), N = 40 :
+        int N = 40;
+        array[N] real coeffs = {
+            0.3224670334241132182362075833230126e-0,  // = (zeta(2)-1)/2
+            0.6735230105319809513324605383715000e-1,  // = (zeta(3)-1)/3
+            0.2058080842778454787900092413529198e-1,
+            0.7385551028673985266273097291406834e-2,
+            0.2890510330741523285752988298486755e-2,
+            0.1192753911703260977113935692828109e-2,
+            0.5096695247430424223356548135815582e-3,
+            0.2231547584535793797614188036013401e-3,
+            0.9945751278180853371459589003190170e-4,
+            0.4492623673813314170020750240635786e-4,
+            0.2050721277567069155316650397830591e-4,
+            0.9439488275268395903987425104415055e-5,
+            0.4374866789907487804181793223952411e-5,
+            0.2039215753801366236781900709670839e-5,
+            0.9551412130407419832857179772951265e-6,
+            0.4492469198764566043294290331193655e-6,
+            0.2120718480555466586923135901077628e-6,
+            0.1004322482396809960872083050053344e-6,
+            0.4769810169363980565760193417246730e-7,
+            0.2271109460894316491031998116062124e-7,
+            0.1083865921489695409107491757968159e-7,
+            0.5183475041970046655121248647057669e-8,
+            0.2483674543802478317185008663991718e-8,
+            0.1192140140586091207442548202774640e-8,
+            0.5731367241678862013330194857961011e-9,
+            0.2759522885124233145178149692816341e-9,
+            0.1330476437424448948149715720858008e-9,
+            0.6422964563838100022082448087644648e-10,
+            0.3104424774732227276239215783404066e-10,
+            0.1502138408075414217093301048780668e-10,
+            0.7275974480239079662504549924814047e-11,
+            0.3527742476575915083615072228655483e-11,
+            0.1711991790559617908601084114443031e-11,
+            0.8315385841420284819798357793954418e-12,
+            0.4042200525289440065536008957032895e-12,
+            0.1966475631096616490411045679010286e-12,
+            0.9573630387838555763782200936508615e-13,
+            0.4664076026428374224576492565974577e-13,
+            0.2273736960065972320633279596737272e-13,
+            0.1109139947083452201658320007192334e-13  // = (zeta(40+1)-1)/(40+1)
+        };
+
+        real c = 0.2273736845824652515226821577978691e-12;  // zeta(N+2)-1
+        real tol_logcf = 1e-14;
+        real lgam;
+        int i;
+
+        if (abs(a) >= 0.5) {
+            // - R C code: lgammafn(x): computes log|gamma(x)|
+            //   https://github.com/SurajGupta/r-source/blob/master/src/nmath/lgamma.c
+            // - Stan: lgamma(x): natural log of the gamma function applied to x
+            //   https://github.com/stan-dev/math/blob/master/stan/math/prim/fun/lgamma.hpp
+            return lgamma(a + 1);
+            // *** trying lgamma()
+        }
+
+        lgam = c * logcf(-a / 2, N + 2, 1, tol_logcf);
+        i = N - 1;
+        while (i >= 0) {
+            lgam = coeffs[i] - a * lgam;
+            i -= 1;
+        }
+
+        return (a * lgam - eulers_const) * a - log1pmx(a);
+    }
+
+    real qchisq_appr(real p, real nu, real g, real tol)
+    {
+        // An approximation to R's qchisq(p, nu)?
+        // See https://github.com/SurajGupta/r-source/blob/master/src/nmath/qgamma.c
+        // nu = 'df'
+        // g = log Gamma(nu/2) = lgamma(nu/2)
+        real C7 = 4.67;
+        real C8 = 6.66;
+        real C9 = 6.73;
+        real C10 = 13.32;
+        real M_LN2_ = 0.693147180559945309417232121458;  // ln(2)
+
+        real alpha, a, c, ch, p1;
+        real p2, q, t, x;
+
+        // test arguments and initialise
+
+        if (p < 0.0 || p > 1.0) {
+            reject("qchisq_appr: bad parameter: p < 0 or p > 1");
+        }
+        if (nu <= 0.0) {
+            reject("qchisq_appr: bad parameter: nu <= 0");
+        }
+
+        alpha = 0.5 * nu;  // = [pq]gamma() shape
+        c = alpha - 1;
+
+        // p1 = R_DT_log(p);
+        // ... R_DT_log(p) reduces to R_D_log(p) for lower_tail = true
+        // ... which reduces to log(p) for log_p = false
+        p1 = log(p);
+        if (nu < -1.24 * p1) {  // for small chi-squared
+            // log(alpha) + g = log(alpha) + log(gamma(alpha)) =
+            //        = log(alpha*gamma(alpha)) = lgamma(alpha+1) suffers from
+            //  catastrophic cancellation when alpha << 1
+            real lgam1pa = (alpha < 0.5) ? lgamma1p(alpha) : (log(alpha) + g);
+            ch = exp((lgam1pa + p1) / alpha + M_LN2_);
+
+        } else if (nu > 0.32) {  // using Wilson and Hilferty estimate
+            // x = qnorm(p, 0, 1, lower_tail, log_p);
+            x = std_normal_qf(p);
+            if (is_inf(x)) {
+                // RNC alteration; if p = 1 then x = inf, and then we end up
+                // with ch = inf in the next steps, and then via the (ch > 2.2
+                // * ...) condition, we get ch = -nan instead of inf. So:
+                ch = x;
+                // This makes it work.
+            } else {
+
+                p1 = 2. / (9 * nu);
+                ch = nu * pow(x * sqrt(p1) + 1 - p1, 3);
+
+                // approximation for p tending to 1:
+                if (ch > 2.2 * nu + 6) {
+                    ch = -2 * (log1p(-p) - c * log(0.5 * ch) + g);
+                    // ... R_DT_Clog(p) reduces to R_D_LExp(p) for lower_tail = true
+                    // ... R_D_LExp(p) reduces to log1p(-p) for log_p = false
+                }
+            }
+
+        } else {  // "small nu" : 1.24*(-log(p)) <= nu <= 0.32
+            ch = 0.4;
+            a = log1p(-p) + g + c * M_LN2_;
+            // R_DT_Clog(p) -> log1p(-p), as above
+            while (1) {
+                q = ch;
+                p1 = 1. / (1 + ch * (C7 + ch));
+                p2 = ch * (C9 + ch * (C8 + ch));
+                t = -0.5 + (C7 + 2 * ch) * p1 - (C9 + ch * (C10 + 3 * ch)) / p2;
+                ch -= (1 - exp(a + 0.5 * ch) * p2 * p1) / t;
+                if (abs(q - ch) <= tol * abs(ch)) {
+                    // converged
+                    break;
+                }
+            }
+        }
+
+        // print("qchisq_appr(", p, ", ", nu, ", ", g, ", ", tol, ") -> ", ch);
+        return ch;
+    }
+
+    real qgamma(real p, real alpha, real beta) {
+        // Quantile, or inverse cumulative distribution function (inverse CDF),
+        // for the gamma distribution. Equivalent to qgamma() in R, or at least
+        // a less capable version of it. Implements the missing Stan function
+        // gamma_qf().
+        //
+        // - The first parameter is a cumulative probability.
+        // - Distribution parameter shape (R) = alpha (Stan).
+        // - Distribution parameter rate (R) = beta (Stan).
+        //   (R also offers scale = 1/rate.)
+        // - The result is a value from the gamma distribution.
+        //
+        // From
+        // https://github.com/SurajGupta/r-source/blob/master/src/nmath/qgamma.c,
+        // modified as per qbeta_notes.txt. We are just implementing the
+        // version with lower_tail = false and log_p = false.
+
+        real scale = 1. / beta;
+        real EPS1 = 1e-2;
+        real EPS2 = 5e-7;  // final precision of AS 91
+        real EPS_N = 1e-15;  // precision of Newton step / iterations
+        real LN_EPS = -36.043653389117156;  // = log(.Machine$double.eps) iff IEEE_754
+        int MAXIT = 1000;  // was 20
+        real pMIN = 1e-100;  // was 0.000002 = 2e-6
+        real pMAX = (1 - 1e-14);  // was (1-1e-12) and 0.999998 = 1 - 2e-6
+        real i420 = 1. / 420., i2520 = 1. / 2520., i5040 = 1. / 5040;
+        real p_, a, b, c, g, ch, ch0, p1;
+        real p2, q, s1, s2, s3, s4, s5, s6, t, x;
+        int max_it_Newton = 1;
+        int iterate = 1;  // no boolean type in Stan
+
+        if (p < 0.0 || p > 1.0) {
+            reject("qgamma: bad parameter: p < 0 or p > 1");
+        }
+        if (alpha < 0.0 || scale <= 0.0) {
+            reject("qbeta: bad parameter: alpha < 0 or scale (1/rate) <= 0");
+        }
+
+        if (alpha == 0.0) {
+            // all mass at 0:
+            return 0;
+        }
+
+        if (alpha < 1e-10) {
+            print(
+                "qgamma: alpha (", alpha,
+                ") is extremely small: results may be unreliable"
+            );
+            max_it_Newton = 7;  // may still be increased below
+        }
+
+        // p_ = R_DT_qIv(p);  // lower_tail prob (in any case)
+        p_ = p;
+
+        // g = lgammafn(alpha);  // log Gamma(v/2)
+        g = lgamma(alpha);  // log Gamma(v/2)
+
+        // ----- Phase I : Starting Approximation
+        ch = qchisq_appr(
+            p,
+            2 * alpha,  // nu = 'df'
+            g,  // = lgamma(nu/2)
+            EPS1  // tol
+        );
+        // if (!R_FINITE(ch)) {
+        if (is_inf(ch)) {
+            // forget about all iterations!
+            max_it_Newton = 0;
+            iterate = 0;
+        } else if (ch < EPS2) {
+            // Corrected according to AS 91; MM, May 25, 1999
+            max_it_Newton = 20;
+            iterate = 0;  // and do Newton steps
+        } else if (p_ > pMAX || p_ < pMIN) {
+            max_it_Newton = 20;
+            iterate = 0;  // and do Newton steps
+        }
+
+        if (iterate) {
+            // ----- Phase II: Iteration
+            // Call pgamma() [AS 239]	and calculate seven term taylor series
+            real M_LN2_ = 0.693147180559945309417232121458;  // ln(2)
+            c = alpha - 1;
+            s6 = (120 + c * (346 + 127 * c)) * i5040;  // used below, is "const"
+
+            ch0 = ch;  // save initial approx.
+            for (i in 1:MAXIT) {
+                q = ch;
+                p1 = 0.5 * ch;
+                p2 = p_ - gamma_cdf(p1 | alpha, 1.0);
+                // pgamma_raw(p1, alpha, lower_tail=TRUE, log_p=FALSE)
+                // is equivalent to pgamma(p1, alpha, scale=1) in R
+                // and thus to gamma_cdf(p1, alpha, 1.0).
+                // See https://github.com/SurajGupta/r-source/blob/master/src/nmath/pgamma.c
+
+                if (is_inf(p2) || ch <= 0) {
+                    ch = ch0;
+                    max_it_Newton = 27;
+                    break;
+                }  // was  return ML_NAN;
+
+                t = p2 * exp(alpha * M_LN2_ + g + p1 - c * log(ch));
+                b = t / ch;
+                a = 0.5 * t - b * c;
+                s1 = (210 + a * (140 + a * (105 + a * (84 + a * (70 + 60 * a)))))
+                    * i420;
+                s2 = (420 + a * (735 + a * (966 + a * (1141 + 1278 * a)))) * i2520;
+                s3 = (210 + a * (462 + a * (707 + 932 * a))) * i2520;
+                s4 = (252 + a * (672 + 1182 * a) + c * (294 + a * (889 + 1740 * a)))
+                    * i5040;
+                s5 = (84 + 2264 * a + c * (1175 + 606 * a)) * i2520;
+
+                ch += t
+                    * (1 + 0.5 * t * s1
+                       - b * c
+                           * (s1 - b * (s2 - b * (s3 - b * (s4 - b * (s5 - b * s6)))))
+                    );
+                if (abs(q - ch) < EPS2 * ch) {
+                    break;
+                }
+                if (abs(q - ch) > 0.1 * ch) {
+                    // diverging? -- also forces ch > 0
+                    if (ch < q) {
+                        ch = 0.9 * q;
+                    } else {
+                        ch = 1.1 * q;
+                    }
+                }
+            }
+            // no convergence in MAXIT iterations -- but we add Newton now...
+        }
+
+        x = 0.5 * scale * ch;
+        if (max_it_Newton) {
+            // always use log scale
+            real NEG_INF = negative_infinity();
+            real DBL_MIN_ = 1e-323;  // as above
+            real logp = log(p);  // can't reassign to p
+            if (x == 0) {
+                real one_p = 1. + 1e-7;
+                real one_m = 1. - 1e-7;
+                x = DBL_MIN_;
+                p_ = gamma_lcdf(x | alpha, beta);
+                if (p_ > logp * one_p) {
+                    return 0;
+                }
+                // else:  continue, using x = DBL_MIN instead of 0
+            } else {
+                p_ = gamma_lcdf(x | alpha, beta);
+            }
+            if (p_ == NEG_INF) {
+                return 0.0;  // PR#14710
+            }
+            for (i in 1:max_it_Newton) {
+                p1 = p_ - logp;
+                if (abs(p1) < abs(EPS_N * logp)) {
+                    break;
+                }
+                g = gamma_lpdf(x | alpha, beta);
+                if (g == NEG_INF) {
+                    break;
+                }
+                t = p1 * exp(p_ - g);  // = "delta x"
+                t = x - t;
+                p_ = gamma_cdf(t | alpha, beta);
+                if (abs(p_ - logp) > abs(p1)
+                        || (i > 1 && abs(p_ - logp) == abs(p1))) {
+                    // no improvement
+                    break;
+                }
+                x = t;
+            }
+        }
+
+        return x;
+    }
+
+
+    // ------------------------------------------------------------------------
     // LOG PROBABILITY FUNCTIONS FOR BRIDGE SAMPLING
     // ------------------------------------------------------------------------
     /*

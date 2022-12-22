@@ -2,33 +2,7 @@
     Test various versions of softmax for speed.
     The content is just garbage.
 
-    To get started with cmdstan:
-
-    - Download cmdstan from https://github.com/stan-dev/cmdstan/releases.
-      For example, cmdstan-2.26.1.tar.gz.
-    - Unzip it.
-    - Change into the cmdstan home directory.
-    - Run
-        make bin/summary
-
-
-    - Change into its home directory.
-    - Call your Stan program MYPATH/MYPROG.stan; it can be in any directory.
-    - Run "make MYPATH/MYPROG" (without the ".stan" suffix).
-
-    This will create a program called "MYPROG" in the same directory as your
-    Stan source code.
-
-    Run it from the code directory with:
-
-        MYPROG sample
-
-    It will write "output.csv". You can then run
-
-        <CMDSTANHOME>/bin/stansummary output.csv
-
-    It will also write "profile.csv". Inspect this and see
-    https://mc-stan.org/docs/2_26/cmdstan-guide/stan-csv.html#profiling-csv-output-file
+    To get started with cmdstan: see stan_notes.rst
 
 */
 
