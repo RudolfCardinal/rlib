@@ -30,14 +30,14 @@ functions {
 
     // START_OF_EXCERPT_FOR_MAKE_COMMONFUNC
 
-    // ------------------------------------------------------------------------
+    // ========================================================================
     // Probability distribution functions not provided by Stan
-    // ------------------------------------------------------------------------
+    // ========================================================================
     // See extra_distribution_functions.stan, which also implements tests.
 
-    // ========================================================================
+    // ------------------------------------------------------------------------
     // qbeta()
-    // ========================================================================
+    // ------------------------------------------------------------------------
 
     real qbeta(real p, real alpha, real beta)
     {
@@ -81,9 +81,7 @@ functions {
         }
 
         // pp = fmin2(ONE_M_DBL_EPSILON, p * (1 + Eps));
-        pp = ONE_M_DBL_EPSILON < p * (1 + Eps)
-            ? ONE_M_DBL_EPSILON
-            : p * (1 + Eps);
+        pp = fmin(ONE_M_DBL_EPSILON, p * (1 + Eps));
 
         // Start ux at 0.5 and work it up (in big steps) while it's too low.
         ux = 0.5;
@@ -119,9 +117,9 @@ functions {
         return 0.5 * (ux + lx);
     }
 
-    // ========================================================================
+    // ------------------------------------------------------------------------
     // qgamma(), and its support functions
-    // ========================================================================
+    // ------------------------------------------------------------------------
 
     real logcf(real x, real i, real d, real eps)
     {
@@ -523,6 +521,327 @@ functions {
         return x;
     }
 
+    // ------------------------------------------------------------------------
+    // qwiener(), as in R's RWiener package
+    // ------------------------------------------------------------------------
+    // Notes:
+    // - Stan's ceil() does not return an integer. One might think to_int()
+    //   would solve the problem, but it needs an input qualified as "data".
+    //   If you mark all function arguments "data real" rather than real,
+    //   values calculated from them are not automatically considered "data";
+    //   nor can you declare a local variable as "data real". This looks like
+    //   nannying on the part of Stan and is unhelpful.
+    //   We need a to_int_stupid() function.
+    // - pnorm(q, mean = 0, sd = 1, lower_tail = 1, log.p = 0) becomes
+    //   std_normal_cdf(q).
+    // - qnorm(p, 0, 1, 1, 0) becomes std_normal_qf(q).
+    // - sign() requires implementing
+
+    int to_positive_int(real x) {
+        // https://discourse.mc-stan.org/t/real-to-integer-conversion/5622/5
+        // This assumes that min_val >= 0 is the minimum integer in range,
+        // max_val > min_val, and that x has already been rounded. It should
+        // find the integer equivalent to x.
+        // RNC: By TRUNCATION.
+        int min_val = 0;
+        int max_val = 2147483646;  // 2 ^ 31 - 2;
+        // ... https://mc-stan.org/docs/2_18/reference-manual/numerical-data-types.html
+        int range;
+        int mid_pt;
+        int out;
+        int n_for_simple_version = 20;
+
+        if (x < min_val || x > max_val) {
+            reject(
+                "to_positive_int: ", x,
+                " out of range [", min_val, ", ", max_val, "]"
+            );
+        }
+
+        // The "halving range" method below takes up to about 30-31 interations
+        // for our possible range, so is pretty efficient. But for some small
+        // number, this is more efficient:
+        if (x - min_val < n_for_simple_version) {
+            for (q in min_val:min_val + n_for_simple_version) {
+                // print("* x = ", x, ", q = ", q);
+                if (q > x) {  // e.g. 6 > 5.1
+                    return q - 1;  // e.g. return 5
+                }
+            }
+        }
+
+        range = (max_val - min_val + 1) %/% 2;
+        // We add 1 to make sure that truncation doesn't exclude a number.
+        // ... and %/% for integer division in Stan, to avoid a warning.
+        mid_pt = min_val + range;
+        while (range > 0) {
+            // print("* x = ", x, ", range = ", range, ", mid_pt = ", mid_pt);
+            if (x >= mid_pt && x < mid_pt + 1) {
+                out = mid_pt;
+                range = 0;
+            } else {
+                // figure out if range == 1
+                range = (range + 1) %/% 2;  // basically, halve the range
+                mid_pt = x > mid_pt ? mid_pt + range : mid_pt - range;
+            }
+        }
+        return out;
+    }
+
+    int sign(real x) {
+        // https://discourse.mc-stan.org/t/signum-function/9156
+        // https://github.com/stan-dev/math/issues/1686
+        return x < 0 ? -1 : x > 0;
+    }
+
+    real prob_upperbound(real v, real a, real w)
+    {
+        // Used by pwiener. See
+        // https://github.com/cran/RWiener/blob/master/src/pwiener.c
+        real e = exp(-2.0 * v * a * (1.0 - w));
+        if (is_inf(e)) {
+            return 1;
+        }
+        if (v == 0 || w == 1) {
+            return 1 - w;
+        }
+        return ((1 - e) / (exp(2.0 * v * a * w) - e));
+    }
+
+    real exp_pnorm(real a, real b)
+    {
+        // Used by pwiener. See
+        // https://github.com/cran/RWiener/blob/master/src/pwiener.c
+        // But the original had some daft tests for impossible conditions.
+        return exp(a) * std_normal_cdf(b);
+    }
+
+    int K_large(real q, real v, real a, real w)
+    {
+        // Used by pwiener. See
+        // https://github.com/cran/RWiener/blob/master/src/pwiener.c
+        real err = 1e-10;
+        real PI = pi();
+        real sqrtL1 = sqrt(1 / q) * a / PI;
+        real sqrtL2 = sqrt(fmax(
+            1.0,
+            -2 / q * a * a / PI / PI * (
+                log(err * PI * q / 2 * (v * v + PI * PI / a / a))
+                + v * a * w + v * v * q / 2
+            )
+        ));
+        return to_positive_int(ceil(fmax(sqrtL1, sqrtL2)));
+    }
+
+    int K_small(real q, real v, real a, real w, real epsilon)
+    {
+        // Used by pwiener. See
+        // https://github.com/cran/RWiener/blob/master/src/pwiener.c
+        real S2, S3, S4;
+        int K;
+        if (v == 0) {
+            return to_positive_int(ceil(
+                fmax(
+                    0.0,
+                    w / 2 - sqrt(q) / 2 / a * std_normal_qf(
+                        fmax(0.0, fmin(1.0, epsilon / (2 - 2 * w)))
+                    )
+                )
+            ));
+        }
+        if (v > 0) {
+            return K_small(q, -v, a, w, exp(-2 * a * w * v) * epsilon);
+        }
+        S2 = w - 1 + 0.5 / v / a * log(epsilon / 2 * (1 - exp(2 * v * a)));
+        S3 = (0.535 * sqrt(2 * q) + v * q + a * w) / 2 / a;
+        S4 = w / 2 - sqrt(q) / 2 / a * std_normal_qf(
+            fmax(
+                0.0,
+                fmin(
+                    1.0,
+                    epsilon * a / 0.3 / sqrt(2 * pi() * q)
+                        * exp(v * v * q / 2 + v * a * w)
+                )
+            )
+        );
+        return to_positive_int(ceil(fmax(fmax(fmax(S2, S3), S4), 0.0)));
+    }
+
+    real Fl_lower(real q, real v, real a, real w, int K)
+    {
+        // Used by pwiener. See
+        // https://github.com/cran/RWiener/blob/master/src/pwiener.c
+        real F = 0;
+        real PI = pi();
+        int k = K;
+        while (k >= 1) {
+            F = F - k
+                / (v * v * 1.0 + k * k * PI * PI / (a * 1.0) / a)
+                * exp(
+                    -v * a * w * 1.0
+                    - 0.5 * v * v * q
+                    - 0.5 * k * k * PI * PI / (a * 1.0) / a * q
+                )
+                * sin(PI * k * w);
+            // RNC: What's with all the "* 1.0"? Pointless, or something fancy
+            // about floating-point handling?
+            k -= 1;
+        }
+        return prob_upperbound(v, a, w) + 2.0 * PI / (a * 1.0) / a * F;
+    }
+
+    real Fs0_lower(real q, real a, real w, int K)
+    {
+        // Used by pwiener. See
+        // https://github.com/cran/RWiener/blob/master/src/pwiener.c
+        real F = 0;
+        int k = K;
+        while (k >= 0) {
+            F = F
+                - std_normal_cdf((-2 * k - 2 + w) * a / sqrt(q))
+                + std_normal_cdf((-2 * k - w) * a / sqrt(q));
+            k -= 1;
+        }
+        return 2 * F;
+    }
+
+    real Fs_lower(real q, real v, real a, real w, int K)
+    {
+        // Used by pwiener. See
+        // https://github.com/cran/RWiener/blob/master/src/pwiener.c
+        real S1=0, S2=0;
+        real sqt = sqrt(q);
+        int k = K;
+        if (v == 0) {
+            return Fs0_lower(q, a, w, K);
+        }
+        while (k >= 1) {
+            S1 = S1
+                + exp_pnorm(
+                    2 * v * a * k,
+                    -sign(v) * (2 * a * k + a * w + v * q) / sqt
+                )
+                - exp_pnorm(
+                    -2 * v * a * k - 2 * v * a * w,
+                    sign(v) * (2 * a * k + a * w - v * q) / sqt
+                );
+            S2 = S2
+                + exp_pnorm(
+                    -2 * v * a * k,
+                    sign(v) * (2 * a * k - a * w - v * q) / sqt
+                )
+                - exp_pnorm(
+                    2 * v * a * k - 2 * v * a * w,
+                    -sign(v) * (2 * a * k - a * w + v * q) / sqt
+                );
+            k -= 1;
+        }
+        return prob_upperbound(v, a, w)
+            + sign(v) * (
+                (
+                    std_normal_cdf(-sign(v) * (a * w + v * q) / sqt)
+                    - exp_pnorm(
+                        -2 * v * a * w,
+                        sign(v) * (a * w - v * q) / sqt
+                    )
+                )
+                + S1 + S2
+            );
+    }
+
+    real F_lower(real q, real v, real a, real w)
+    {
+        // Used by pwiener. See
+        // https://github.com/cran/RWiener/blob/master/src/pwiener.c
+        real err = 1e-10;
+        int K_l = K_large(q, v, a, w);
+        int K_s = K_small(q, v, a, w, err);
+        if (K_l < 10 * K_s) {
+            return Fl_lower(q, v, a, w, K_l);
+        } else {
+            return Fs_lower(q, v, a, w, K_s);
+        }
+    }
+
+    real pwiener(real q, real alpha, real tau, real beta, real delta)
+    {
+        // https://github.com/cran/RWiener/blob/master/src/pwiener.c
+        if (is_inf(q)) {
+            return positive_infinity();
+        }
+        if (is_nan(q)) {
+            return not_a_number();
+        }
+        if (abs(q) <= tau) {
+            return 0;
+        }
+
+        if (q < 0) { // lower boundary 0
+            return F_lower(abs(q) - tau, delta, alpha, beta);
+        } else {  // upper boundary a
+            return F_lower(q - tau, (-delta), alpha, (1 - beta));
+        }
+    }
+
+    real qwiener(real p, real alpha, real tau, real beta, real delta)
+    {
+        // Based on https://github.com/cran/RWiener/blob/master/src/qwiener.c
+        // Its license: GPL v2
+        //
+        // R's qwiener() handles upper, lower, or both boundaries.
+        // Stan's only does the upper boundary, so we can just implement that.
+        // https://mc-stan.org/docs/functions-reference/wiener-first-passage-time-distribution.html
+        //
+        // R's qwiener() calls C function qwiener_c, which is likely qwiener()
+        // in qwiener.c. That is boilerplate code around qwiener_d().
+        // We'll restrict it to p in [0, 1]; the original dealt with negative
+        // probabilities too. And pmin/pmax not used.
+        //
+        // For pwiener(), Stan does not provide wiener_cdf, so we have to
+        // implement that too.
+
+        real pmid = 0;  // value of p for current q guess
+        real qmin = 0;  // lower bound of q
+        real qmax = positive_infinity();  // upper bound of q
+        real q = 1;  // current guess for q
+        int c = 0;  // loop counter
+
+        if (p < 0.0 || p > 1.0) {
+            reject("qwiener: bad parameter: p < 0 or p > 1");
+        }
+
+        // print("--- qwiener(p = ", p, ", alpha = ", alpha, ", tau = ", tau, ", beta = ", beta, ", delta = ", delta, ")");
+        while (1) {
+            c += 1;
+            pmid = pwiener(q, alpha, tau, beta, delta);
+            // print("    c = ", c, ": pwiener(q = ", q, ", alpha = ", alpha, ", tau = ", tau, ", beta = ", beta, ", delta = ", delta, ") -> ", pmid);
+            if (p <= pmid) {  // near lower point
+                // RNC: pmid correct or too high; move q down
+                qmax = q;
+                q = qmin + (qmax - qmin) / 2;
+            } else {  // near upper point
+                // RNC: pmid too low; move q up
+                qmin = q;
+                if (!is_inf(qmax)) {
+                    q = qmin + (qmax - qmin) / 2;
+                } else {
+                    q = q * 10;
+                }
+            }
+            if (is_nan(pmid)) {
+                return not_a_number();
+            }
+            if (q >= 1e+10) {
+                return positive_infinity();
+            }
+            if (abs(p - pmid) <= 1e-10 || c >= 1000) {
+                // accurate enough, or enough iterations
+                break;
+            }
+        }
+        return q;
+    }
+
     // END_OF_EXCERPT_FOR_MAKE_COMMONFUNC
 
 }
@@ -675,16 +994,68 @@ transformed data {
     };
     real EPSILON_GAMMA = 1e-13;  // doesn't quite manage 1e-14
 
+    int N_TO_POSITIVE_INT_TESTS = 5;
+    array[N_TO_POSITIVE_INT_TESTS] real to_positive_int_params = {
+        0.0, 1.0, 5.1, 100.99, 2147483646.0
+    };
+    array[N_TO_POSITIVE_INT_TESTS] int to_positive_int_expected = {
+        0,   1,   5,   100,    2147483646
+    };
+    int N_WIENER_TESTS = 4;
+    array[N_WIENER_TESTS, 4] real wiener_test_params = {
+        // alpha (boundary sep., >0),
+        // tau (nondecision time, >0),
+        // beta (start, 0-1),
+        // delta (rate)
+        {2, 0.3, 0.5, 0},  // demo values from ?qwiener
+        {1, 1e-5, 0.5, 0.7},
+        {1, 99, 0.5, 0.3},
+        {4, 0.1, 0.2, -0.3}
+    };
+    array[N_WIENER_TESTS, N_P] real wiener_test_expected_q = {
+        // Test values from R
+        {
+            // paste(qwiener(p, 2, 0.3, 0.5, 0, resp=rep("upper", length(p))), collapse = ", ")
+            0.125, 0.560317782685161, 0.669613259378821, 0.782604275271297,
+            0.909202825278044, 1.05749567685416, 1.23849643592257,
+            1.47170581773389, 1.80036591459066, 2.36220996780321, 55, INF, INF,
+            INF, INF, INF, INF, INF, INF, INF, INF
+        },
+        {
+            // paste(qwiener(p, 1, 1e-5, 0.5, 0.7, resp=rep("upper", length(p))), collapse = ", ")
+            0.005859375, 0.056625128199812, 0.0769340710830875,
+            0.0964674862625543, 0.116885954921599, 0.139079156622756,
+            0.163835697923787, 0.192082859517541, 0.225111804145854,
+            0.264952990342863, 0.315202706609853, 0.383314897655509,
+            0.489498388953507, 0.744627000764012, INF, INF, INF, INF, INF, INF,
+            INF
+        },
+        {
+            // paste(qwiener(p, 1, 99, 0.5, 0.3, resp=rep("upper", length(p))), collapse = ", ")
+            0.5, 99.0611168317355, 99.0849751511132, 99.1087843149671,
+            99.1345429452576, 99.1635524735284, 99.1972394864388,
+            99.237649412371, 99.2882636351897, 99.3560886072373,
+            99.4592687927798, 99.6829128492391, INF, INF, INF, INF, INF, INF,
+            INF, INF, INF
+        },
+        {
+            // paste(qwiener(p, 4, 0.1, 0.2, -0.3, resp=rep("upper", length(p))), collapse = ", ")
+            0.375, 6.85549499467015, INF, INF, INF, INF, INF, INF, INF, INF,
+            INF, INF, INF, INF, INF, INF, INF, INF, INF, INF, INF
+        }
+    };
+    real EPSILON_WIENER = 1e-13;  // not quite 1e-14
+
     // ========================================================================
     // Testing
     // ========================================================================
 
     real p, q, x;
-    real alpha, beta;
+    real alpha, beta, delta, tau;
 
-    // ========================================================================
+    // ------------------------------------------------------------------------
     // qbeta()
-    // ========================================================================
+    // ------------------------------------------------------------------------
 
     print("--- Testing qbeta() with tolerance ", EPSILON_BETA);
     for (t in 1:N_BETA_TESTS) {
@@ -714,9 +1085,9 @@ transformed data {
         }
     }
 
-    // ========================================================================
+    // ------------------------------------------------------------------------
     // qgamma()
-    // ========================================================================
+    // ------------------------------------------------------------------------
 
     print("--- Testing qgamma() with tolerance ", EPSILON_GAMMA);
     for (t in 1:N_GAMMA_TESTS) {
@@ -745,5 +1116,67 @@ transformed data {
             }
         }
     }
+
+    // ------------------------------------------------------------------------
+    // qwiener()
+    // ------------------------------------------------------------------------
+
+    print("--- Testing to_positive_int()");
+    for (t in 1:N_TO_POSITIVE_INT_TESTS) {
+        real input = to_positive_int_params[t];
+        int expected = to_positive_int_expected[t];
+        int obtained = to_positive_int(input);
+        if (expected != obtained) {
+            reject(
+                "Bad result for to_positive_int(", input,
+                "); expected ", expected,
+                " but obtained ", obtained
+            );
+        } else {
+            print(
+                "Good result for to_positive_int(", input,
+                ") -> ", obtained
+            );
+        }
+    }
+    print("--- Testing qwiener() with tolerance ", EPSILON_WIENER);
+    for (t in 1:N_WIENER_TESTS) {
+        alpha = wiener_test_params[t, 1];
+        tau = wiener_test_params[t, 2];
+        beta = wiener_test_params[t, 3];
+        delta = wiener_test_params[t, 4];
+        for (i in 1:N_P) {
+            p = test_p[i];
+            q = wiener_test_expected_q[t, i];  // expected, from R
+            x = qwiener(p, alpha, tau, beta, delta);  // obtained
+            if (abs(x - q) > EPSILON_WIENER) {
+                reject(
+                    "Bad result for qwiener(p = ", p,
+                    ", alpha = ", alpha,
+                    ", tau = ", tau,
+                    ", beta = ", beta,
+                    ", delta = ", delta,
+                    "); expected q = ", q,
+                    " but obtained ", x
+                );
+            } else {
+                print(
+                    "Good result for qwiener(p = ", p,
+                    ", alpha = ", alpha,
+                    ", tau = ", tau,
+                    ", beta = ", beta,
+                    ", delta = ", delta,
+                    "); expected q = ", q,
+                    ", obtained ", x
+                );
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Done.
+    // ------------------------------------------------------------------------
+
+    print("--- All tests successful.");
 
 }

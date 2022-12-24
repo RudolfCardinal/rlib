@@ -47,7 +47,9 @@ Steps for qbeta function:
 - The Stan developers say there is no speed advantage to writing in C++ rather
   than Stan
   (https://cran.r-project.org/web/packages/rstan/vignettes/external.html), so
-  let's use Stan for now.
+  let's use Stan for now. (I think the one difference is setting an integer,
+  current_statement__, between every C++ statement, to locate problems during
+  exception handling.)
 
 - Translation:
 

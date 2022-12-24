@@ -45,7 +45,8 @@ F(x) = P(X ≤ x) = p
     quantile q.
 
     In Stan, the cumulative distribution is e.g. normal_cdf(x, mean, sd), and
-    the log version normal_lcdf().
+    the log version normal_lcdf(). There are some special versions for some
+    distributions, e.g. std_normal_cdf().
 
 Φ(z)
     Cumulative distribution function (CDF) of the standard normal distribution,
@@ -99,6 +100,7 @@ So we can use the same process for a modified variable on the scale of z.
 However, we may get stuck if Stan lacks a qbeta() equivalent.
 Do we need to write one? It's one of those slightly nightmarish algorithms:
 https://github.com/SurajGupta/r-source/blob/master/src/nmath/qbeta.c
+Oh well -- done.
 
 "
 
