@@ -340,7 +340,6 @@ functions {
             }
         }
 
-        // print("qchisq_appr(", p, ", ", nu, ", ", g, ", ", tol, ") -> ", ch);
         return ch;
     }
 
@@ -563,7 +562,6 @@ functions {
         // number, this is more efficient:
         if (x - min_val < n_for_simple_version) {
             for (q in min_val:min_val + n_for_simple_version) {
-                // print("* x = ", x, ", q = ", q);
                 if (q > x) {  // e.g. 6 > 5.1
                     return q - 1;  // e.g. return 5
                 }
@@ -575,7 +573,6 @@ functions {
         // ... and %/% for integer division in Stan, to avoid a warning.
         mid_pt = min_val + range;
         while (range > 0) {
-            // print("* x = ", x, ", range = ", range, ", mid_pt = ", mid_pt);
             if (x >= mid_pt && x < mid_pt + 1) {
                 out = mid_pt;
                 range = 0;
@@ -810,11 +807,9 @@ functions {
             reject("qwiener: bad parameter: p < 0 or p > 1");
         }
 
-        // print("--- qwiener(p = ", p, ", alpha = ", alpha, ", tau = ", tau, ", beta = ", beta, ", delta = ", delta, ")");
         while (1) {
             c += 1;
             pmid = pwiener(q, alpha, tau, beta, delta);
-            // print("    c = ", c, ": pwiener(q = ", q, ", alpha = ", alpha, ", tau = ", tau, ", beta = ", beta, ", delta = ", delta, ") -> ", pmid);
             if (p <= pmid) {  // near lower point
                 // RNC: pmid correct or too high; move q down
                 qmax = q;
