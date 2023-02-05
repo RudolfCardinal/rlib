@@ -125,7 +125,9 @@ This is probably preferable - a script to make the .stan file.
 2023-05-23:
 
 - Added qcauchy(), qupperhalfnormal(), qupperhalfcauchy().
-- Moved to new array syntax, requiring Stan v2.26. 
+- Moved to new array syntax, requiring Stan v2.26.
+- Note that Stan 2.26.1 rejects e.g. "real a, b;" with an error like:
+  ";" or plain assignment expected after variable declaration.
 
 """  # noqa
 

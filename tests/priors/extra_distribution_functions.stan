@@ -1,7 +1,7 @@
 /*
 
 Additional distribution functions.
-Rudolf Cardinal, 2022-12-21.
+Rudolf Cardinal, 2022-12-21 onwards.
 
 Original copyright/license below. This code also licensed under GPL v3+.
 
@@ -35,6 +35,25 @@ functions {
     // ========================================================================
     // See extra_distribution_functions.stan, which also implements tests.
 
+    /*
+        NOTE STAN VERSION/SYNTAX PROBLEMS:
+
+        - "real a, b;" is disallowed by RStan 2.26.1 but permitted by stanc
+          2.31.1. The error from the earlier version is:
+
+            ";" or plain assignment expected after variable declaration.
+
+        - gamma_cdf(x, a, b) is warned about in Stan 2.31.1 with a plan to
+          remove in Stan 2.32.0. It wants gamma_lcdf(x | a, b). Likewise for
+          beta_cdf(). HOWEVER, Stan 2.26.1 prohibits this, with the error:
+
+            Only functions with names ending in _lpdf, _lupdf, _lpmf, _lupmf,
+            _lcdf, _lccdf can make use of conditional notation.
+
+          Currently (2023-02-05), we use comma notation, because the latest
+          version of RStan is only 2.26.1. This will need changing, though.
+    */
+
     // ------------------------------------------------------------------------
     // qbeta()
     // ------------------------------------------------------------------------
@@ -62,7 +81,10 @@ functions {
         real accu = 1e-15;
         real Eps = 1e-14;  // must be > accu
 
-        real ux, lx, nx, pp;
+        real ux;  // Stan 2.26.1 dislikes "real ux, lx, nx, pp;"
+        real lx;
+        real nx;
+        real pp;
 
         if (p < 0.0 || p > 1.0) {
             reject("qbeta: bad parameter: p < 0 or p > 1");
@@ -85,7 +107,7 @@ functions {
 
         // Start ux at 0.5 and work it up (in big steps) while it's too low.
         ux = 0.5;
-        while (ux < ONE_M_DBL_EPSILON && beta_cdf(ux | alpha, beta) < pp) {
+        while (ux < ONE_M_DBL_EPSILON && beta_cdf(ux, alpha, beta) < pp) {
             ux = 0.5 * (1 + ux);
         }
         // ux is now 0.5 or higher
@@ -94,7 +116,7 @@ functions {
 
         // Start lx at 0.5 and work it down (in big steps) while it's too high.
         lx = 0.5;
-        while (lx > DBL_MIN_ && beta_cdf(lx | alpha, beta) > pp) {
+        while (lx > DBL_MIN_ && beta_cdf(lx, alpha, beta) > pp) {
             lx *= 0.5;
         }
         // lx is now 0.5 or lower
@@ -103,7 +125,7 @@ functions {
         // Narrow down the gap to find the answer.
         while (1) {
             nx = 0.5 * (lx + ux);  // nx is the mean of lx and ux
-            if (beta_cdf(nx | alpha, beta) > p) {
+            if (beta_cdf(nx, alpha, beta) > p) {
                 ux = nx;  // nx too high; move down (shift the upper boundary down)
             } else {
                 lx = nx;  // nx too low; move up (shift the lower boundary up)
@@ -178,7 +200,7 @@ functions {
             // p = 1 is handled above
         }
         return location + (lower_tail ? -scale : scale) / tanpi(p_working);
-        /*	-1/tan(pi * p) = -cot(pi * p) = tan(pi * (p - 1/2))  */
+        // -1/tan(pi * p) = -cot(pi * p) = tan(pi * (p - 1/2))
     }
 
     // ------------------------------------------------------------------------
@@ -203,7 +225,7 @@ functions {
         b2 = c4 * b1 - i * b2;
 
         while (abs(a2 * b1 - a1 * b2) > abs(eps * b1 * b2)) {
-            c3 = c2*c2*x;
+            c3 = c2 * c2 * x;
             c2 += d;
             c4 += d;
             a1 = c4 * a2 - c3 * a1;
@@ -215,12 +237,12 @@ functions {
             a2 = c4 * a1 - c3 * a2;
             b2 = c4 * b1 - c3 * b2;
 
-            if (abs (b2) > scalefactor) {
+            if (abs(b2) > scalefactor) {
                 a1 /= scalefactor;
                 b1 /= scalefactor;
                 a2 /= scalefactor;
                 b2 /= scalefactor;
-            } else if (abs (b2) < 1 / scalefactor) {
+            } else if (abs(b2) < 1 / scalefactor) {
                 a1 *= scalefactor;
                 b1 *= scalefactor;
                 a2 *= scalefactor;
@@ -240,7 +262,8 @@ functions {
         if (x > 1 || x < minLog1Value) {
             return log1p(x) - x;
         } else {
-            real r = x / (2 + x), y = r * r;
+            real r = x / (2 + x);
+            real y = r * r;
             if (abs(x) < 1e-2) {
                 real two = 2;
                 return r * ((((two / 9 * y + two / 7) * y + two / 5) * y +
@@ -338,8 +361,15 @@ functions {
         real C10 = 13.32;
         real M_LN2_ = 0.693147180559945309417232121458;  // ln(2)
 
-        real alpha, a, c, ch, p1;
-        real p2, q, t, x;
+        real alpha;
+        real a;
+        real c;
+        real ch;
+        real p1;
+        real p2;
+        real q;
+        real t;
+        real x;
 
         // test arguments and initialise
 
@@ -366,7 +396,7 @@ functions {
 
         } else if (nu > 0.32) {  // using Wilson and Hilferty estimate
             // x = qnorm(p, 0, 1, lower_tail, log_p);
-            x = std_normal_qf(p);
+            x = inv_Phi(p);
             if (is_inf(x)) {
                 // RNC alteration; if p = 1 then x = inf, and then we end up
                 // with ch = inf in the next steps, and then via the (ch > 2.2
@@ -431,9 +461,27 @@ functions {
         int MAXIT = 1000;  // was 20
         real pMIN = 1e-100;  // was 0.000002 = 2e-6
         real pMAX = (1 - 1e-14);  // was (1-1e-12) and 0.999998 = 1 - 2e-6
-        real i420 = 1. / 420., i2520 = 1. / 2520., i5040 = 1. / 5040;
-        real p_, a, b, c, g, ch, ch0, p1;
-        real p2, q, s1, s2, s3, s4, s5, s6, t, x;
+        real i420 = 1. / 420.;
+        real i2520 = 1. / 2520.;
+        real i5040 = 1. / 5040;
+        real p_;
+        real a;
+        real b;
+        real c;
+        real g;
+        real ch;
+        real ch0;
+        real p1;
+        real p2;
+        real q;
+        real s1;
+        real s2;
+        real s3;
+        real s4;
+        real s5;
+        real s6;
+        real t;
+        real x;
         int max_it_Newton = 1;
         int iterate = 1;  // no boolean type in Stan
 
@@ -495,7 +543,7 @@ functions {
             for (i in 1:MAXIT) {
                 q = ch;
                 p1 = 0.5 * ch;
-                p2 = p_ - gamma_cdf(p1 | alpha, 1.0);
+                p2 = p_ - gamma_cdf(p1, alpha, 1.0);
                 // pgamma_raw(p1, alpha, lower_tail=TRUE, log_p=FALSE)
                 // is equivalent to pgamma(p1, alpha, scale=1) in R
                 // and thus to gamma_cdf(p1, alpha, 1.0).
@@ -570,7 +618,7 @@ functions {
                 }
                 t = p1 * exp(p_ - g);  // = "delta x"
                 t = x - t;
-                p_ = gamma_cdf(t | alpha, beta);
+                p_ = gamma_cdf(t, alpha, beta);
                 if (abs(p_ - logp) > abs(p1)
                         || (i > 1 && abs(p_ - logp) == abs(p1))) {
                     // no improvement
@@ -596,7 +644,8 @@ functions {
     //   We need a to_int_stupid() function.
     // - pnorm(q, mean = 0, sd = 1, lower_tail = 1, log.p = 0) becomes
     //   std_normal_cdf(q).
-    // - qnorm(p, 0, 1, 1, 0) becomes std_normal_qf(q).
+    // - qnorm(p, 0, 1, 1, 0) becomes std_normal_qf(q) from Stan 2.31.1 or
+    //   inv_Phi(p) before that.
     // - sign() requires implementing
 
     int to_positive_int(real x) {
@@ -697,13 +746,15 @@ functions {
     {
         // Used by pwiener. See
         // https://github.com/cran/RWiener/blob/master/src/pwiener.c
-        real S2, S3, S4;
+        real S2;
+        real S3;
+        real S4;
         int K;
         if (v == 0) {
             return to_positive_int(ceil(
                 fmax(
                     0.0,
-                    w / 2 - sqrt(q) / 2 / a * std_normal_qf(
+                    w / 2 - sqrt(q) / 2 / a * inv_Phi(
                         fmax(0.0, fmin(1.0, epsilon / (2 - 2 * w)))
                     )
                 )
@@ -714,7 +765,7 @@ functions {
         }
         S2 = w - 1 + 0.5 / v / a * log(epsilon / 2 * (1 - exp(2 * v * a)));
         S3 = (0.535 * sqrt(2 * q) + v * q + a * w) / 2 / a;
-        S4 = w / 2 - sqrt(q) / 2 / a * std_normal_qf(
+        S4 = w / 2 - sqrt(q) / 2 / a * inv_Phi(
             fmax(
                 0.0,
                 fmin(
@@ -769,7 +820,8 @@ functions {
     {
         // Used by pwiener. See
         // https://github.com/cran/RWiener/blob/master/src/pwiener.c
-        real S1 = 0, S2 = 0;
+        real S1 = 0;
+        real S2 = 0;
         real sqt = sqrt(q);
         int k = K;
         if (v == 0) {
@@ -909,7 +961,7 @@ functions {
 
     real qupperhalfnormal(real p, real mu, real sigma)
     {
-        return std_normal_qf(p / 2.0 + 0.5) * sigma + mu;
+        return inv_Phi(p / 2.0 + 0.5) * sigma + mu;
     }
 
     real qupperhalfcauchy(real p, real mu, real sigma)
