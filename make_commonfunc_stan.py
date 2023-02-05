@@ -122,6 +122,11 @@ This is probably preferable - a script to make the .stan file.
 - Additional probabity distribution functions, qbeta() and qgamma(), and their
   support functions.
 
+2023-05-23:
+
+- Added qcauchy(), qupperhalfnormal(), qupperhalfcauchy().
+- Moved to new array syntax, requiring Stan v2.26. 
+
 """  # noqa
 
 import argparse
@@ -199,7 +204,7 @@ REAL = VarDescriptor(
 )
 ARRAY = VarDescriptor(
     abbreviation="A",
-    typedef="real[]",
+    typedef="array[] real",
     singleton=False,
     dimensions=1,
     vector=False,
@@ -207,7 +212,7 @@ ARRAY = VarDescriptor(
 )
 ARRAY_2D = VarDescriptor(
     abbreviation="2",
-    typedef="real[,]",
+    typedef="array[,] real",
     singleton=False,
     dimensions=2,
     vector=False,
@@ -215,7 +220,7 @@ ARRAY_2D = VarDescriptor(
 )
 ARRAY_3D = VarDescriptor(
     abbreviation="3",
-    typedef="real[,,]",
+    typedef="array[,,] real",
     singleton=False,
     dimensions=3,
     vector=False,
@@ -534,12 +539,12 @@ SIMPLE_FUNCTIONS = r"""
     // Basic data manipulation
     // ------------------------------------------------------------------------
 
-    vector vector_from_real_array_row(real[,] x, int row)
+    vector vector_from_real_array_row(array[,] real x, int row)
     {
         // Given an array
-        //      real x[nrows, ncols];
+        //      array[nrows, ncols] real x;
         // you can slice the array with
-        //      real a[ncols] = x[row];
+        //      array[ncols] real a = x[row];
         // but not with
         //      vector[ncols] y = x[row];
         // so this function does that.
@@ -552,7 +557,7 @@ SIMPLE_FUNCTIONS = r"""
         return v;
     }
 
-    vector vector_from_int_array_row(int[,] x, int row)
+    vector vector_from_int_array_row(array[,] int x, int row)
     {
         // As above, but for an int array.
 
@@ -607,7 +612,7 @@ SIMPLE_FUNCTIONS = r"""
     //      dot_product(row vector, row vector)
     //      dot_product(vector, row vector)
     //      dot_product(row vector, vector)
-    //      dot_product(real[], real[])
+    //      dot_product(array[] real, array[] real)
 
     vector dot_product_MV_V(matrix x, vector y)
     {
@@ -624,7 +629,7 @@ SIMPLE_FUNCTIONS = r"""
         //
         //              (3, 2) ⋅ (2, 1) = (3, 1)
 
-        int x_dimensions[2] = dims(x);
+        array[2] int x_dimensions = dims(x);
         int p = x_dimensions[1];
         int q = x_dimensions[2];
         vector[p] z;
@@ -643,11 +648,11 @@ SIMPLE_FUNCTIONS = r"""
         return z;
     }
 
-    vector dot_product_2A_V(real[,] x, real[] y)
+    vector dot_product_2A_V(array[,] real x, array[] real y)
     {
         // As dot_product_MV_V, but for array inputs.
 
-        int x_dimensions[2] = dims(x);
+        array[2] int x_dimensions = dims(x);
         int p = x_dimensions[1];
         int q = x_dimensions[2];
         vector[p] z;
@@ -681,7 +686,7 @@ SIMPLE_FUNCTIONS = r"""
         //
         //              (1, 2) ⋅ (2, 3)    = (1, 3) 
 
-        int y_dimensions[2] = dims(y);
+        array[2] int y_dimensions = dims(y);
         int p = y_dimensions[1];
         int q = y_dimensions[2];
         vector[q] z;
@@ -700,11 +705,11 @@ SIMPLE_FUNCTIONS = r"""
         return z;
     }
 
-    vector dot_product_A2_V(real[] x, real[,] y)
+    vector dot_product_A2_V(array[] real x, array[,] real y)
     {
         // As dot_product_VM_V(), but for array inputs.
 
-        int y_dimensions[2] = dims(y);
+        array[2] int y_dimensions = dims(y);
         int p = y_dimensions[1];
         int q = y_dimensions[2];
         vector[q] z;
@@ -723,7 +728,7 @@ SIMPLE_FUNCTIONS = r"""
         return z;
     }
 
-    real dot_product_AA_R(real[] x, real[] y)
+    real dot_product_AA_R(array[] real x, array[] real y)
     {
         // Dot product of two arrays.
 
@@ -738,7 +743,7 @@ SIMPLE_FUNCTIONS = r"""
         return z;
     }
 
-    real dot_product_iAV_R(int[] x, vector y)
+    real dot_product_iAV_R(array[] int x, vector y)
     {
         int n = num_elements(x);
         real z = 0.0;
@@ -751,7 +756,7 @@ SIMPLE_FUNCTIONS = r"""
         return z;
     }
 
-    matrix tensordot_A3_M(real[] x, real[,,] y)
+    matrix tensordot_A3_M(array[] real x, array[,,] real y)
     {
         // Equivalent to Numpy's tensordot(x, y, axes=1), for:
         //
@@ -769,7 +774,7 @@ SIMPLE_FUNCTIONS = r"""
         //         
         //      (1, 2) ⋅ (2, 3, 4)            = (3, 4)
 
-        int dimensions[3] = dims(y);
+        array[3] int dimensions = dims(y);
         int p = dimensions[1];
         int q = dimensions[2];
         int r = dimensions[3];
@@ -791,15 +796,15 @@ SIMPLE_FUNCTIONS = r"""
         return z;
     }
 
-    real[,] tensordot_A3_2(real[] x, real[,,] y)
+    array[,] real tensordot_A3_2(array[] real x, array[,,] real y)
     {
         // As for tensordot_A3_M(), but returning an array.
 
-        int dimensions[3] = dims(y);
+        array[3] int dimensions = dims(y);
         int p = dimensions[1];
         int q = dimensions[2];
         int r = dimensions[3];
-        real z[q, r];
+        array[q, r] real z;
         real cell;
 
         if (p != num_elements(x)) {
@@ -1054,11 +1059,11 @@ SIMPLE_FUNCTIONS = r"""
         rlib/tests/auroc/test_auroc_algorithm.R.
     */
 
-    real aurocAV(int[] binary_outcome, vector predictor)
+    real aurocAV(array[] int binary_outcome, vector predictor)
     {
         int n = num_elements(binary_outcome);
         // Sort the binary outcome by ascending predictor:
-        int y[n] = binary_outcome[sort_indices_asc(predictor)];
+        array[n] int y = binary_outcome[sort_indices_asc(predictor)];
         int n_false = 0;
         int current_y;
         real total = 0.0;
@@ -1072,11 +1077,11 @@ SIMPLE_FUNCTIONS = r"""
         return total / (n_false * (n - n_false));
     }
 
-    real aurocAA(int[] binary_outcome, real[] predictor)
+    real aurocAA(array[] int binary_outcome, array[] real predictor)
     {
         // For comments, see aurocAV.
         int n = num_elements(binary_outcome);
-        int y[n] = binary_outcome[sort_indices_asc(predictor)];
+        array[n] int y = binary_outcome[sort_indices_asc(predictor)];
         int n_false = 0;
         int current_y;
         real total = 0.0;
@@ -1112,7 +1117,7 @@ DUFF_ANOVA_FUNCTIONS = r"""
                 m ~ normal(0, 0.5);  // error: "no matches for matrix ~ normal(int, real)"
             or
                 real a[A, B];
-                a ~ normal(0, 0.5);  // error: "no matches for real[,] ~ normal(int, real)"
+                a ~ normal(0, 0.5);  // error: "no matches for array[,] real ~ normal(int, real)"
 
             And note that a vectorized sampling statement is strongly preferred
             (for performance reasons) over iterating through a matrix:
@@ -1201,26 +1206,26 @@ LOG_PROB_HEADER = r"""
     See p495:
         "reals" means:
                 real
-                real[]
+                array[] real, formerly called real[]
                 vector
                 row_vector
         "ints" means
                 int
-                int[]
+                array[] int, formerly called int[]
 
     Moreover, you can't define two copies of the same function with
     different names (23.6: no overloading of user-defined functions).
     For real arguments, the options are therefore:
          real
-         real[]  // one-dimensional array
-         real[,]  // two-dimensional array
-         real[,,]  // three-dimensional array (... etc.)
+         array[] real  // one-dimensional array, formerly real[]
+         array[,] real  // two-dimensional array, formerly real[,]
+         array[,,] real  // three-dimensional array (... etc.)
          vector  // vector, similar to a one-dimensional array.
          matrix  // matrix, similar to a two-dimensional array.
     See p297 of the 2017 Stan manual, and also p319.
     Which do we use in practice?
     - Firstly, we use single numbers or one-dimensional collections,
-      and generally the latter. So that means real[] or vector.
+      and generally the latter. So that means array[] real or vector.
     - We use both.
     - So let's have "Real", "Arr" and "Vec" versions.
     - Then, to make things worse, we sometimes have constant parameters,
@@ -1275,7 +1280,8 @@ LOG_PROB_HEADER = r"""
 
     RE TWO-DIMENSIONAL ARRAYS:
 
-        real thing[N_A, N_B];
+        // real thing[N_A, N_B];  // old Stan syntax
+        array[N_A, N_B] real thing;  // new Stan syntax, from v2.26
 
         // One way to iterate through all elements:
         for (a in 1:N_A) {
@@ -1286,24 +1292,24 @@ LOG_PROB_HEADER = r"""
 
         // NOT another way to iterate through all elements:
         for (i in 1:num_elements(thing)) {
-            do_something(thing[i]);  // thing[i] is a real[], not a real
+            do_something(thing[i]);  // thing[i] is an array[] real, not a real
             // ... and thing[num_elements(thing)] will be an index overflow
         }
 
-    So for some functions we want real[,]... let's give this the one-character
-    notation "2" (for 2D array).
+    So for some functions we want array[,] real... let's give this the
+    one-character notation "2" (for 2D array).
 
     Now:
         num_elements() gives the total, in this case N_A * N_B;
             ... but when *accessing* a 2D array, my_array[1] gives the first
                 row, not the first element; see Stan 2017 manual p323.
         size() gives the size of first dimension, in this case N_A;
-        dims() gives all dimensions, in this case an int[] containing {N_A, N_B}.
+        dims() gives all dimensions, in this case an array[] int containing {N_A, N_B}.
 
     RE ARITHMETIC:
 
     Note that we cannot do:
-            real * real[]
+            real * array[] real
             vector * vector
 
     */
@@ -1327,7 +1333,7 @@ LOG_PROB_HELPERS = r"""
             target += negative_infinity();
         }
     }
-    void enforceLowerBound_A_lp(real[] y, real lower)
+    void enforceLowerBound_A_lp(array[] real y, real lower)
     {
         for (i in 1:num_elements(y)) {
             if (y[i] < lower) {
@@ -1336,9 +1342,9 @@ LOG_PROB_HELPERS = r"""
             }
         }
     }
-    void enforceLowerBound_2_lp(real[,] y, real lower)
+    void enforceLowerBound_2_lp(array[,] real y, real lower)
     {
-        int dimensions[2] = dims(y);
+        array[2] int dimensions = dims(y);
         for (i in 1:dimensions[1]) {
             for (j in 1:dimensions[2]) {
                 if (y[i, j] < lower) {
@@ -1348,9 +1354,9 @@ LOG_PROB_HELPERS = r"""
             }
         }
     }
-    void enforceLowerBound_3_lp(real[,,] y, real lower)
+    void enforceLowerBound_3_lp(array[,,] real y, real lower)
     {
-        int dimensions[3] = dims(y);
+        array[3] int dimensions = dims(y);
         for (i in 1:dimensions[1]) {
             for (j in 1:dimensions[2]) {
                 for (k in 1:dimensions[3]) {
@@ -1380,7 +1386,7 @@ LOG_PROB_HELPERS = r"""
             target += negative_infinity();
         }
     }
-    void enforceUpperBound_A_lp(real[] y, real upper)
+    void enforceUpperBound_A_lp(array[] real y, real upper)
     {
         for (i in 1:num_elements(y)) {
             if (y[i] > upper) {
@@ -1389,9 +1395,9 @@ LOG_PROB_HELPERS = r"""
             }
         }
     }
-    void enforceUpperBound_2_lp(real[,] y, real upper)
+    void enforceUpperBound_2_lp(array[,] real y, real upper)
     {
-        int dimensions[2] = dims(y);
+        array[2] int dimensions = dims(y);
         for (i in 1:dimensions[1]) {
             for (j in 1:dimensions[2]) {
                 if (y[i, j] > upper) {
@@ -1401,9 +1407,9 @@ LOG_PROB_HELPERS = r"""
             }
         }
     }
-    void enforceUpperBound_3_lp(real[,,] y, real upper)
+    void enforceUpperBound_3_lp(array[,,] real y, real upper)
     {
-        int dimensions[3] = dims(y);
+        array[3] int dimensions = dims(y);
         for (i in 1:dimensions[1]) {
             for (j in 1:dimensions[2]) {
                 for (k in 1:dimensions[3]) {
@@ -1433,7 +1439,7 @@ LOG_PROB_HELPERS = r"""
             target += negative_infinity();
         }
     }
-    void enforceRangeBounds_A_lp(real[] y, real lower, real upper)
+    void enforceRangeBounds_A_lp(array[] real y, real lower, real upper)
     {
         real value;
         for (i in 1:num_elements(y)) {
@@ -1444,9 +1450,9 @@ LOG_PROB_HELPERS = r"""
             }
         }
     }
-    void enforceRangeBounds_2_lp(real[,] y, real lower, real upper)
+    void enforceRangeBounds_2_lp(array[,] real y, real lower, real upper)
     {
-        int dimensions[2] = dims(y);
+        array[2] int dimensions = dims(y);
         real value;
         for (i in 1:dimensions[1]) {
             for (j in 1:dimensions[2]) {
@@ -1458,9 +1464,9 @@ LOG_PROB_HELPERS = r"""
             }
         }
     }
-    void enforceRangeBounds_3_lp(real[,,] y, real lower, real upper)
+    void enforceRangeBounds_3_lp(array[,,] real y, real lower, real upper)
     {
-        int dimensions[3] = dims(y);
+        array[3] int dimensions = dims(y);
         real value;
         for (i in 1:dimensions[1]) {
             for (j in 1:dimensions[2]) {
@@ -1543,7 +1549,7 @@ def sample_generic(
     if method == SampleMethod.PLAIN:
         if y.dimensions == 3:
             code = f"""
-        int dimensions[3] = dims(y);
+        array[3] int dimensions = dims(y);
         for (i in 1:dimensions[1]) {{
             for (j in 1:dimensions[2]) {{
                 for (k in 1:dimensions[3]) {{
@@ -1594,7 +1600,7 @@ def sample_generic(
         # variable.
         if y.dimensions == 3:
             code += f"""
-        int dimensions[3] = dims(y);
+        array[3] int dimensions = dims(y);
         for (i in 1:dimensions[1]) {{
             for (j in 1:dimensions[2]) {{
                 for (k in 1:dimensions[3]) {{
@@ -1606,7 +1612,7 @@ def sample_generic(
                 """
         elif y.dimensions == 2:
             code += f"""
-        int dimensions[2] = dims(y);
+        array[2] int dimensions = dims(y);
         real correction_per_row = correction_per_value * dimensions[2];
         for (i in 1:dimensions[1]) {{
             target += {lpdf_func}(y[i]{pdf_call_params}) -
@@ -1693,7 +1699,7 @@ def sample_uniform(
 
     if y.dimensions == 3:
         code = r"""
-        int dimensions[3] = dims(y);
+        array[3] int dimensions = dims(y);
         for (i in 1:dimensions[1]) {
             for (j in 1:dimensions[2]) {
                 for (k in 1:dimensions[3]) {
@@ -1842,17 +1848,17 @@ STANDARD_NORMAL_SPECIALS = r"""
         sampleStdNormalLowerBound_R_lp(y, 0);
     }
 
-    void sampleStdNormalPositive_A_lp(real[] y, real lower)
+    void sampleStdNormalPositive_A_lp(array[] real y, real lower)
     {
         sampleStdNormalLowerBound_A_lp(y, 0);
     }
 
-    void sampleStdNormalPositive_2_lp(real[,] y, real lower)
+    void sampleStdNormalPositive_2_lp(array[,] real y, real lower)
     {
         sampleStdNormalLowerBound_2_lp(y, 0);
     }
 
-    void sampleStdNormalPositive_3_lp(real[,,] y, real lower)
+    void sampleStdNormalPositive_3_lp(array[,,] real y, real lower)
     {
         sampleStdNormalLowerBound_3_lp(y, 0);
     }
@@ -2116,15 +2122,15 @@ SAMPLE_BERNOULLI = r"""
     {
         target += bernoulli_lpmf(y | theta);
     }
-    void sampleBernoulli_AR_lp(int[] y, real theta)
+    void sampleBernoulli_AR_lp(array[] int y, real theta)
     {
         target += bernoulli_lpmf(y | theta);
     }
-    void sampleBernoulli_AA_lp(int[] y, real[] theta)
+    void sampleBernoulli_AA_lp(array[] int y, array[] real theta)
     {
         target += bernoulli_lpmf(y | theta);
     }
-    void sampleBernoulli_AV_lp(int[] y, vector theta)
+    void sampleBernoulli_AV_lp(array[] int y, vector theta)
     {
         target += bernoulli_lpmf(y | theta);
     }
@@ -2138,15 +2144,15 @@ SAMPLE_BERNOULLI = r"""
     {
         target += bernoulli_logit_lpmf(y | alpha);
     }
-    void sampleBernoulliLogit_AR_lp(int[] y, real alpha)
+    void sampleBernoulliLogit_AR_lp(array[] int y, real alpha)
     {
         target += bernoulli_logit_lpmf(y | alpha);
     }
-    void sampleBernoulliLogit_AA_lp(int[] y, real[] alpha)
+    void sampleBernoulliLogit_AA_lp(array[] int y, array[] real alpha)
     {
         target += bernoulli_logit_lpmf(y | alpha);
     }
-    void sampleBernoulliLogit_AV_lp(int[] y, vector alpha)
+    void sampleBernoulliLogit_AV_lp(array[] int y, vector alpha)
     {
         target += bernoulli_logit_lpmf(y | alpha);
     }
@@ -2174,7 +2180,7 @@ SAMPLE_CATEGORICAL = r"""
     {
         target += categorical_lpmf(y | theta);
     }
-    void sampleCategorical_AV_lp(int[] y, vector theta)
+    void sampleCategorical_AV_lp(array[] int y, vector theta)
     {
         target += categorical_lpmf(y | theta);
     }
@@ -2189,7 +2195,7 @@ SAMPLE_CATEGORICAL = r"""
     {
         target += categorical_logit_lpmf(y | beta);
     }
-    void sampleCategoricalLogit_AV_lp(int[] y, vector beta)
+    void sampleCategoricalLogit_AV_lp(array[] int y, vector beta)
     {
         target += categorical_logit_lpmf(y | beta);
     }
@@ -2280,16 +2286,16 @@ def make_reparam_normal(
     elif y.dimensions == 1:  # 1D array
         code += """
         int length = num_elements(y_unit_normal);
-        real result[length];
+        array[length] real result;
         """
     elif y.dimensions == 2:
         code += """
-        int dimensions[2] = dims(y_unit_normal);
+        array[2] int dimensions = dims(y_unit_normal);
         real result[dimensions[1], dimensions[2]];
         """
     elif y.dimensions == 3:
         code += """
-        int dimensions[3] = dims(y_unit_normal);
+        array[3] int dimensions = dims(y_unit_normal);
         real result[dimensions[1], dimensions[2], dimensions[3]];
         """
     else:
@@ -2550,16 +2556,16 @@ def make_reparam_cauchy(
     elif y.dimensions == 1:  # 1D array
         code += """
         int length = num_elements(y_uniform);
-        real result[length];
+        array[length] real result;
         """
     elif y.dimensions == 2:
         code += """
-        int dimensions[2] = dims(y_uniform);
+        array[2] int dimensions = dims(y_uniform);
         real result[dimensions[1], dimensions[2]];
         """
     elif y.dimensions == 3:
         code += """
-        int dimensions[3] = dims(y_uniform);
+        array[3] int dimensions = dims(y_uniform);
         real result[dimensions[1], dimensions[2], dimensions[3]];
         """
     else:

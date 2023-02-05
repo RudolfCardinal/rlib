@@ -104,12 +104,15 @@ Oh well -- done.
 
 "
 
-library(ggtext)
-library(patchwork)
-library(tidyverse)
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+    ggtext,
+    patchwork,
+    tidyverse
+)
 set.seed(1234)
 
-N_VALUES <- 5e6  # use 1e6 for sketch, 5e6 for medium, 1e7 for high accuracy
+N_VALUES <- 1e6  # use 1e6 for sketch, 5e6 for medium, 1e7 for high accuracy
 
 PRIOR_BETADIST_SHAPE1 <- 1.2  # den Ouden 2013: Beta(1.2, 1.2)
 PRIOR_BETADIST_SHAPE2 <- 1.2  # den Ouden 2013
@@ -385,6 +388,8 @@ normal_uniform_arbitrary_beta <- function(n) {
 PARAMNAME_01 <- "param [0, 1]"
 PARAMNAME_0_INF <- "param [0, +∞)"
 PARAMNAME_UNCONSTRAINED <- "param (−∞, +∞)"
+PARAMNAME_SD <- "param SD [0, +∞)"
+PARAMNAME_EXPANDED <- "param with intersubject variability (−∞, +∞)"
 
 priors_01 <- rbind(
     data.frame(
@@ -504,40 +509,101 @@ priors_unconstrained <- rbind(
     ),
     data.frame(
         parameter = PARAMNAME_UNCONSTRAINED,
+        method = "N(1.5, 1)",
+        x = rnorm(N_VALUES, mean = 1.5, sd = 1)
+    ),
+    data.frame(
+        parameter = PARAMNAME_UNCONSTRAINED,
+        method = "N(0, σ = 3)",
+        x = rnorm(N_VALUES, mean = 0, sd = 3)
+    ),
+    data.frame(
+        parameter = PARAMNAME_UNCONSTRAINED,
+        method = "N(0, σ = 5)",
+        x = rnorm(N_VALUES, mean = 0, sd = 5)
+    ),
+    data.frame(
+        parameter = PARAMNAME_UNCONSTRAINED,
         method = "Cauchy(0, 5)",
         x = rcauchy(N_VALUES, location = 0, scale = 5)
     )
 ) %>% as_tibble()
 
+priors_sd <- rbind(
+    data.frame(
+        parameter = PARAMNAME_SD,
+        method = "N+(0, σ = 0.05)",
+        x = halfnormal(N_VALUES, mean = 0, sd = 0.05)
+    ),
+    data.frame(
+        parameter = PARAMNAME_SD,
+        method = "N+(0, σ = 0.1)",
+        x = halfnormal(N_VALUES, mean = 0, sd = 0.1)
+    ),
+    data.frame(
+        parameter = PARAMNAME_SD,
+        method = "N+(0, σ = 0.5)",
+        x = halfnormal(N_VALUES, mean = 0, sd = 0.5)
+    )
+) %>% as_tibble()
+
+# Var(X + Y) = Var(X) + Var(Y) + 2 * Cov(X, Y)
+# The variance of a normal RV is the square of its SD. So:
+intersubject_variability <- rbind(
+    data.frame(
+        parameter = PARAMNAME_EXPANDED,
+        method = "N(0, 1)",
+        x = rnorm(N_VALUES, mean = 0, sd = 1)
+    ),
+    data.frame(
+        parameter = PARAMNAME_EXPANDED,
+        method = "N(0, σ<sup>2</sup> = 1<sup>2</sup> + 0.05<sup>2</sup>)",
+        x = rnorm(N_VALUES, mean = 0, sd = sqrt(1 + 0.05^2))
+    ),
+    data.frame(
+        parameter = PARAMNAME_EXPANDED,
+        method = "N(0, σ<sup>2</sup> = 1<sup>2</sup> + 0.5<sup>2</sup>)",
+        x = rnorm(N_VALUES, mean = 0, sd = sqrt(1 + 0.5^2))
+    ),
+    data.frame(
+        parameter = PARAMNAME_EXPANDED,
+        method = "N(0, σ<sup>2</sup> = 1<sup>2</sup> + 1<sup>2</sup>)",
+        x = rnorm(N_VALUES, mean = 0, sd = sqrt(1 + 1))
+    )
+) %>% as_tibble()
+
+COMMON_GRAPH_ELEMENTS <- list(
+    facet_grid(. ~ parameter),
+    theme_bw(),
+    theme(legend.text = element_markdown())
+)
 p_01 <- (
     ggplot(priors_01, aes(x = x, colour = method))
     + geom_density(size = LINEWIDTH, n = KERNEL_DENSITY_N)
-    + facet_grid(. ~ parameter)
-    + theme_bw()
-    + theme(
-        legend.text = element_markdown()
-    )
+    + COMMON_GRAPH_ELEMENTS
 )
 p_0_inf <- (
     ggplot(priors_0_inf, aes(x = x, colour = method))
     + geom_density(size = LINEWIDTH, n = KERNEL_DENSITY_N)
     + xlim(-1, 15)
-    + facet_grid(. ~ parameter)
-    + theme_bw()
-    + theme(
-        legend.text = element_markdown()
-    )
+    + COMMON_GRAPH_ELEMENTS
 )
 p_unconstrained <- (
     ggplot(priors_unconstrained, aes(x = x, colour = method))
     + geom_density(size = LINEWIDTH, n = KERNEL_DENSITY_N)
     + xlim(-8, 8)
-    + facet_grid(. ~ parameter)
-    + theme_bw()
-    + theme(
-        legend.text = element_markdown()
-    )
+    + COMMON_GRAPH_ELEMENTS
 )
-p <- (p_01 / p_0_inf / p_unconstrained)
-ggsave("_explore_priors.png", p, units = "cm", width = 25, height = 45)
+p_sd <- (
+    ggplot(priors_sd, aes(x = x, colour = method))
+    + geom_density(size = LINEWIDTH, n = KERNEL_DENSITY_N)
+    + COMMON_GRAPH_ELEMENTS
+)
+p_expanded <- (
+    ggplot(intersubject_variability, aes(x = x, colour = method))
+    + geom_density(size = LINEWIDTH, n = KERNEL_DENSITY_N)
+    + COMMON_GRAPH_ELEMENTS
+)
+p <- (p_01 / p_0_inf / p_unconstrained / p_sd / p_expanded)
+ggsave("_explore_priors.png", p, units = "cm", width = 25, height = 60)
 # ... PDF doesn't get the theta character right
