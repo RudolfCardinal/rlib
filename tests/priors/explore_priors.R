@@ -105,10 +105,11 @@ Oh well -- done.
 "
 
 library(ggtext)
+library(patchwork)
 library(tidyverse)
 set.seed(1234)
 
-N_VALUES <- 1e6  # use 1e6 for sketch, 1e7 for high accuracy
+N_VALUES <- 5e6  # use 1e6 for sketch, 5e6 for medium, 1e7 for high accuracy
 
 PRIOR_BETADIST_SHAPE1 <- 1.2  # den Ouden 2013: Beta(1.2, 1.2)
 PRIOR_BETADIST_SHAPE2 <- 1.2  # den Ouden 2013
@@ -119,6 +120,7 @@ PRIOR_HALF_NORMAL_SD_FOR_SD_IN_RANGE_0_1 <- 0.05  # Kanen 2019, Table 2
 # underlying Beta(1.2, 1.2) distribution, but reassuringly little.
 
 LINEWIDTH <- 1
+KERNEL_DENSITY_N <- 2048  # default 512
 
 
 std_normal <- function(n) {
@@ -366,22 +368,25 @@ normal_uniform_arbitrary_beta <- function(n) {
             for (s in 1:N_SUBJECTS) {
                 parameter[s] = ***qbeta_equivalent***(
                     Phi_approx(
-                        group_mean[group[s]]
+                        raw_group_mean[group[s]]
                         + raw_intersubject_sd * raw_subject_effect[s]
                     )
                 );
             }
         }
         model {
-            group_mean ~ normal(0, 1);
-            intersubject_sd ~ normal(0, ROMEU2020_SD_HALFNORMAL_SD);
+            raw_group_mean ~ normal(0, 1);
+            raw_intersubject_sd ~ normal(0, ROMEU2020_SD_HALFNORMAL_SD);
             raw_subject_effect_std_normal ~ normal(0, 1);
         }
     "
 }
 
-PARAMNAME_01 <- "param[0, 1]"
-priors <- rbind(
+PARAMNAME_01 <- "param [0, 1]"
+PARAMNAME_0_INF <- "param [0, +∞)"
+PARAMNAME_UNCONSTRAINED <- "param (−∞, +∞)"
+
+priors_01 <- rbind(
     data.frame(
         parameter = PARAMNAME_01,
         method = paste0(
@@ -468,13 +473,71 @@ priors <- rbind(
     )
 ) %>% as_tibble()
 
-p <- (
-    ggplot(priors, aes(x = x, colour = method))
-    + geom_density(size = LINEWIDTH)
+priors_0_inf <- rbind(
+    data.frame(
+        parameter = PARAMNAME_0_INF,
+        method = "N<sup>+</sup>(0, 1)",
+        x = halfnormal(N_VALUES)
+    ),
+    data.frame(
+        parameter = PARAMNAME_0_INF,
+        method = "exp{ N(0, 1) }",
+        x = exp(std_normal(N_VALUES))
+    ),
+    data.frame(
+        parameter = PARAMNAME_0_INF,
+        method = "Gamma(4.82, 0.88)",
+        x = rgamma(N_VALUES, shape = 4.82, rate = 0.88)
+    )
+) %>% as_tibble()
+
+priors_unconstrained <- rbind(
+    data.frame(
+        parameter = PARAMNAME_UNCONSTRAINED,
+        method = "N<sup>+</sup>(0, 1)—just to check it",
+        x = halfnormal(N_VALUES)
+    ),
+    data.frame(
+        parameter = PARAMNAME_UNCONSTRAINED,
+        method = "N(0, 1)",
+        x = std_normal(N_VALUES)
+    ),
+    data.frame(
+        parameter = PARAMNAME_UNCONSTRAINED,
+        method = "Cauchy(0, 5)",
+        x = rcauchy(N_VALUES, location = 0, scale = 5)
+    )
+) %>% as_tibble()
+
+p_01 <- (
+    ggplot(priors_01, aes(x = x, colour = method))
+    + geom_density(size = LINEWIDTH, n = KERNEL_DENSITY_N)
     + facet_grid(. ~ parameter)
     + theme_bw()
     + theme(
         legend.text = element_markdown()
     )
 )
-print(p)
+p_0_inf <- (
+    ggplot(priors_0_inf, aes(x = x, colour = method))
+    + geom_density(size = LINEWIDTH, n = KERNEL_DENSITY_N)
+    + xlim(-1, 15)
+    + facet_grid(. ~ parameter)
+    + theme_bw()
+    + theme(
+        legend.text = element_markdown()
+    )
+)
+p_unconstrained <- (
+    ggplot(priors_unconstrained, aes(x = x, colour = method))
+    + geom_density(size = LINEWIDTH, n = KERNEL_DENSITY_N)
+    + xlim(-8, 8)
+    + facet_grid(. ~ parameter)
+    + theme_bw()
+    + theme(
+        legend.text = element_markdown()
+    )
+)
+p <- (p_01 / p_0_inf / p_unconstrained)
+ggsave("_explore_priors.png", p, units = "cm", width = 25, height = 45)
+# ... PDF doesn't get the theta character right

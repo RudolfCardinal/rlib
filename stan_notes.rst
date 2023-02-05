@@ -700,7 +700,7 @@ are not used directly within "transformed parameters" but are calculated within
     # Analyse it with Stan
     model_code <- '
         // Single-group within-subjects design.
-        // The prefix "raw_" means "in standard normal (Z) space".
+        // The prefix "raw" means "in standard normal (Z) space".
         data {
             int<lower=1> N_SUBJECTS;
             int<lower=1> N_OBSERVATIONS;
@@ -840,6 +840,108 @@ Howell uses the example of analysing log salary, then reporting
 antilog(mean(log salary)).
 
 So: approach (a).
+
+
+Parameterization: a third method
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+[RNC, Dec 2022.]
+
+We could also use quantile functions to start with standard normal
+distributions (cf. Ahn), and do intersubject variation in that same (infinite)
+parameter space (cf. Ahn), but then transform to more specific priors (cf. my
+previous direct method e.g. Kanen).
+
+See ``tests/priors/explore_priors.R`` and
+``tests/priors/extra_distribution_functions.stan``; functions from the latter
+are pulled into my ``commonfunc.stan``. I've implemented:
+
+.. code-block:: none
+
+    qbeta()
+    qgamma()
+    qwiener()  # maybe pointless!
+
+So, for a terse-parameter coding of a between-group comparison (e.g. for a
+reinforcement learning task with parameters alpha and beta), we could do
+something like this:
+
+.. code-block:: C++
+
+    data {
+        int<lower=1> N_GROUPS;
+        int<lower=1> N_SUBJECTS;
+        array[N_SUBJECTS] int<lower=1, upper=N_GROUPS> group;
+        // ...
+    }
+    transformed data {
+        int<lower=1> N_PARAMS = 2;
+        int PARAM_ALPHA = 1;
+        int PARAM_BETA = 2;
+
+        real PRIOR_BETA_SHAPE1 = 1.2;  // den Ouden 2013
+        real PRIOR_BETA_SHAPE2 = 1.2;  // den Ouden 2013
+        real PRIOR_GAMMA_ALPHA = 4.82;  // Gershman 2016
+        real PRIOR_GAMMA_BETA = 0.88;  // Gershman 2016
+        real PRIOR_HALF_NORMAL_SD = 0.05;  // cf. Kanen 2019
+    }
+    parameters {
+        array[N_PARAMS, N_GROUPS] real raw_group_mean;
+        array[N_PARAM] real<lower=0> raw_group_sd;  // homogeneity across groups
+        array[N_PARAM, N_SUBJECTS] real stdnormal_subject_effect;
+    }
+    transformed parameters {
+        array[N_SUBJECTS] real subject_alpha;
+        array[N_SUBJECTS] real subject_beta;
+        for (p in 1:N_PARAMS) {
+            for (s in 1:N_SUBJECTS) {
+                // Random variable in normal space:
+                real raw_x =
+                    raw_group_mean[p, group[s]]
+                    + raw_group_sd[p] * stdnormal_subject_effect[p, s];
+                // Corresponding cumulative probability:
+                real raw_p = Phi_approx(raw_x);
+                // Convert via our target prior distribution:
+                if (param == PARAM_ALPHA) {
+                    subject_alpha[s] = qbeta(
+                        raw_p, PRIOR_BETA_SHAPE1, PRIOR_BETA_SHAPE2
+                    );
+                } else if (param == PARAM_BETA) {
+                    subject_beta[s] = qgamma(
+                        raw_p, PRIOR_GAMMA_ALPHA, PRIOR_GAMMA_BETA
+                    );
+                } else {
+                    reject("bug");
+                }
+            }
+        }
+
+        // ... implement RL code here (or in "model")
+    }
+    model {
+        raw_group_mean ~ std_normal();
+        raw_group_sd ~ normal(0, PRIOR_HALF_NORMAL_SD);  // half-normal
+        stdnormal_subject_effect ~ std_normal();
+
+        // ... implement RL code here (or in "transformed parameters")
+    }
+    generated quantities {
+        array[N_GROUPS] group_alpha;
+        array[N_GROUPS] group_beta;
+        for (g in 1:N_GROUPS) {
+            group_alpha[g] = qbeta(
+                Phi_approx(raw_group_mean[PARAM_ALPHA]),
+                PRIOR_BETA_SHAPE1,
+                PRIOR_BETA_SHAPE2
+            );
+            group_beta[g] = qgamma(
+                Phi_approx(raw_group_mean[PARAM_BETA]),
+                PRIOR_GAMMA_ALPHA,
+                PRIOR_GAMMA_BETA
+            );
+        }
+        // ... now do group differences in this space if desired
+    }
 
 
 Group-level testing

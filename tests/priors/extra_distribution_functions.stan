@@ -118,6 +118,70 @@ functions {
     }
 
     // ------------------------------------------------------------------------
+    // qcauchy()
+    // ------------------------------------------------------------------------
+
+    real tanpi(real x)
+    {
+        // Computes tan(pi * x).
+        // R's nmath/nmath.h defines __STDC_WANT_IEC_60559_FUNCS_EXT__ to
+        // ensure that tanpi() is defined. There is a declaration in
+        // https://github.com/SurajGupta/r-source/blob/master/src/include/Rmath.h0.in
+        // Stan has a change request to add tanpi() as of Apr 2021 at
+        // https://github.com/stan-dev/math/issues/2376
+        //
+        // Even Boost's Cauchy distribution uses a simple implementation:
+        // https://www.boost.org/doc/libs/1_81_0/boost/random/cauchy_distribution.hpp
+        return tan(pi() * x);
+    }
+
+    real qcauchy(real p, real location, real scale)
+    {
+        // location (R) = mu (Stan)
+        // scale (R) = sigma (Stan)
+        //
+        // Implements "lower.tail = TRUE, log.p = FALSE" version.
+        // See https://github.com/SurajGupta/r-source/blob/master/src/nmath/qcauchy.c
+
+        int lower_tail = 1;  // no "bool" data type
+        real p_working = p;  // can't rewrite argument
+
+        if (p < 0.0 || p > 1.0) {
+            reject("qcauchy: bad parameter: p < 0 or p > 1");
+        }
+        if (scale <= 0) {
+            if (scale == 0) {
+                // [RNC] Point mass.
+                return location;
+            }
+            reject("qcauchy: bad parameter: sigma (scale) < 0");
+        }
+
+        if (p > 0.5) {
+            if (p == 1.0) {
+                return location
+                    + (lower_tail ? scale : -scale) * positive_infinity();
+                // RNC: curious! Was the my_INF macro.
+            }
+            p_working = 1 - p;
+            lower_tail = !lower_tail;
+        }
+        // Use p_working, not p, below here.
+        // Stan doesn't let us rewrite our argument.
+
+        if (p_working == 0.5) {
+            return location;  // avoid 1/Inf below
+        }
+        if (p_working == 0.0) {
+            return location
+                + (lower_tail ? scale : -scale) * negative_infinity();
+            // p = 1 is handled above
+        }
+        return location + (lower_tail ? -scale : scale) / tanpi(p_working);
+        /*	-1/tan(pi * p) = -cot(pi * p) = tan(pi * (p - 1/2))  */
+    }
+
+    // ------------------------------------------------------------------------
     // qgamma(), and its support functions
     // ------------------------------------------------------------------------
 
@@ -250,7 +314,6 @@ functions {
             // - Stan: lgamma(x): natural log of the gamma function applied to x
             //   https://github.com/stan-dev/math/blob/master/stan/math/prim/fun/lgamma.hpp
             return lgamma(a + 1);
-            // *** trying lgamma()
         }
 
         lgam = c * logcf(-a / 2, N + 2, 1, tol_logcf);
@@ -706,7 +769,7 @@ functions {
     {
         // Used by pwiener. See
         // https://github.com/cran/RWiener/blob/master/src/pwiener.c
-        real S1=0, S2=0;
+        real S1 = 0, S2 = 0;
         real sqt = sqrt(q);
         int k = K;
         if (v == 0) {
@@ -837,6 +900,23 @@ functions {
         return q;
     }
 
+    // ------------------------------------------------------------------------
+    // Upper-half quantile functions
+    // ------------------------------------------------------------------------
+    // Return the quantile of a random variate from a HALF-distribution, given
+    // the corresponding cumulative probability. The transformation is p/2 +
+    // 0.5, which compresses p values from the range [0, 1] to [0.5, 1].
+
+    real qupperhalfnormal(real p, real mu, real sigma)
+    {
+        return std_normal_qf(p / 2.0 + 0.5) * sigma + mu;
+    }
+
+    real qupperhalfcauchy(real p, real mu, real sigma)
+    {
+        return qcauchy(p / 2.0 + 0.5, mu, sigma);
+    }
+
     // END_OF_EXCERPT_FOR_MAKE_COMMONFUNC
 
 }
@@ -902,6 +982,55 @@ transformed data {
         }
     };
     real EPSILON_BETA = 1e-14;
+
+    int N_CAUCHY_TESTS = 4;
+    array[N_CAUCHY_TESTS, 2] real cauchy_test_params = {
+        // location (mu), scale (sigma)
+        {0, 1},
+        {0, 5},
+        {1, 3},
+        {-2, 2.5}
+    };
+    array[N_CAUCHY_TESTS, N_P] real cauchy_test_expected_q = {
+        // Test values from R
+        {
+            // paste(qcauchy(p, 0, 1), collapse = ", ")
+            -INF, -6.31375151467504, -3.07768353717525, -1.96261050550515,
+            -1.37638192047117, -1, -0.726542528005361, -0.509525449494429,
+            -0.324919696232906, -0.158384440324536, 0, 0.158384440324537,
+            0.324919696232907, 0.509525449494429, 0.726542528005361, 1,
+            1.37638192047117, 1.96261050550515, 3.07768353717525,
+            6.31375151467505, INF
+        },
+        {
+            // paste(qcauchy(p, 0, 5), collapse = ", ")
+            -INF, -31.5687575733752, -15.3884176858763, -9.81305252752575,
+            -6.88190960235587, -5, -3.6327126400268, -2.54762724747214,
+            -1.62459848116453, -0.791922201622682, 0, 0.791922201622683,
+            1.62459848116453, 2.54762724747214, 3.63271264002681, 5,
+            6.88190960235587, 9.81305252752576, 15.3884176858763,
+            31.5687575733753, INF
+        },
+        {
+            // paste(qcauchy(p, 1, 3), collapse = ", ")
+            -INF, -17.9412545440251, -8.23305061152576, -4.88783151651545,
+            -3.12914576141352, -2, -1.17962758401608, -0.528576348483287,
+            0.0252409113012808, 0.524846679026391, 1, 1.47515332097361,
+            1.97475908869872, 2.52857634848329, 3.17962758401608, 4,
+            5.12914576141352, 6.88783151651546, 10.2330506115258,
+            19.9412545440252, INF
+        },
+        {
+            // paste(qcauchy(p, -2, 2.5), collapse = ", ")
+            -INF, -17.7843787866876, -9.69420884293814, -6.90652626376288,
+            -5.44095480117793, -4.5, -3.8163563200134, -3.27381362373607,
+            -2.81229924058227, -2.39596110081134, -2, -1.60403889918866,
+            -1.18770075941773, -0.726186376263928, -0.183643679986597, 0.5,
+            1.44095480117793, 2.90652626376288, 5.69420884293814,
+            13.7843787866876, INF
+        }
+    };
+    real EPSILON_CAUCHY = 1e-12;  // 1e-13 doesn't work
 
     int N_GAMMA_TESTS = 7;
     array[N_GAMMA_TESTS, 2] real gamma_test_params = {
@@ -1041,12 +1170,39 @@ transformed data {
     };
     real EPSILON_WIENER = 1e-13;  // not quite 1e-14
 
+    int N_HALF_NORMAL_TESTS = 3;
+    array[N_HALF_NORMAL_TESTS, 3] real upper_half_normal_params = {
+        // p, mu, sigma
+        {0.0, 0, 1},
+        {0.0, 0, 2},
+        {0.0, 5, 1}
+    };
+    array[N_HALF_NORMAL_TESTS] real upper_half_normal_expected = {
+        // q
+        0.0,
+        0.0,
+        5.0
+    };
+    real EPSILON_HALF_NORMAL = 1e-14;
+
+    int N_HALF_CAUCHY_TESTS = 3;
+    array[N_HALF_CAUCHY_TESTS, 3] real upper_half_cauchy_params = {
+        // p, mu, sigma
+        {0.0, 0, 1},
+        {0.0, 0, 2},
+        {0.0, 5, 1}
+    };
+    array[N_HALF_CAUCHY_TESTS] real upper_half_cauchy_expected = {
+        // q
+        0.0,
+        0.0,
+        5.0
+    };
+    real EPSILON_HALF_CAUCHY = 1e-14;
+
     // ========================================================================
     // Testing
     // ========================================================================
-
-    real p, q, x;
-    real alpha, beta, delta, tau;
 
     // ------------------------------------------------------------------------
     // qbeta()
@@ -1054,12 +1210,12 @@ transformed data {
 
     print("--- Testing qbeta() with tolerance ", EPSILON_BETA);
     for (t in 1:N_BETA_TESTS) {
-        alpha = beta_test_params[t, 1];
-        beta = beta_test_params[t, 2];
+        real alpha = beta_test_params[t, 1];
+        real beta = beta_test_params[t, 2];
         for (i in 1:N_P) {
-            p = test_p[i];
-            q = beta_test_expected_q[t, i];  // expected, from R
-            x = qbeta(p, alpha, beta);  // obtained
+            real p = test_p[i];
+            real q = beta_test_expected_q[t, i];  // expected, from R
+            real x = qbeta(p, alpha, beta);  // obtained
             if (abs(x - q) > EPSILON_BETA) {
                 reject(
                     "Bad result for qbeta(p = ", p,
@@ -1081,17 +1237,49 @@ transformed data {
     }
 
     // ------------------------------------------------------------------------
+    // qcauchy()
+    // ------------------------------------------------------------------------
+
+    print("--- Testing qcauchy() with tolerance ", EPSILON_CAUCHY);
+    for (t in 1:N_CAUCHY_TESTS) {
+        real mu = cauchy_test_params[t, 1];
+        real sigma = cauchy_test_params[t, 2];
+        for (i in 1:N_P) {
+            real p = test_p[i];
+            real q = cauchy_test_expected_q[t, i];  // expected, from R
+            real x = qcauchy(p, mu, sigma);  // obtained
+            if (abs(x - q) > EPSILON_CAUCHY) {
+                reject(
+                    "Bad result for qcauchy(p = ", p,
+                    ", mu = ", mu,
+                    ", sigma = ", sigma,
+                    "); expected q = ", q,
+                    " but obtained ", x
+                );
+            } else {
+                print(
+                    "Good result for qcauchy(p = ", p,
+                    ", mu = ", mu,
+                    ", sigma = ", sigma,
+                    "); expected q = ", q,
+                    ", obtained ", x
+                );
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
     // qgamma()
     // ------------------------------------------------------------------------
 
     print("--- Testing qgamma() with tolerance ", EPSILON_GAMMA);
     for (t in 1:N_GAMMA_TESTS) {
-        alpha = gamma_test_params[t, 1];
-        beta = gamma_test_params[t, 2];
+        real alpha = gamma_test_params[t, 1];
+        real beta = gamma_test_params[t, 2];
         for (i in 1:N_P) {
-            p = test_p[i];
-            q = gamma_test_expected_q[t, i];  // expected, from R
-            x = qgamma(p, alpha, beta);  // obtained
+            real p = test_p[i];
+            real q = gamma_test_expected_q[t, i];  // expected, from R
+            real x = qgamma(p, alpha, beta);  // obtained
             if (abs(x - q) > EPSILON_GAMMA) {
                 reject(
                     "Bad result for qgamma(p = ", p,
@@ -1136,14 +1324,14 @@ transformed data {
     }
     print("--- Testing qwiener() with tolerance ", EPSILON_WIENER);
     for (t in 1:N_WIENER_TESTS) {
-        alpha = wiener_test_params[t, 1];
-        tau = wiener_test_params[t, 2];
-        beta = wiener_test_params[t, 3];
-        delta = wiener_test_params[t, 4];
+        real alpha = wiener_test_params[t, 1];
+        real tau = wiener_test_params[t, 2];
+        real beta = wiener_test_params[t, 3];
+        real delta = wiener_test_params[t, 4];
         for (i in 1:N_P) {
-            p = test_p[i];
-            q = wiener_test_expected_q[t, i];  // expected, from R
-            x = qwiener(p, alpha, tau, beta, delta);  // obtained
+            real p = test_p[i];
+            real q = wiener_test_expected_q[t, i];  // expected, from R
+            real x = qwiener(p, alpha, tau, beta, delta);  // obtained
             if (abs(x - q) > EPSILON_WIENER) {
                 reject(
                     "Bad result for qwiener(p = ", p,
@@ -1165,6 +1353,63 @@ transformed data {
                     ", obtained ", x
                 );
             }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Half distributions
+    // ------------------------------------------------------------------------
+
+    print(
+        "--- Testing qupperhalfnormal() with tolerance ", EPSILON_HALF_NORMAL
+    );
+    for (t in 1:N_HALF_NORMAL_TESTS) {
+        real p = upper_half_normal_params[t, 1];
+        real mu = upper_half_normal_params[t, 2];
+        real sigma = upper_half_normal_params[t, 3];
+        real q = upper_half_normal_expected[t];
+        real x = qupperhalfnormal(p, mu, sigma);
+        if (abs(x - q) > EPSILON_HALF_NORMAL) {
+            reject(
+                "Bad result for qupperhalfnormal(", p,
+                ", ", mu,
+                ", ", sigma,
+                "); expected ", q,
+                " but obtained ", x
+            );
+        } else {
+            print(
+                "Good result for qupperhalfnormal(", p,
+                ", ", mu,
+                ", ", sigma,
+                ") -> ", x
+            );
+        }
+    }
+    print(
+        "--- Testing qupperhalfcauchy() with tolerance ", EPSILON_HALF_CAUCHY
+    );
+    for (t in 1:N_HALF_CAUCHY_TESTS) {
+        real p = upper_half_cauchy_params[t, 1];
+        real mu = upper_half_cauchy_params[t, 2];
+        real sigma = upper_half_cauchy_params[t, 3];
+        real q = upper_half_cauchy_expected[t];
+        real x = qupperhalfcauchy(p, mu, sigma);
+        if (abs(x - q) > EPSILON_HALF_CAUCHY) {
+            reject(
+                "Bad result for qupperhalfnormal(", p,
+                ", ", mu,
+                ", ", sigma,
+                "); expected ", q,
+                " but obtained ", x
+            );
+        } else {
+            print(
+                "Good result for qupperhalfnormal(", p,
+                ", ", mu,
+                ", ", sigma,
+                ") -> ", x
+            );
         }
     }
 
