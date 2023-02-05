@@ -1170,33 +1170,39 @@ transformed data {
     };
     real EPSILON_WIENER = 1e-13;  // not quite 1e-14
 
-    int N_HALF_NORMAL_TESTS = 3;
+    int N_HALF_NORMAL_TESTS = 4;
     array[N_HALF_NORMAL_TESTS, 3] real upper_half_normal_params = {
         // p, mu, sigma
+        // Very basic tests only.
         {0.0, 0, 1},
         {0.0, 0, 2},
-        {0.0, 5, 1}
+        {0.0, 5, 1},
+        {1.0, 0, 1}
     };
     array[N_HALF_NORMAL_TESTS] real upper_half_normal_expected = {
         // q
         0.0,
         0.0,
-        5.0
+        5.0,
+        INF
     };
     real EPSILON_HALF_NORMAL = 1e-14;
 
-    int N_HALF_CAUCHY_TESTS = 3;
+    int N_HALF_CAUCHY_TESTS = 4;
     array[N_HALF_CAUCHY_TESTS, 3] real upper_half_cauchy_params = {
         // p, mu, sigma
+        // Very basic tests only.
         {0.0, 0, 1},
         {0.0, 0, 2},
-        {0.0, 5, 1}
+        {0.0, 5, 1},
+        {1.0, 0, 1}
     };
     array[N_HALF_CAUCHY_TESTS] real upper_half_cauchy_expected = {
         // q
         0.0,
         0.0,
-        5.0
+        5.0,
+        INF
     };
     real EPSILON_HALF_CAUCHY = 1e-14;
 

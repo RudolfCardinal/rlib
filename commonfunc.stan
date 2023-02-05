@@ -896,6 +896,70 @@
     }
 
     // ------------------------------------------------------------------------
+    // qcauchy()
+    // ------------------------------------------------------------------------
+
+    real tanpi(real x)
+    {
+        // Computes tan(pi * x).
+        // R's nmath/nmath.h defines __STDC_WANT_IEC_60559_FUNCS_EXT__ to
+        // ensure that tanpi() is defined. There is a declaration in
+        // https://github.com/SurajGupta/r-source/blob/master/src/include/Rmath.h0.in
+        // Stan has a change request to add tanpi() as of Apr 2021 at
+        // https://github.com/stan-dev/math/issues/2376
+        //
+        // Even Boost's Cauchy distribution uses a simple implementation:
+        // https://www.boost.org/doc/libs/1_81_0/boost/random/cauchy_distribution.hpp
+        return tan(pi() * x);
+    }
+
+    real qcauchy(real p, real location, real scale)
+    {
+        // location (R) = mu (Stan)
+        // scale (R) = sigma (Stan)
+        //
+        // Implements "lower.tail = TRUE, log.p = FALSE" version.
+        // See https://github.com/SurajGupta/r-source/blob/master/src/nmath/qcauchy.c
+
+        int lower_tail = 1;  // no "bool" data type
+        real p_working = p;  // can't rewrite argument
+
+        if (p < 0.0 || p > 1.0) {
+            reject("qcauchy: bad parameter: p < 0 or p > 1");
+        }
+        if (scale <= 0) {
+            if (scale == 0) {
+                // [RNC] Point mass.
+                return location;
+            }
+            reject("qcauchy: bad parameter: sigma (scale) < 0");
+        }
+
+        if (p > 0.5) {
+            if (p == 1.0) {
+                return location
+                    + (lower_tail ? scale : -scale) * positive_infinity();
+                // RNC: curious! Was the my_INF macro.
+            }
+            p_working = 1 - p;
+            lower_tail = !lower_tail;
+        }
+        // Use p_working, not p, below here.
+        // Stan doesn't let us rewrite our argument.
+
+        if (p_working == 0.5) {
+            return location;  // avoid 1/Inf below
+        }
+        if (p_working == 0.0) {
+            return location
+                + (lower_tail ? scale : -scale) * negative_infinity();
+            // p = 1 is handled above
+        }
+        return location + (lower_tail ? -scale : scale) / tanpi(p_working);
+        /*	-1/tan(pi * p) = -cot(pi * p) = tan(pi * (p - 1/2))  */
+    }
+
+    // ------------------------------------------------------------------------
     // qgamma(), and its support functions
     // ------------------------------------------------------------------------
 
@@ -1028,7 +1092,6 @@
             // - Stan: lgamma(x): natural log of the gamma function applied to x
             //   https://github.com/stan-dev/math/blob/master/stan/math/prim/fun/lgamma.hpp
             return lgamma(a + 1);
-            // *** trying lgamma()
         }
 
         lgam = c * logcf(-a / 2, N + 2, 1, tol_logcf);
@@ -1484,7 +1547,7 @@
     {
         // Used by pwiener. See
         // https://github.com/cran/RWiener/blob/master/src/pwiener.c
-        real S1=0, S2=0;
+        real S1 = 0, S2 = 0;
         real sqt = sqrt(q);
         int k = K;
         if (v == 0) {
@@ -1613,6 +1676,23 @@
             }
         }
         return q;
+    }
+
+    // ------------------------------------------------------------------------
+    // Upper-half quantile functions
+    // ------------------------------------------------------------------------
+    // Return the quantile of a random variate from a HALF-distribution, given
+    // the corresponding cumulative probability. The transformation is p/2 +
+    // 0.5, which compresses p values from the range [0, 1] to [0.5, 1].
+
+    real qupperhalfnormal(real p, real mu, real sigma)
+    {
+        return std_normal_qf(p / 2.0 + 0.5) * sigma + mu;
+    }
+
+    real qupperhalfcauchy(real p, real mu, real sigma)
+    {
+        return qcauchy(p / 2.0 + 0.5, mu, sigma);
     }
 
 
