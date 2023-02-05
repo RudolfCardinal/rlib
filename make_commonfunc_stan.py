@@ -29,7 +29,7 @@ This is probably preferable - a script to make the .stan file.
     - bugfix for bridgesampling normalization. The bridgesampling manual
       uses the example
 
-        target += normal_lpdf(y | mu, sigma) - normal_lcdf(upper | mu, sigma);
+        target += normal_lpdf(y | mu, sigma) - normal_lcdf(upperbound | mu, sigma);
 
       but note that Stan allows this sampling notation for vectors and one-
       dimensional arrays. In this situation the left-hand term is the sum
@@ -140,6 +140,7 @@ import os
 # =============================================================================
 
 THIS_DIR = os.path.abspath(os.path.dirname(__file__))
+DEFAULT_COMMONFUNC_OUTPUT = os.path.join(THIS_DIR, "commonfunc.stan")
 DISTFUNC_STANFILE = os.path.join(
     THIS_DIR, "tests", "priors", "extra_distribution_functions.stan"
 )
@@ -173,7 +174,7 @@ class VarDescriptor(object):
         return self.typedef
 
     def __repr__(self) -> str:
-        return "VarDescriptor<{} {}>".format(self.typedef, self.name)
+        return f"VarDescriptor<{self.typedef} {self.name}>"
 
     def __eq__(self, other: "VarDescriptor") -> bool:
         return self.typedef == other.typedef
@@ -929,7 +930,7 @@ SIMPLE_FUNCTIONS = r"""
             return 0;
         }
         denominator = factorial(k) * factorial(n - k);
-        return factorial(n) / denominator;  // will produce a Stan info message
+        return factorial(n) %/% denominator;
     }
 
     vector pairwiseDifferencesVec(vector x)
@@ -1327,40 +1328,40 @@ LOG_PROB_HELPERS = r"""
 
     // Lower
 
-    void enforceLowerBound_R_lp(real y, real lower)
+    void enforceLowerBound_R_lp(real y, real lowerbound)
     {
-        if (y < lower) {
+        if (y < lowerbound) {
             target += negative_infinity();
         }
     }
-    void enforceLowerBound_A_lp(array[] real y, real lower)
+    void enforceLowerBound_A_lp(array[] real y, real lowerbound)
     {
         for (i in 1:num_elements(y)) {
-            if (y[i] < lower) {
+            if (y[i] < lowerbound) {
                 target += negative_infinity();
                 return;
             }
         }
     }
-    void enforceLowerBound_2_lp(array[,] real y, real lower)
+    void enforceLowerBound_2_lp(array[,] real y, real lowerbound)
     {
         array[2] int dimensions = dims(y);
         for (i in 1:dimensions[1]) {
             for (j in 1:dimensions[2]) {
-                if (y[i, j] < lower) {
+                if (y[i, j] < lowerbound) {
                     target += negative_infinity();
                     return;
                 }
             }
         }
     }
-    void enforceLowerBound_3_lp(array[,,] real y, real lower)
+    void enforceLowerBound_3_lp(array[,,] real y, real lowerbound)
     {
         array[3] int dimensions = dims(y);
         for (i in 1:dimensions[1]) {
             for (j in 1:dimensions[2]) {
                 for (k in 1:dimensions[3]) {
-                    if (y[i, j, k] < lower) {
+                    if (y[i, j, k] < lowerbound) {
                         target += negative_infinity();
                         return;
                     }
@@ -1368,10 +1369,10 @@ LOG_PROB_HELPERS = r"""
             }
         }
     }
-    void enforceLowerBound_V_lp(vector y, real lower)
+    void enforceLowerBound_V_lp(vector y, real lowerbound)
     {
         for (i in 1:num_elements(y)) {
-            if (y[i] < lower) {
+            if (y[i] < lowerbound) {
                 target += negative_infinity();
                 return;
             }
@@ -1380,40 +1381,40 @@ LOG_PROB_HELPERS = r"""
 
     // Upper
 
-    void enforceUpperBound_R_lp(real y, real upper)
+    void enforceUpperBound_R_lp(real y, real upperbound)
     {
-        if (y > upper) {
+        if (y > upperbound) {
             target += negative_infinity();
         }
     }
-    void enforceUpperBound_A_lp(array[] real y, real upper)
+    void enforceUpperBound_A_lp(array[] real y, real upperbound)
     {
         for (i in 1:num_elements(y)) {
-            if (y[i] > upper) {
+            if (y[i] > upperbound) {
                 target += negative_infinity();
                 return;
             }
         }
     }
-    void enforceUpperBound_2_lp(array[,] real y, real upper)
+    void enforceUpperBound_2_lp(array[,] real y, real upperbound)
     {
         array[2] int dimensions = dims(y);
         for (i in 1:dimensions[1]) {
             for (j in 1:dimensions[2]) {
-                if (y[i, j] > upper) {
+                if (y[i, j] > upperbound) {
                     target += negative_infinity();
                     return;
                 }
             }
         }
     }
-    void enforceUpperBound_3_lp(array[,,] real y, real upper)
+    void enforceUpperBound_3_lp(array[,,] real y, real upperbound)
     {
         array[3] int dimensions = dims(y);
         for (i in 1:dimensions[1]) {
             for (j in 1:dimensions[2]) {
                 for (k in 1:dimensions[3]) {
-                    if (y[i, j, k] > upper) {
+                    if (y[i, j, k] > upperbound) {
                         target += negative_infinity();
                         return;
                     }
@@ -1421,10 +1422,10 @@ LOG_PROB_HELPERS = r"""
             }
         }
     }
-    void enforceUpperBound_V_lp(vector y, real upper)
+    void enforceUpperBound_V_lp(vector y, real upperbound)
     {
         for (i in 1:num_elements(y)) {
-            if (y[i] > upper) {
+            if (y[i] > upperbound) {
                 target += negative_infinity();
                 return;
             }
@@ -1433,38 +1434,38 @@ LOG_PROB_HELPERS = r"""
 
     // Range
 
-    void enforceRangeBounds_R_lp(real y, real lower, real upper)
+    void enforceRangeBounds_R_lp(real y, real lowerbound, real upperbound)
     {
-        if (y < lower || y > upper) {
+        if (y < lowerbound || y > upperbound) {
             target += negative_infinity();
         }
     }
-    void enforceRangeBounds_A_lp(array[] real y, real lower, real upper)
+    void enforceRangeBounds_A_lp(array[] real y, real lowerbound, real upperbound)
     {
         real value;
         for (i in 1:num_elements(y)) {
             value = y[i];  // lookup only once
-            if (value < lower || value > upper) {
+            if (value < lowerbound || value > upperbound) {
                 target += negative_infinity();
                 return;
             }
         }
     }
-    void enforceRangeBounds_2_lp(array[,] real y, real lower, real upper)
+    void enforceRangeBounds_2_lp(array[,] real y, real lowerbound, real upperbound)
     {
         array[2] int dimensions = dims(y);
         real value;
         for (i in 1:dimensions[1]) {
             for (j in 1:dimensions[2]) {
                 value = y[i, j];  // lookup only once
-                if (value < lower || value > upper) {
+                if (value < lowerbound || value > upperbound) {
                     target += negative_infinity();
                     return;
                 }
             }
         }
     }
-    void enforceRangeBounds_3_lp(array[,,] real y, real lower, real upper)
+    void enforceRangeBounds_3_lp(array[,,] real y, real lowerbound, real upperbound)
     {
         array[3] int dimensions = dims(y);
         real value;
@@ -1472,7 +1473,7 @@ LOG_PROB_HELPERS = r"""
             for (j in 1:dimensions[2]) {
                 for (k in 1:dimensions[3]) {
                     value = y[i, j, k];  // lookup only once
-                    if (value < lower || value > upper) {
+                    if (value < lowerbound || value > upperbound) {
                         target += negative_infinity();
                         return;
                     }
@@ -1480,12 +1481,12 @@ LOG_PROB_HELPERS = r"""
             }
         }
     }
-    void enforceRangeBounds_V_lp(vector y, real lower, real upper)
+    void enforceRangeBounds_V_lp(vector y, real lowerbound, real upperbound)
     {
         real value;
         for (i in 1:num_elements(y)) {
             value = y[i];  // lookup only once
-            if (value < lower || value > upper) {
+            if (value < lowerbound || value > upperbound) {
                 target += negative_infinity();
                 return;
             }
@@ -1525,18 +1526,18 @@ def sample_generic(
     """
     if any(vd.dimensions > 0 for vd in distribution_params):
         raise NotImplementedError(
-            "y={}, distribution_params={}".format(y, distribution_params)
+            f"y={y}, distribution_params={distribution_params}"
         )
     y.name = "y"
     call_params = [y] + distribution_params
     lower = REAL.clone()
-    lower.name = "lower"
+    lower.name = "lowerbound"
     upper = REAL.clone()
-    upper.name = "upper"
-    lpdf_func = "{}_lpdf".format(name_lower)
+    upper.name = "upperbound"
+    lpdf_func = f"{name_lower}_lpdf"
     cdf_prefix = cdf_prefix or name_lower
-    lcdf_func = "{}_lcdf".format(cdf_prefix)
-    lccdf_func = "{}_lccdf".format(cdf_prefix)
+    lcdf_func = f"{cdf_prefix}_lcdf"
+    lccdf_func = f"{cdf_prefix}_lccdf"
     if distribution_params:
         pdf_call_params = " | " + ", ".join(
             vd.name for vd in distribution_params
@@ -1580,17 +1581,17 @@ def sample_generic(
         # Define the correction PER SAMPLED VALUE.
         if method == SampleMethod.LOWER:
             code = f"""
-        real correction_per_value = {lccdf_func}(lower{cdf_call_params});
+        real correction_per_value = {lccdf_func}(lowerbound{cdf_call_params});
             """
         elif method == SampleMethod.UPPER:
             code = f"""
-        real correction_per_value = {lcdf_func}(upper{cdf_call_params});
+        real correction_per_value = {lcdf_func}(upperbound{cdf_call_params});
             """
         elif method == SampleMethod.RANGE:
             code = f"""
         real correction_per_value = log_diff_exp(
-            {lcdf_func}(upper{cdf_call_params}),
-            {lcdf_func}(lower{cdf_call_params}));
+            {lcdf_func}(upperbound{cdf_call_params}),
+            {lcdf_func}(lowerbound{cdf_call_params}));
             """
         else:
             raise AssertionError("bug")
@@ -1637,21 +1638,21 @@ def sample_generic(
         # Apply bounds checking
         if method == SampleMethod.LOWER:
             code += f"""
-        enforceLowerBound_{y.abbreviation}_lp(y, lower);
+        enforceLowerBound_{y.abbreviation}_lp(y, lowerbound);
             """
             funcname_extra = "LowerBound"
             call_params += [lower]
 
         elif method == SampleMethod.UPPER:
             code += f"""
-        enforceUpperBound_{y.abbreviation}_lp(y, upper);
+        enforceUpperBound_{y.abbreviation}_lp(y, upperbound);
             """
             funcname_extra = "UpperBound"
             call_params += [upper]
 
         elif method == SampleMethod.RANGE:
             code += f"""
-        enforceRangeBounds_{y.abbreviation}_lp(y, lower, upper);
+        enforceRangeBounds_{y.abbreviation}_lp(y, lowerbound, upperbound);
             """
             funcname_extra = "RangeBound"
             call_params += [lower, upper]
@@ -1661,11 +1662,8 @@ def sample_generic(
     else:
         raise AssertionError("bug")
 
-    funcname = "sample{name_caps}{funcname_extra}_{types}_lp".format(
-        name_caps=name_caps,
-        funcname_extra=funcname_extra,
-        types="".join(vd.abbreviation for vd in [y] + distribution_params),
-    )
+    typedefs = "".join(vd.abbreviation for vd in [y] + distribution_params)
+    funcname = f"sample{name_caps}{funcname_extra}_{typedefs}_lp"
     param_defs = ", ".join(f"{vd.typedef} {vd.name}" for vd in call_params)
     return (
         f"""
@@ -1691,11 +1689,11 @@ def sample_uniform(
         vd.dimensions > 1 for vd in distribution_params
     ):
         raise NotImplementedError(
-            "y={}, distribution_params={}".format(y, distribution_params)
+            f"y={y}, distribution_params={distribution_params}"
         )
     y.name = "y"
-    lower.name = "lower"
-    upper.name = "upper"
+    lower.name = "lowerbound"
+    upper.name = "upperbound"
 
     if y.dimensions == 3:
         code = r"""
@@ -1703,29 +1701,28 @@ def sample_uniform(
         for (i in 1:dimensions[1]) {
             for (j in 1:dimensions[2]) {
                 for (k in 1:dimensions[3]) {
-                    target += uniform_lpdf(y[i, j, k] | lower, upper);
+                    target += uniform_lpdf(y[i, j, k] | lowerbound, upperbound);
                 }
             }
         }
-        """
+        """  # noqa
     elif y.dimensions == 2:
         code = r"""
         for (i in 1:size(y)) {
-            target += uniform_lpdf(y[i] | lower, upper);
+            target += uniform_lpdf(y[i] | lowerbound, upperbound);
             // ... y[i] is a one-dimensional array
         }
         """
     else:  # vector, 1D array, real
         code = r"""
-        target += uniform_lpdf(y | lower, upper);
+        target += uniform_lpdf(y | lowerbound, upperbound);
         """
 
     call_params = [y, lower, upper]
-    funcname = "sampleUniform_{types}_lp".format(
-        types="".join(vd.abbreviation for vd in call_params)
-    )
+    typedefs="".join(vd.abbreviation for vd in call_params)
+    funcname = f"sampleUniform_{typedefs}_lp"
     param_defs = ", ".join(
-        "{} {}".format(vd.typedef, vd.name) for vd in call_params
+        f"{vd.typedef} {vd.name}" for vd in call_params
     )
 
     return f"""
@@ -1848,22 +1845,22 @@ STANDARD_NORMAL_SPECIALS = r"""
         sampleStdNormalLowerBound_R_lp(y, 0);
     }
 
-    void sampleStdNormalPositive_A_lp(array[] real y, real lower)
+    void sampleStdNormalPositive_A_lp(array[] real y, real lowerbound)
     {
         sampleStdNormalLowerBound_A_lp(y, 0);
     }
 
-    void sampleStdNormalPositive_2_lp(array[,] real y, real lower)
+    void sampleStdNormalPositive_2_lp(array[,] real y, real lowerbound)
     {
         sampleStdNormalLowerBound_2_lp(y, 0);
     }
 
-    void sampleStdNormalPositive_3_lp(array[,,] real y, real lower)
+    void sampleStdNormalPositive_3_lp(array[,,] real y, real lowerbound)
     {
         sampleStdNormalLowerBound_3_lp(y, 0);
     }
 
-    void sampleStdNormalPositive_V_lp(vector y, real lower)
+    void sampleStdNormalPositive_V_lp(vector y, real lowerbound)
     {
         sampleStdNormalLowerBound_V_lp(y, 0);
     }
@@ -2097,8 +2094,8 @@ def get_uniform_distribution() -> str:
         lower_ = lower_.clone()
         upper_ = upper_.clone()
         y_ = y_.clone()
-        lower_.name = "lower"
-        upper_.name = "upper"
+        lower_.name = "lowerbound"
+        upper_.name = "upperbound"
         code += sample_uniform(y=y_, lower=lower_, upper=upper_)
 
     code += comment("Sampling")
@@ -2221,16 +2218,16 @@ def make_reparam_normal(
     if (y.dimensions > 1 or y.singleton) and (
         not mu.singleton or not sigma.singleton
     ):
-        raise NotImplementedError("y={}, mu={}, sigma={}".format(y, mu, sigma))
+        raise NotImplementedError(f"y={y}, mu={mu}, sigma={sigma}")
     y.name = "y_unit_normal"
     mu.name = "mu"
     sigma.name = "sigma"
     call_params = [y, mu, sigma]
     original_call_params = call_params.copy()
     lower = REAL.clone()
-    lower.name = "lower"
+    lower.name = "lowerbound"
     upper = REAL.clone()
-    upper.name = "upper"
+    upper.name = "upperbound"
 
     using_lower = False
     using_upper = False
@@ -2259,17 +2256,13 @@ def make_reparam_normal(
         call_params += [lower]
         constraints += ", lower_transformed"
         calc_transformed_1 = (
-            "lower_transformed = (lower - mu{mu_i}) / sigma{sigma_i};".format(
-                mu_i=mu_i, sigma_i=sigma_i
-            )
+            f"lower_transformed = (lowerbound - mu{mu_i}) / sigma{sigma_i};"
         )
     if using_upper:
         call_params += [upper]
         constraints += ", upper_transformed"
         calc_transformed_2 = (
-            "upper_transformed = (upper - mu{mu_i}) / sigma{sigma_i};".format(
-                mu_i=mu_i, sigma_i=sigma_i
-            )
+            f"upper_transformed = (upperbound - mu{mu_i}) / sigma{sigma_i};"
         )
 
     # Variable declarations
@@ -2291,12 +2284,12 @@ def make_reparam_normal(
     elif y.dimensions == 2:
         code += """
         array[2] int dimensions = dims(y_unit_normal);
-        real result[dimensions[1], dimensions[2]];
+        array[dimensions[1], dimensions[2]] real result;
         """
     elif y.dimensions == 3:
         code += """
         array[3] int dimensions = dims(y_unit_normal);
-        real result[dimensions[1], dimensions[2], dimensions[3]];
+        array[dimensions[1], dimensions[2], dimensions[3]] real result;
         """
     else:
         raise AssertionError("bug")
@@ -2319,7 +2312,7 @@ def make_reparam_normal(
         }}
             """.format(
                 conditions=" || ".join(
-                    "num_elements({}) != length".format(x.name)
+                    f"num_elements({x.name}) != length"
                     for x in sized_dist_params
                 )
             )
@@ -2495,16 +2488,16 @@ def make_reparam_cauchy(
     if (y.dimensions > 1 or y.singleton) and (
         not mu.singleton or not sigma.singleton
     ):
-        raise NotImplementedError("y={}, mu={}, sigma={}".format(y, mu, sigma))
+        raise NotImplementedError(f"y={y}, mu={mu}, sigma={sigma}")
     y.name = "y_uniform"
     mu.name = "mu"
     sigma.name = "sigma"
     call_params = [y, mu, sigma]
     original_call_params = call_params.copy()
     lower = REAL.clone()
-    lower.name = "lower"
+    lower.name = "lowerbound"
     upper = REAL.clone()
-    upper.name = "upper"
+    upper.name = "upperbound"
 
     using_lower = False
     using_upper = False
@@ -2532,14 +2525,16 @@ def make_reparam_cauchy(
     if using_lower:
         call_params += [lower]
         constraints += ", lower_transformed"
-        calc_transformed_1 = "lower_transformed = atan((lower - mu{mu_i}) / sigma{sigma_i});".format(  # noqa
-            mu_i=mu_i, sigma_i=sigma_i
+        calc_transformed_1 = (
+            f"lower_transformed = "
+            f"atan((lowerbound - mu{mu_i}) / sigma{sigma_i});"
         )
     if using_upper:
         call_params += [upper]
         constraints += ", upper_transformed"
-        calc_transformed_2 = "upper_transformed = atan((upper - mu{mu_i}) / sigma{sigma_i});".format(  # noqa
-            mu_i=mu_i, sigma_i=sigma_i
+        calc_transformed_2 = (
+            f"upper_transformed = "
+            f"atan((upperbound - mu{mu_i}) / sigma{sigma_i});"
         )
 
     # Variable declarations
@@ -2561,12 +2556,12 @@ def make_reparam_cauchy(
     elif y.dimensions == 2:
         code += """
         array[2] int dimensions = dims(y_uniform);
-        real result[dimensions[1], dimensions[2]];
+        array[dimensions[1], dimensions[2]] real result;
         """
     elif y.dimensions == 3:
         code += """
         array[3] int dimensions = dims(y_uniform);
-        real result[dimensions[1], dimensions[2], dimensions[3]];
+        array[dimensions[1], dimensions[2], dimensions[3]] real result;
         """
     else:
         raise AssertionError("bug")
@@ -2589,7 +2584,7 @@ def make_reparam_cauchy(
         }}
             """.format(
                 conditions=" || ".join(
-                    "num_elements({}) != length".format(x.name)
+                    f"num_elements({x.name}) != length"
                     for x in sized_dist_params
                 )
             )
@@ -2812,7 +2807,7 @@ By Rudolf Cardinal. Created 2018-02-09.
     parser.add_argument(
         "--filename",
         type=str,
-        default="commonfunc.stan",
+        default=DEFAULT_COMMONFUNC_OUTPUT,
         help="Output filename",
     )
     args = parser.parse_args()
@@ -2820,7 +2815,7 @@ By Rudolf Cardinal. Created 2018-02-09.
     code = get_code()
     with open(args.filename, "w") as f:
         f.write(code)
-    print("Written to {}".format(args.filename))
+    print(f"Written to {args.filename}")
 
 
 if __name__ == "__main__":
