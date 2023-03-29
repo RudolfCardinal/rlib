@@ -1,7 +1,10 @@
 # miscstat.R
 
-if (!require("pacman")) install.packages("pacman")
-pacman::p_load(
+tmp_require_package_namespace <- function(...) {
+    packages <- as.character(match.call(expand.dots = FALSE)[[2]])
+    for (p in packages) if (!requireNamespace(p)) install.packages(p)
+}
+tmp_require_package_namespace(
     data.table,
     ggplot2,
     lmerTest,
@@ -11,7 +14,7 @@ pacman::p_load(
     multcomp,
     plyr
 )
-
+rm(tmp_require_package_namespace)
 
 
 # =============================================================================
