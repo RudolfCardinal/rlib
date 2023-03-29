@@ -106,7 +106,9 @@ RUN install2.r --error \
     MCMCglmm \
     # ... MCMC generalized linear mixed models
     moments \
-    # ... e.g. skewness, kurosis
+    # ... e.g. skewness, kurosis \
+    multcomp \
+    # ... multiple comparisons for generalized linear models etc.
     nlme \
     # ... nonlinear mixed effects models
     nortest \

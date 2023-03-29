@@ -32,6 +32,7 @@ services:
         volumes:
             # './path/on/docker/host:/path/inside/container'
             - ${HOME}:/userhome
+            - ${PWD}:/userdata
 
 
 # =============================================================================
@@ -48,3 +49,4 @@ services:
 # Directories will include:
 #   /cardinal_rlib      # from the Dockerfile
 #   /userhome           # mounted from docker-compose.yml
+#   /userdata           # mounted from docker-compose.yml
