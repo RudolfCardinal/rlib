@@ -6,9 +6,12 @@
 # characteristic curve) for Stan.
 
 
-library(data.table)
-library(ggplot2)
-library(pROC)  # reference implementations
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+    data.table,
+    ggplot2,
+    pROC  # reference implementations
+)
 
 
 auroc <- function(binary_outcome, probability)
