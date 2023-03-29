@@ -1,6 +1,10 @@
 # datetimefunc.R
 
-requireNamespace("lubridate")
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+    lubridate
+)
+
 
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
@@ -22,8 +26,8 @@ datetimefunc$calendar_age_lubridate_1 <- function(dob, now) {
     #     interval_period %% lubridate::years(1) %/% lubridate::weeks(1)
     # )
     # remaining_days <- (
-    #     interval_period 
-    #     %% lubridate::years(1) 
+    #     interval_period
+    #     %% lubridate::years(1)
     #     %% lubridate::weeks(1)
     #     %/% lubridate::days(1)
     # )

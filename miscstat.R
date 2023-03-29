@@ -1,13 +1,17 @@
 # miscstat.R
 
-requireNamespace("data.table")
-requireNamespace("ggplot2")
-requireNamespace("lmerTest")
-requireNamespace("emmeans")
-requireNamespace("MASS")
-requireNamespace("moments")
-requireNamespace("multcomp")
-requireNamespace("plyr")
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+    data.table,
+    ggplot2,
+    lmerTest,
+    emmeans,
+    MASS,
+    moments,
+    multcomp,
+    plyr
+)
+
 
 
 # =============================================================================

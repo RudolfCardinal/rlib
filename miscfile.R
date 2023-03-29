@@ -1,6 +1,10 @@
 # miscfile.R
 
-requireNamespace("data.table")
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+    data.table
+)
+
 
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786

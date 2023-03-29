@@ -1,14 +1,17 @@
 # mapfunc.R
 
 # Packages:
-requireNamespace("data.table")
-requireNamespace("broom")
-requireNamespace("ggplot2")
-requireNamespace("maptools")
-requireNamespace("raster")
-requireNamespace("rgdal")  # Linux: use "sudo apt install libgdal-dev libproj-dev" before install.packages("rgdal")
-requireNamespace("rgeos")  # Linux: use "sudo apt install libgeos-dev" before install.packages("raster")
-requireNamespace("sp")
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+    data.table,
+    broom,
+    ggplot2,
+    maptools,
+    raster,  # Linux: use "sudo apt install libgeos-dev" first
+    rgdal,  # Linux: use "sudo apt install libgdal-dev libproj-dev" first
+    rgeos,
+    sp
+)
 
 # Try this, for our local ones:
 # requireNamespace("miscfile")  # nope, fails

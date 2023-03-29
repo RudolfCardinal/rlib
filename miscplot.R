@@ -1,12 +1,14 @@
 # miscplot.R
 
-requireNamespace("grid")  # for gpar, etc.
-requireNamespace("ggplot2")
-
-library(gridExtra)
-#library(extrafont) # install with sudo. Then (with sudo R) run font_import() then loadfonts(). Then view with fonts() or fonttable(). See https://github.com/wch/extrafont
-library(Cairo)
-library(ggplot2)
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+    grid,  # for gpar, etc.
+    ggplot2,
+    gridExtra,
+    # extrafont,  # install with sudo. Then (with sudo R) run font_import() then loadfonts(). Then view with fonts() or fonttable(). See https://github.com/wch/extrafont
+    Cairo,
+    ggplot2
+)
 
 
 #==============================================================================

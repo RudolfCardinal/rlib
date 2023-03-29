@@ -1,6 +1,10 @@
 # debugfunc.R
 
-library(xtermStyle)
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+    xtermStyle
+)
+
 
 # =============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786

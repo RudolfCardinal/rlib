@@ -1,6 +1,9 @@
 #!/usr/bin/env Rscript
 
-requireNamespace("gsubfn")
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+    gsubfn
+)
 
 
 # =============================================================================

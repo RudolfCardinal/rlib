@@ -1,7 +1,11 @@
 # miscvisualize.R
 
-requireNamespace("arm")
-library("ggplot2")
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+    arm,
+    ggplot2
+)
+
 
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786

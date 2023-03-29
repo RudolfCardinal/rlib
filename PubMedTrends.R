@@ -1,10 +1,14 @@
 # http://rpsychologist.com/an-r-script-to-automatically-look-at-pubmed-citation-counts-by-year-of-publication/
 
-library("RCurl") # before RCurl installation: sudo apt-get install libcurl3-dev
-library("XML")
-library("plyr")
-library("ggplot2")
-library("directlabels")
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+    RCurl,  # before RCurl installation: sudo apt-get install libcurl3-dev
+    XML,
+    plyr,
+    ggplot2,
+    directlabels
+)
+
 
 #==============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786

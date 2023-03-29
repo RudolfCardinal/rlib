@@ -6,15 +6,18 @@
 # https://github.com/Rdatatable/data.table/blob/master/NEWS.md#bug-fixes-5
 
 
-library(bridgesampling)
-library(coda)
-library(data.table)
-library(ggplot2)
-library(matrixStats)
-library(parallel)
-library(reshape)
-library(rstan)
-library(stringr)
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+    bridgesampling,
+    coda,
+    data.table,
+    ggplot2,
+    matrixStats,
+    parallel,
+    reshape,
+    rstan,
+    stringr
+)
 
 
 #==============================================================================

@@ -1,0 +1,41 @@
+---
+
+# =============================================================================
+# docker-compose file syntax version
+# =============================================================================
+
+version: "3.5"
+
+
+# =============================================================================
+# Containers (services)
+# =============================================================================
+
+services:
+
+    # -------------------------------------------------------------------------
+    # R container, aimed at the host's filesystem
+    # -------------------------------------------------------------------------
+
+    r_container:
+        # Build a container from a Dockerfile.
+        build:
+            # Context for Docker to build the image (relative to this file).
+            context: .
+
+            # Filename of the Dockerfile to use, relative to the context.
+            dockerfile: Dockerfile
+
+        # Specify volumes by name, having explored the default container to
+        # find out what it creates (and where it mounts it) otherwise.
+        # (You can't have no volume.)
+        volumes:
+            # './path/on/docker/host:/path/inside/container'
+            - ~:/home
+
+
+# =============================================================================
+# Launch with:
+# =============================================================================
+
+# docker-compose up
