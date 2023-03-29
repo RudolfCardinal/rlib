@@ -6,6 +6,7 @@ MAINTAINER "Rudolf Cardinal" rudolf@pobox.com
 # https://github.com/rocker-org/geospatial/blob/master/Dockerfile
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        cmake \
         lbzip2 \
         libfftw3-dev \
         libgdal-dev \

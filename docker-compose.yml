@@ -31,11 +31,20 @@ services:
         # (You can't have no volume.)
         volumes:
             # './path/on/docker/host:/path/inside/container'
-            - ~:/home
+            - ${HOME}:/userhome
 
 
 # =============================================================================
 # Launch with:
 # =============================================================================
 
-# docker-compose up
+# In one prompt:
+#   docker-compose up
+#
+# And in another:
+#   docker container ls  # check container name
+#   docker exec -it rlib_r_container_1 bash
+#
+# Directories will include:
+#   /cardinal_rlib      # from the Dockerfile
+#   /userhome           # mounted from docker-compose.yml
