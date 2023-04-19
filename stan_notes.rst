@@ -169,11 +169,37 @@ General Stan/C++ coding
             responded_right ~ bernoulli(p_choose_rhs);
         }
 
+
+Stan versions of note
+---------------------
+
+- Array notation changes from e.g. ``int n[5]`` (up to v2.26) to
+  ``array[5] int n`` (v2.27 onwards). See
+
+  - https://mc-stan.org/docs/2_26/reference-manual/array-data-types-section.html
+  - https://mc-stan.org/docs/2_27/reference-manual/array-data-types-section.html
+
+
+Modelling choices
+-----------------
+
+The two-choice situation
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+- For a two-choice situation, you can model ``p_do_something`` against the
+  binary data ``did_something``, via the Bernoulli distribution, or log
+  equivalent. For a choice like "left or right", you can model
+  ``p_choose_left``.
+
 - For the ``y ~ bernoulli(theta)`` distribution, ``y`` is in {0, 1} and
   ``theta`` is a probability in the range [0, 1]. However, if you start with
   log odds, use ``y ~ bernoulli_logit(alpha)``, where alpha is a logit (log
   odds) in the range [-inf, +inf]. This is more efficient than converting the
   log odds into a probability and then using ``bernoulli()``.
+
+
+Softmax
+~~~~~~~
 
 - For softmax, there is no neat mapping of the softmax coefficients to to
   "logit space". Stan provides the `softmax()
@@ -275,6 +301,76 @@ General Stan/C++ coding
     concrete2b = {beta:1.0, X[1]:0.5, X[2]:0.5}
     print(p2b.evalf(subs=concrete2b))  # 0.5
     print(logit(p2b).evalf(subs=concrete2b))  # 0
+
+
+The multi-way choice situation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- For a multi-way choice, the equivalent is a collection of *k* probabilities
+  that add up to 1, but now k > 2, so there are ``k - 1`` probabilities to be
+  modelled. Stan's concept of "a number of non-negative things that add up to
+  1" is called a unit simplex:
+  https://mc-stan.org/docs/reference-manual/vector-and-matrix-data-types.html.
+  The relevant distribution is likely the multinomial,
+  https://mc-stan.org/docs/functions-reference/multinomial-distribution.html.
+  With ``multinomial()``:
+
+  .. code-block:: C++
+
+        // UNCHECKED
+
+        data {
+            int<lower=2> K;  // number of choice options
+            int<lower=1> T;  // number of trials
+
+            array[T] int<lower=1, upper=K> choice;
+        }
+        model {
+            vector[K] theta;  // choice tendencies or strengths
+            simplex[K] p_choose;  // a K-simplex
+            vector[K] y;  // choice for a single trial
+            for (t in 1:T) {
+                // Calculate theta somehow.
+
+                p_choose = softmax(theta);
+
+                // Here we are predicting only a single trial, so y must add
+                // up to 1:
+                y = rep_vector(0, K);
+                y[choice[t]] = 1;
+
+                // Fit to behaviour:
+                y ~ multinomial(p_choose);
+            }
+        }
+
+  Alternatively, with ``multinomial_logit()``, in which the softmax step is
+  implicit
+  (https://mc-stan.org/docs/functions-reference/multinomial-distribution-logit-parameterization.html):
+
+  .. code-block:: C++
+
+        // UNCHECKED
+
+        data {
+            int<lower=2> K;  // number of choice options
+            int<lower=1> T;  // number of trials
+
+            array[T] int<lower=1, upper=K> choice;
+        }
+        model {
+            vector[K] theta;  // choice tendencies or strengths
+            vector[K] y;  // choice for a single trial
+            for (t in 1:T) {
+                // Calculate theta somehow.
+
+                y = rep_vector(0, K);
+                y[choice[t]] = 1;
+
+                // Fit to behaviour:
+                y ~ multinomial_logit(theta);
+            }
+        }
 
 
 Parameterizing the model
