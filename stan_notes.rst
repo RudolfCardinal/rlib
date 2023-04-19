@@ -73,7 +73,7 @@ The old ``rstan::set_cppo()`` function is defunct and advises using your
 General Stan/C++ coding
 -----------------------
 
-- Use fewer C++ statements; Stan applies an overhead to each.
+- Use fewer C++ statements; Stan applies a (small) overhead to each.
 
   If you're thinking of making a cut-down model by setting parameters to zero
   in code for a more complex model, be aware that this might be much slower
@@ -132,6 +132,10 @@ General Stan/C++ coding
   **keep constraints** if unsure, at least for now. This may improve with
   future versions of Stan.
 
+
+Vectorization and sampling
+--------------------------
+
 - Vectorize everything that you can.
 
 - In particular, vectorize sampling statements.
@@ -169,11 +173,33 @@ General Stan/C++ coding
             responded_right ~ bernoulli(p_choose_rhs);
         }
 
-- For the ``y ~ bernoulli(theta)`` distribution, ``y`` is in {0, 1} and
-  ``theta`` is a probability in the range [0, 1]. However, if you start with
-  log odds, use ``y ~ bernoulli_logit(alpha)``, where alpha is a logit (log
-  odds) in the range [-inf, +inf]. This is more efficient than converting the
-  log odds into a probability and then using ``bernoulli()``.
+- **Probabilities.** For the ``y ~ bernoulli(theta)`` distribution, ``y`` is in
+  {0, 1} and ``theta`` is a probability in the range [0, 1].
+
+  With and without bridge sampling compatibility, equivalents are:
+
+  .. code:: C++
+
+    chose_left ~ bernoulli(p_choose_left);  // standard Stan
+    target += bernoulli_lpmf(chose_left | p_choose_left);  // for bridgesampling
+    sampleBernoulli_AV_lp(chose_left, p_choose_left);  // RNC bridgesampling shorthand
+
+- **Log odds.** However, if you start with log odds, use
+  ``y ~ bernoulli_logit(alpha)``, where alpha is a logit (log odds) in the
+  range [-inf, +inf]. This is more efficient than converting the log odds into
+  a probability and then using ``bernoulli()``.
+
+  Some versions:
+
+  .. code:: C++
+
+    chose_left ~ bernoulli_logit(log_odds_choose_left);  // standard Stan
+    target += bernoulli_logit_lpmf(chose_left | log_odds_choose_left);  // for bridgesampling
+    sampleBernoulliLogit_AV_lp(chose_left, log_odds_choose_left);  // RNC bridgesampling shorthand
+
+
+Softmax
+-------
 
 - For softmax, there is no neat mapping of the softmax coefficients to to
   "logit space". Stan provides the `softmax()
@@ -606,7 +632,7 @@ example, using a subjects-within-groups design:
 
 
 The interpretation of transformed parameters
---------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Be careful not to misinterpret transformed parameters.
 
@@ -863,8 +889,8 @@ are pulled into my ``commonfunc.stan``. I've implemented:
     qwiener()  # maybe pointless!
 
 So, for a terse-parameter coding of a between-group comparison (e.g. for a
-reinforcement learning task with parameters alpha and beta), we could do
-something like this:
+reinforcement learning task with parameters ``alpha`` and ``beta``), we could
+do something like this:
 
 .. code-block:: C++
 
@@ -887,17 +913,20 @@ something like this:
     }
     parameters {
         array[N_PARAMS, N_GROUPS] real raw_group_mean;
-        array[N_PARAM] real<lower=0> raw_group_sd;  // homogeneity across groups
+        array[N_PARAM] real<lower=0> raw_group_sd;  // homogeneity of variance
         array[N_PARAM, N_SUBJECTS] real stdnormal_subject_effect;
     }
+
+    // BETWEEN-GROUP VERSION -- ONE SUBJECT ONLY EVER IN ONE GROUP:
     transformed parameters {
         array[N_SUBJECTS] real subject_alpha;
         array[N_SUBJECTS] real subject_beta;
         for (p in 1:N_PARAMS) {
             for (s in 1:N_SUBJECTS) {
+                int g = group[s];
                 // Random variable in normal space:
                 real raw_x =
-                    raw_group_mean[p, group[s]]
+                    raw_group_mean[p, g]
                     + raw_group_sd[p] * stdnormal_subject_effect[p, s];
                 // Corresponding cumulative probability:
                 real raw_p = Phi_approx(raw_x);
@@ -918,12 +947,46 @@ something like this:
 
         // ... implement RL code here (or in "model")
     }
+
+    // WITHIN-SUBJECTS VERSION -- EACH SUBJECT IN ALL GROUPS (CHANGES MARKED):
+    transformed parameters {
+        array[N_SUBJECTS, N_GROUPS] real subject_group_alpha;       // <-------
+        array[N_SUBJECTS, N_GROUPS] real subject_group_beta;        // <-------
+        for (p in 1:N_PARAMS) {
+            for (s in 1:N_SUBJECTS) {
+                for (g in 1:N_GROUPS) {                             // <-------
+                    // Random variable in normal space:
+                    real raw_x =
+                        raw_group_mean[p, g]
+                        + raw_group_sd[p] * stdnormal_subject_effect[p, s];
+                    // Corresponding cumulative probability:
+                    real raw_p = Phi_approx(raw_x);
+                    // Convert via our target prior distribution:
+                    if (param == PARAM_ALPHA) {
+                        subject_group_alpha[s, g] = qbeta(          // <-------
+                            raw_p, PRIOR_BETA_SHAPE1, PRIOR_BETA_SHAPE2
+                        );
+                    } else if (param == PARAM_BETA) {
+                        subject_group_beta[s, g] = qgamma(          // <-------
+                            raw_p, PRIOR_GAMMA_ALPHA, PRIOR_GAMMA_BETA
+                        );
+                    } else {
+                        reject("bug");
+                    }
+                }
+            }
+        }
+
+        // ... implement RL code here (or in "model")
+    }
+
     model {
         raw_group_mean ~ std_normal();
         raw_group_sd ~ normal(0, PRIOR_HALF_NORMAL_SD);  // half-normal
         stdnormal_subject_effect ~ std_normal();
 
         // ... implement RL code here (or in "transformed parameters")
+        // ... perform final fit to behaviour here
     }
     generated quantities {
         array[N_GROUPS] group_alpha;
@@ -942,6 +1005,10 @@ something like this:
         }
         // ... now do group differences in this space if desired
     }
+
+
+**CURRENTLY THINKING ABOUT:** Any bridgesampling implications?
+Just fix that half-normal sampling?
 
 
 Group-level testing
@@ -1508,7 +1575,7 @@ you need. Here we'll aim for version 2.48.4 on an x86_64 architecture.
 
     # Download the .deb package:
     mkdir -p "${INSTALLDIR}"
-    wget "http://ftp.uk.debian.org/debian/pool/main/u/unison/${DEBFILE}" -P "${INSTALLDIR}"
+    wget "https://ftp.uk.debian.org/debian/pool/main/u/unison/${DEBFILE}" -P "${INSTALLDIR}"
 
     # Install:
     mkdir -p "${UNISONDIR}"
