@@ -177,10 +177,14 @@ Vectorization and sampling
 Stan versions of note
 ---------------------
 
-- Array notation changes from e.g. ``int n[5]`` (up to v2.26) to
-  ``array[5] int n`` (v2.27 onwards). See
+- Array notation changes from e.g. ``int n[5]`` (before v2.26) to
+  ``array[5] int n`` (v2.26 onwards). Support for old syntax due to be removed
+  in v2.32. See
 
   - https://mc-stan.org/docs/2_26/reference-manual/array-data-types-section.html
+    ... note v2.26 docs reporting old syntax, but
+    https://mc-stan.org/docs/2_29/reference-manual/brackets-array-syntax.html
+    clarifies;
   - https://mc-stan.org/docs/2_27/reference-manual/array-data-types-section.html
 
 
