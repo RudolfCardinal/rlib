@@ -188,6 +188,15 @@ Stan versions of note
   - https://mc-stan.org/docs/2_27/reference-manual/array-data-types-section.html
 
 
+Which Stan version/code was used for a fit?
+-------------------------------------------
+
+.. code-block:: R
+
+    cat(fit@stanmodel@model_code)  # show Stan code
+    cat(fit@stanmodel@model_cpp$model_cppcode)  # show C++ with Stan version
+
+
 Modelling choices
 -----------------
 
