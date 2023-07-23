@@ -189,7 +189,7 @@ def main() -> None:
     cmd_bash = "bash"
     cmd_r = "R"
     cmd_rscript = "Rscript"
-    cmd_rstudio = "rstudio"
+    cmd_rstudio = "RStudio"
 
     logging.basicConfig(level=logging.DEBUG)
     parser = argparse.ArgumentParser(
