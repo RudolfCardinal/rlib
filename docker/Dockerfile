@@ -23,7 +23,7 @@ MAINTAINER "Rudolf Cardinal" rudolf@pobox.com
 # =============================================================================
 
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
         apt-utils \
         cmake \
         ed \
