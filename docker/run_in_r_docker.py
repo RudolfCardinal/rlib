@@ -206,15 +206,16 @@ Commands:
     Launch a bash shell within the Docker container, interactively, as root.
 
 - {cmd_r}
-    Launch R within the Docker container, interactively, as the {DOCKER_R_USER}
-    user.
+    Launch R within the Docker container, interactively (as the root user).
 
 - {cmd_rscript} SCRIPT [ARGS...]
-    Launch an R script (via the Rscript tool), with optional arguments, as the
-    {DOCKER_R_USER} user.
+    Launch an R script via the Rscript tool), with optional arguments (as the
+    root user).
 
 - {cmd_rstudio}
-    Launch RStudio as a web service, via the {DOCKER_R_USER} user.
+    Launch RStudio as a web service (via the root user and then the
+    {DOCKER_R_USER} user).
+
 """,
     )
     parser.add_argument(
