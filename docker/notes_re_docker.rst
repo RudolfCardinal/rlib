@@ -1,3 +1,21 @@
+Quick start with Docker
+=======================
+
+- Ensure Docker is installed.
+- Ensure Python 3.7+ is installed.
+- Try
+
+  .. code-block:: bash
+
+    ./run_in_r_docker.py --help
+
+  or
+
+  .. code-block:: bash
+
+    python3 run_in_r_docker.py --help
+
+
 Alternative Docker Compose approach (abandoned)
 ===============================================
 

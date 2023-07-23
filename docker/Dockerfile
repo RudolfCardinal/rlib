@@ -56,7 +56,7 @@ RUN apt-get update \
 
 
 # =============================================================================
-# Set up default R user's config -- neeeded for building packages
+# Set up default (root) R user's config -- neeeded for building packages
 # =============================================================================
 
 RUN mkdir -p $HOME/.R/ \
@@ -66,6 +66,8 @@ RUN mkdir -p $HOME/.R/ \
 # =============================================================================
 # Install R packages.
 # =============================================================================
+# Note also that installation as root means that packages are available to all
+# users.
 
 # Already available from the installation to date:
 #
@@ -224,14 +226,6 @@ RUN installGithub.r \
 
 
 # =============================================================================
-# Configure user settings: after package installation
-# =============================================================================
-
-RUN echo "rstan::rstan_options(auto_write = TRUE)\n" >> $HOME/.Rprofile \
-    && echo "options(mc.cores = parallel::detectCores())\n" >> $HOME/.Rprofile
-
-
-# =============================================================================
 # Copy our library files
 # =============================================================================
 
@@ -243,12 +237,49 @@ COPY . .
 # - However, "." means "the context", not "the Dockerfile directory", so all is
 #   well. We specify this Dockerfile by filename, and use the context of the
 #   parent directory.
-
 WORKDIR /
 
+
+# =============================================================================
+# Configure user settings: after package installation
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Further config for root user.
+# -----------------------------------------------------------------------------
+
+# $HOME is currently /root, when seen within RUN commands.
+# (However, not within WORKDIR commands, I think! See below.)
+
+RUN echo "rstan::rstan_options(auto_write = TRUE)\n" >> $HOME/.Rprofile \
+    && echo "options(mc.cores = parallel::detectCores())\n" >> $HOME/.Rprofile
+
+# -----------------------------------------------------------------------------
+# Config for rstudio user. (This is pre-created by the parent image.)
+# -----------------------------------------------------------------------------
+
+USER rstudio
+
+RUN mkdir -p $HOME/.R/ \
+    && echo "CXXFLAGS=-O3 -mtune=native -march=native -Wno-unused-variable -Wno-unused-function -flto -ffat-lto-objects  -Wno-unused-local-typedefs -Wno-ignored-attributes -Wno-deprecated-declarations\n" >> $HOME/.R/Makevars \
+    && echo "rstan::rstan_options(auto_write = TRUE)\n" >> $HOME/.Rprofile \
+    && echo "options(mc.cores = parallel::detectCores())\n" >> $HOME/.Rprofile
+
+# I think WORKDIR does not respect the $HOME variable, which appears blank in
+# this context.
+WORKDIR /home/rstudio/.config/rstudio
+# Set our RStudio preferences.
+COPY docker/rstudio-prefs.json rstudio-prefs.json
+
+# -----------------------------------------------------------------------------
+# Reset to root user/directory.
+# -----------------------------------------------------------------------------
+
+USER root
+WORKDIR /
 
 # =============================================================================
 # Done.
 # =============================================================================
 
-# See launch scripts for building/testing.
+# See launch script for building/testing.

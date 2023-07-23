@@ -34,6 +34,7 @@ DOCKER_RSTUDIO_PORT = 8787  # default TCP/IP port for RStudio (do not change)
 DEFAULT_HOST_RSTUDIO_PORT = 8787
 SEP = "=" * 79
 DOCKER_CMD = "docker"
+DOCKER_R_USER = "rstudio"
 
 
 # =============================================================================
@@ -44,7 +45,7 @@ THIS_SCRIPT_DIR = dirname(abspath(__file__))
 DOCKERFILE = join(THIS_SCRIPT_DIR, "Dockerfile")
 CONTEXT = abspath(join(THIS_SCRIPT_DIR, pardir))
 
-DEFAULT_DOCKER_DATA_DIR = "/data"
+DEFAULT_DOCKER_DATA_DIR = "/data"  # also matches rstudio-prefs.json
 
 
 # =============================================================================
@@ -136,6 +137,7 @@ def docker_run(
     mounts: List[VolumeMount] = None,
     envvars: Dict[str, str] = None,
     ports_docker_to_host: Dict[int, int] = None,
+    user: str = None,
 ) -> None:
     """
     Run a command in the Docker environment.
@@ -168,6 +170,8 @@ def docker_run(
     if rm:
         # Remove container afterwards (stops hard disk clogging up).
         cmdargs.append("--rm")
+    if user:
+        cmdargs += ["--user", user]
     cmdargs.append(IMAGE)  # Image to run with
     cmdargs += cmd
     # If the command is missing, the image's default command is run.
@@ -199,16 +203,18 @@ def main() -> None:
 Commands:
 
 - {cmd_bash}
-    Launch a bash shell within the Docker container, interactively.
+    Launch a bash shell within the Docker container, interactively, as root.
 
 - {cmd_r}
-    Launch R within the Docker container, interactively.
+    Launch R within the Docker container, interactively, as the {DOCKER_R_USER}
+    user.
 
 - {cmd_rscript} SCRIPT [ARGS...]
-    Launch an R script (via the Rscript tool), with optional arguments.
+    Launch an R script (via the Rscript tool), with optional arguments, as the
+    {DOCKER_R_USER} user.
 
 - {cmd_rstudio}
-    Launch RStudio as a web service.
+    Launch RStudio as a web service, via the {DOCKER_R_USER} user.
 """,
     )
     parser.add_argument(
@@ -284,7 +290,9 @@ Commands:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         announce("Starting R inside Docker container.")
         docker_run(
-            ["bash", "-c", f"cd {args.dockerdata!r} && R"], mounts=mounts
+            ["bash", "-c", f"cd {args.dockerdata!r} && R"],
+            mounts=mounts,
+            # unnecessary #  user=DOCKER_R_USER
         )
     elif args.command == cmd_rscript:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -314,6 +322,7 @@ Commands:
         docker_run(
             ["bash", "-c", f"cd {args.dockerdata!r} && Rscript " + textargs],
             mounts=mounts,
+            # unnecessary #  user=DOCKER_R_USER
         )
     elif args.command == cmd_rstudio:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -321,6 +330,7 @@ Commands:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         pw = args.password
         if not pw:
+            announce("Please provide a temporary password for this session")
             done = False
             while not done:
                 pw = getpass("Enter a password for RStudio: ")
@@ -344,6 +354,7 @@ Commands:
             mounts=mounts,
             envvars=dict(PASSWORD=pw),
             ports_docker_to_host={DOCKER_RSTUDIO_PORT: args.port},
+            # nope, fails permissions  # user=DOCKER_R_USER,
         )
         # No command: the rocker/verse image runs RStudio as its default
         # command.
