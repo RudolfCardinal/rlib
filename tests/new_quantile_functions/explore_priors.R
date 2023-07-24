@@ -307,7 +307,7 @@ ahn2017_constrained <- function(n, lower = 0, upper = 1) {
     # 0.2) for SDs.
     #
     # See also my ``stan_notes.rst`` for discussion of half-normal versus
-    # half-Cauchy for SD priors.
+    # half-Cauchy for SD new_quantile_functions.
 
     group_mean <- std_normal(n)
     # intersubject_sd <- 1e-5  # for exploring removing this effect!

@@ -174,6 +174,18 @@ Vectorization and sampling
         }
 
 
+Prefer generated quantities where possible
+------------------------------------------
+
+The "generated quantities" block is called less often
+(https://mc-stan.org/docs/reference-manual/overview-of-stans-program-blocks.html).
+Therefore, if you can, calculated in "generated quantities". For example, if
+you have to save choice probabilities anyway (e.g. in "transformed parameters",
+and are using them to calculate an area under the receiver operating
+characteristic curve (AUROC) measure, put that AUROC calculation in "generated
+quantities".
+
+
 Stan versions of note
 ---------------------
 
@@ -186,6 +198,27 @@ Stan versions of note
     https://mc-stan.org/docs/2_29/reference-manual/brackets-array-syntax.html
     clarifies;
   - https://mc-stan.org/docs/2_27/reference-manual/array-data-types-section.html
+
+- Stan used to require variables to be declared (or declared-and-defined)
+  before any other statements in a scope; e.g.
+  https://betanalpha.github.io/assets/case_studies/stan_intro.html (section
+  4.2.4):
+
+    "Unlike in most other imperative programming languages, in the Stan
+    Modeling Language local variables have to be defined at the beginning of
+    each scope before any other non-declarative statements. For example the
+    following code will not compile because the second statement is not a
+    variable declaration.
+
+    .. code-block:: c++
+
+        {
+            real variable1 = 5;
+            variable1 /= 2;
+            real variable2 = exp(variable1);
+        }
+
+  However, by Stan 2.26.21, this limitation has been removed.
 
 
 Modelling choices
@@ -1015,21 +1048,21 @@ do something like this:
     }
     parameters {
         array[N_PARAMS, N_GROUPS] real raw_group_mean;
-        array[N_PARAM] real<lower=0> raw_group_sd;  // homogeneity of variance
-        array[N_PARAM, N_SUBJECTS] real stdnormal_subject_effect;
+        array[N_PARAMS] real<lower=0> raw_group_sd;  // homogeneity of variance
+        array[N_PARAMS, N_SUBJECTS] real stdnormal_subject_effect;
     }
 
     // BETWEEN-GROUP VERSION -- ONE SUBJECT ONLY EVER IN ONE GROUP:
     transformed parameters {
         array[N_SUBJECTS] real subject_alpha;
         array[N_SUBJECTS] real subject_beta;
-        for (p in 1:N_PARAMS) {
+        for (param in 1:N_PARAMS) {
             for (s in 1:N_SUBJECTS) {
                 int g = group[s];
                 // Random variable in normal space:
                 real raw_x =
-                    raw_group_mean[p, g]
-                    + raw_group_sd[p] * stdnormal_subject_effect[p, s];
+                    raw_group_mean[param, g]
+                    + raw_group_sd[param] * stdnormal_subject_effect[param, s];
                 // Corresponding cumulative probability:
                 real raw_p = Phi_approx(raw_x);
                 // Convert via our target prior distribution:
@@ -1054,13 +1087,13 @@ do something like this:
     transformed parameters {
         array[N_SUBJECTS, N_GROUPS] real subject_group_alpha;       // <-------
         array[N_SUBJECTS, N_GROUPS] real subject_group_beta;        // <-------
-        for (p in 1:N_PARAMS) {
+        for (param in 1:N_PARAMS) {
             for (s in 1:N_SUBJECTS) {
                 for (g in 1:N_GROUPS) {                             // <-------
                     // Random variable in normal space:
                     real raw_x =
-                        raw_group_mean[p, g]
-                        + raw_group_sd[p] * stdnormal_subject_effect[p, s];
+                        raw_group_mean[param, g]
+                        + raw_group_sd[param] * stdnormal_subject_effect[param, s];
                     // Corresponding cumulative probability:
                     real raw_p = Phi_approx(raw_x);
                     // Convert via our target prior distribution:
@@ -1083,9 +1116,11 @@ do something like this:
     }
 
     model {
-        raw_group_mean ~ std_normal();
-        raw_group_sd ~ normal(0, PRIOR_HALF_NORMAL_SD);  // half-normal
-        stdnormal_subject_effect ~ std_normal();
+        for (param in 1:N_PARAMS) {
+            raw_group_mean[param] ~ std_normal();
+            raw_group_sd[param] ~ normal(0, PRIOR_HALF_NORMAL_SD);  // half-normal
+            stdnormal_subject_effect[param] ~ std_normal();
+        }
 
         // ... implement RL code here (or in "transformed parameters")
         // ... perform final fit to behaviour here
@@ -1095,18 +1130,20 @@ do something like this:
         array[N_GROUPS] group_beta;
         for (g in 1:N_GROUPS) {
             group_alpha[g] = qbeta(
-                Phi_approx(raw_group_mean[PARAM_ALPHA]),
+                Phi_approx(raw_group_mean[PARAM_ALPHA, g]),
                 PRIOR_BETA_SHAPE1,
                 PRIOR_BETA_SHAPE2
             );
             group_beta[g] = qgamma(
-                Phi_approx(raw_group_mean[PARAM_BETA]),
+                Phi_approx(raw_group_mean[PARAM_BETA, g]),
                 PRIOR_GAMMA_ALPHA,
                 PRIOR_GAMMA_BETA
             );
         }
         // ... now do group differences in this space if desired
     }
+
+**Phi() or Phi_approx()?** The Ahn/hBayesDM package uses Phi_approx(), so that's precedent.
 
 
 **CURRENTLY THINKING ABOUT:** Any bridgesampling implications?

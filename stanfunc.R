@@ -510,7 +510,7 @@ stanfunc$compare_model_evidence <- function(
     #                   ... useful to show e.g. maximum R-hat summaries
     #   (R note: if x is a list, then if x *doesn't* have item y, x$y == NULL.)
     #
-    # priors:
+    # new_quantile_functions:
     #   optional, but can be a vector containing prior probabilities for
     #   each model
     #
@@ -593,10 +593,10 @@ stanfunc$compare_model_evidence <- function(
 
     n_models <- nrow(d)
     if (is.null(priors)) {
-        # Flat priors
+        # Flat new_quantile_functions
         d[, prior_p_model := 1/n_models]
     } else {
-        # User-specified priors
+        # User-specified new_quantile_functions
         if (length(priors) != n_models) {
             stop("priors: wrong length")
         }
@@ -814,6 +814,7 @@ stanfunc$annotated_parameters <- function(
         hdi_method = "kruschke_mcmc"
     )
 {
+    # LARGELY SUPERSEDED BY summarize_fit
     if (length(ci) != 2) {
         stop("Bad ci parameter")
     }
@@ -1974,19 +1975,59 @@ stanfunc$scatterplot_params <- function(fit, parnames = NULL, parlabels = NULL,
 }
 
 
-stanfunc$summarize_fit <- function(fit,
-                                   par_regex = NULL,
-                                   par_exclude_regex = NULL,
-                                   vb = FALSE)
+stanfunc$summarize_fit <- function(
+    fit,
+    pars = NULL,
+    par_regex = NULL,
+    par_exclude_regex = NULL,
+    probs = c(0.025, 0.25, 0.50, 0.75, 0.975),
+    annotate = TRUE,  # add *, **, etc.
+    vb = FALSE
+)
 {
-    s <- stanfunc$summary_by_par_regex(fit,
-                                       par_regex = par_regex,
-                                       par_exclude_regex = par_exclude_regex)
+    # -------------------------------------------------------------------------
+    # Annotation helper functions
+    # -------------------------------------------------------------------------
     f <- function(x) {
         y <- sprintf("%.3f", x)
         y <- gsub("-", "–", y)
         return(y)
     }
+    get_p_colname <- function(prob) {
+        return(paste(prob * 100, "%", sep = ""))
+    }
+    nonzero_at <- function(lower, upper) {
+        lower_name <- get_p_colname(lower)
+        upper_name <- get_p_colname(upper)
+        return(
+            0 < s[, lower_name, with = FALSE]
+            | s[, upper_name, with = FALSE] < 0
+        )
+    }
+    # -------------------------------------------------------------------------
+    # Sort out arguments
+    # -------------------------------------------------------------------------
+    initial_probs <- probs
+    if (annotate) {
+        probs <- c(probs, c(0.0005, 0.9995,  # p < 0.001 two-tailed
+                0.005, 0.995,  # for "**", p < 0.01 two-tailed
+                0.025, 0.975,  # for "*", p < 0.05 two-tailed
+                0.05, 0.95))  # for ".", p < 0.1 two-tailed
+    } else {
+        probs <- initial_probs
+    }
+    probs <- sort(unique(probs))
+    # -------------------------------------------------------------------------
+    # Filtered fit object
+    # -------------------------------------------------------------------------
+    s <- stanfunc$summary_by_par_regex(fit,
+                                       pars = pars,
+                                       par_regex = par_regex,
+                                       par_exclude_regex = par_exclude_regex,
+                                       probs = probs)
+    # -------------------------------------------------------------------------
+    # Summary column
+    # -------------------------------------------------------------------------
     if (vb) {
         # Variational Bayes approximation; no R-hat
         maketextcol <- function(m, a, b) {
@@ -2000,6 +2041,33 @@ stanfunc$summarize_fit <- function(fit,
         }
         s[, summary := maketextcol(mean, s[["2.5%"]], s[["97.5%"]], s[["Rhat"]])]
     }
+    # -------------------------------------------------------------------------
+    # Asterisk annotation
+    # -------------------------------------------------------------------------
+    if (annotate) {
+        p_001 <- nonzero_at(0.0005, 0.9995)
+        p_01 <- nonzero_at(0.005, 0.995)
+        p_05 <- nonzero_at(0.025, 0.975)
+        p_1 <- nonzero_at(0.05, 0.95)
+        s[
+            ,
+            vs_zero := ifelse(p_001, "***",
+                              ifelse(p_01, "**",
+                                     ifelse(p_05, "*",
+                                            ifelse(p_1, ".", ""))))
+        ]
+    }
+    # -------------------------------------------------------------------------
+    # Tidy up
+    # -------------------------------------------------------------------------
+    hidden_probs <- setdiff(probs, initial_probs)  # in former, not latter
+    for (remove_prob in hidden_probs) {
+        remove_colname <- get_p_colname(remove_prob)
+        s[, (remove_colname) := NULL]
+    }
+    # -------------------------------------------------------------------------
+    # Done
+    # -------------------------------------------------------------------------
     s <- s[]  # for data table display bug
     return(s)
 }

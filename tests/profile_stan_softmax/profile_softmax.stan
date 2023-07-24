@@ -64,7 +64,7 @@ transformed data {
     int OTHER_OPTION = 2;
     real EPSILON = 1e-6;
 
-    int<lower=0, upper=1> y[N] = {
+    array[N] int<lower=0, upper=1> y = {
         1, 0, 0, 0, 0, 0, 0, 1, 1, 1,
         1, 1, 1, 0, 1, 1, 0, 1, 1, 1,
         0, 1, 0, 1, 1, 1, 1, 1, 0, 0,
@@ -212,7 +212,7 @@ model {
 
     check_builtin = softmax(options)[OPTION_OF_INTEREST];
     check_homebrew = softmaxNth(options, OPTION_OF_INTEREST);
-    if (fabs(check_homebrew - check_builtin) > EPSILON) {
+    if (abs(check_homebrew - check_builtin) > EPSILON) {
         reject(
             "- Bug in softmaxNth(): built-in softmax() gives ", check_builtin,
             " but homebrew version gives ", check_homebrew
@@ -250,7 +250,9 @@ model {
         // Faster than builtin_softmax_vectorized_sample; takes 79% of its
         // total_time (taking 70.4% of its forward_time and 208% of its
         // reverse_time).
-        // THE BEST OF THESE.
+        // WAS THE BEST OF THESE.
+        // BUT AS OF cmdstan 2.32.0 (8 Jun 2023), NO LONGER -- NOW IT'S
+        // BEATEN BY THE BUILT-IN.
 
         for (i in 1:N) {
             calc_p[i] = softmaxNth(options, OPTION_OF_INTEREST);
