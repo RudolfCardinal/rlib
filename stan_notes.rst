@@ -221,6 +221,15 @@ Stan versions of note
   However, by Stan 2.26.21, this limitation has been removed.
 
 
+Which Stan version/code was used for a fit?
+-------------------------------------------
+
+.. code-block:: R
+
+    cat(fit@stanmodel@model_code)  # show Stan code
+    cat(fit@stanmodel@model_cpp$model_cppcode)  # show C++ with Stan version
+
+
 Modelling choices
 -----------------
 
