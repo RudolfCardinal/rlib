@@ -181,6 +181,7 @@ def docker_run(
     envvars: Dict[str, str] = None,
     ports_docker_to_host: Dict[int, int] = None,
     user: str = None,
+    workdir: str = None,
 ) -> None:
     """
     Run a command in the Docker environment.
@@ -215,6 +216,8 @@ def docker_run(
         cmdargs.append("--rm")
     if user:
         cmdargs += ["--user", user]
+    if workdir:
+        cmdargs += ["--workdir", workdir]
     cmdargs.append(IMAGE)  # Image to run with
     cmdargs += cmd
     # If the command is missing, the image's default command is run.
@@ -338,7 +341,7 @@ Commands:
         docker_run(
             ["bash", "-c", f"cd {args.dockerdata!r} && R"],
             mounts=mounts,
-            user=DOCKER_R_USER
+            user=DOCKER_R_USER,
         )
         # The Docker container must have "root" as its default user for
         # RStudio. However, where not necessary, there is lower risk with bind
@@ -371,7 +374,7 @@ Commands:
         docker_run(
             ["bash", "-c", f"cd {args.dockerdata!r} && Rscript " + textargs],
             mounts=mounts,
-            user=DOCKER_R_USER
+            user=DOCKER_R_USER,
         )
     elif args.command == cmd_rstudio:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -403,10 +406,13 @@ Commands:
             mounts=mounts,
             envvars=dict(PASSWORD=pw),
             ports_docker_to_host={DOCKER_RSTUDIO_PORT: args.port},
-            # nope, fails permissions  # user=DOCKER_R_USER,
         )
-        # No command: the rocker/verse image runs RStudio as its default
-        # command.
+        # - No command: the rocker/verse image runs RStudio as its default
+        #   command.
+        # - Setting the user to DOCKER_R_USER fails via permission problems;
+        #   it needs to be root.
+        # - Setting workdir here fails; it must change directory. Use
+        #   rstudio-prefs.json instead ("initial_working_directory").
     else:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Anything else is a bug.
