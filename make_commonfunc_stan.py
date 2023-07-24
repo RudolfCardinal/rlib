@@ -144,7 +144,10 @@ import os
 THIS_DIR = os.path.abspath(os.path.dirname(__file__))
 DEFAULT_COMMONFUNC_OUTPUT = os.path.join(THIS_DIR, "commonfunc.stan")
 DISTFUNC_STANFILE = os.path.join(
-    THIS_DIR, "tests", "priors", "extra_distribution_functions.stan"
+    THIS_DIR,
+    "tests",
+    "new_quantile_functions",
+    "extra_distribution_functions.stan",
 )
 
 
@@ -351,70 +354,25 @@ SIMPLE_FUNCTIONS = r"""
     // Softmax
     // ------------------------------------------------------------------------
 
-    real softmaxNth(vector softmax_inputs, int index)
-    {
-        /*
-            Returns the nth value (at "index") of the softmax of the inputs.
-            Assumes an inverse temperature of 1.
+    // REMOVED 2023-06-08:
+    //
+    //      real softmaxNth(vector softmax_inputs, int index)
+    //
+    // It's now faster to use Stan's:
+    //
+    //      softmax(softmax_inputs)[index];
+    //
+    // See profile_softmax.stan.
 
-            FOR AN EXPLICIT INVERSE TEMPERATURE, see softmaxNthInvTemp().
-            FOR A LOGIT (LOG ODDS) VERSION, see logitSoftmaxNth().
-
-            NOTES:
-
-            A softmax function takes several inputs and normalizes them so
-            that:
-                - the outputs are in the same relative order as the inputs
-                - the outputs sum to 1.
-
-            For softmax: see my miscstat.R; the important points for
-            optimization are (1) that softmax is invariant to the addition/
-            subtraction of a constant, and subtracting the mean makes the
-            numbers less likely to fall over computationally; (2) we often only
-            need the final part of the computation for a single number
-            (preference for one option), so here we don't waste time
-            vector-calculating the preference for the left as well [that is:
-            we don't have to calculate s_exp_products / sum(s_exp_products)].
-
-            The constant can be the mean, or the max; Stan uses the max, which
-            is probably a little more efficient.
-
-            Since Stan 2.0.0, the alternative is to use softmax(); see
-            https://github.com/stan-dev/math/blob/develop/stan/math/prim/mat/fun/softmax.hpp
-            The exact syntactic equivalence is:
-
-                real result = softmaxNth(inputs, index);  // this
-                real result = softmax(inputs)[index];  // Stan
-
-            This "homebrew" version is faster than using Stan's built-in
-            softmax() (our speed comparison is in
-            rlib/tests/profile_stan_softmax/profile_softmax.stan), presumably
-            because Stan calculates the result for all elements of the input,
-            and we only bother with the element we care about.
-        */
-
-        int length = num_elements(softmax_inputs);
-        real constant = max(softmax_inputs);
-        vector[length] s_exp_products = exp(softmax_inputs - constant);
-        return s_exp_products[index] / sum(s_exp_products);
-    }
-
-    real softmaxNthInvTemp(vector softmax_inputs, real inverse_temp, int index)
-    {
-        /*
-            Version of softmaxNth allowing you to specify the inverse temp.
-
-            These are equivalent:
-
-                real result = softmaxNthInvTemp(inputs, invtemp, index);
-                real result = softmax(inputs * invtemp)[index];  // Stan
-
-            See softmaxNth() above for speed comparisons.
-        */
-
-        return softmaxNth(softmax_inputs * inverse_temp, index);
-        // return softmax(softmax_inputs * inverse_temp)[index];
-    }
+    // REMOVED 2023-06-08:
+    //
+    //      real softmaxNthInvTemp(vector softmax_inputs, real inverse_temp, int index)
+    //
+    // It's now faster to use Stan's:
+    //
+    //      softmax(softmax_inputs * inverse_temp)[index];
+    //
+    // See profile_softmax.stan.
 
     real logitSoftmaxNth(vector inputs, int index)
     {
@@ -1721,11 +1679,9 @@ def sample_uniform(
         """
 
     call_params = [y, lower, upper]
-    typedefs="".join(vd.abbreviation for vd in call_params)
+    typedefs = "".join(vd.abbreviation for vd in call_params)
     funcname = f"sampleUniform_{typedefs}_lp"
-    param_defs = ", ".join(
-        f"{vd.typedef} {vd.name}" for vd in call_params
-    )
+    param_defs = ", ".join(f"{vd.typedef} {vd.name}" for vd in call_params)
 
     return f"""
     void {funcname}({param_defs})
