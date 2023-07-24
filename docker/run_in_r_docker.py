@@ -4,6 +4,13 @@
 Run commands (or the RStudio web interface) in our Docker environment for R.
 
 Rudolf Cardinal, 6 July 2023 onwards.
+
+Notes re file permissions
+-------------------------
+
+- https://techflare.blog/permission-problems-in-bind-mount-in-docker-volume/
+- https://blog.gougousis.net/file-permissions-the-painful-side-of-docker/
+
 """
 
 # =============================================================================
@@ -12,7 +19,7 @@ Rudolf Cardinal, 6 July 2023 onwards.
 # Use only the standard library.
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass  # requires Python 3.7+
 from getpass import getpass
 import logging
 from os import getcwd, pardir
@@ -45,7 +52,7 @@ THIS_SCRIPT_DIR = dirname(abspath(__file__))
 DOCKERFILE = join(THIS_SCRIPT_DIR, "Dockerfile")
 CONTEXT = abspath(join(THIS_SCRIPT_DIR, pardir))
 
-DEFAULT_DOCKER_DATA_DIR = "/data"  # also matches rstudio-prefs.json
+DOCKER_DATA_DIR = "/data"  # also matches rstudio-prefs.json
 
 
 # =============================================================================
@@ -55,24 +62,60 @@ DEFAULT_DOCKER_DATA_DIR = "/data"  # also matches rstudio-prefs.json
 
 @dataclass
 class VolumeMount:
+    """
+    Represents a bind mount (mounting a host directory within Docker).
+    """
+
     host_dir: str
     docker_dir: str
     rw: bool = False  # read/write, not read only?
 
+    def __post_init__(self) -> None:
+        """
+        Validation.
+        """
+        # ---------------------------------------------------------------------
+        # Host
+        # ---------------------------------------------------------------------
+        if ":" in self.host_dir:
+            raise ValueError(
+                f"Host directory should not contain ':' but is {self.host_dir}"
+            )
+        if not self.host_dir.startswith("/"):
+            raise ValueError(
+                f"Host directory should start with '/' but is "
+                f"{self.host_dir}"
+            )
+        if self.rw and self.host_dir == "/":
+            raise ValueError(
+                "It is too dangerous to mount the host root directory "
+                "read-write"
+            )
+        # ---------------------------------------------------------------------
+        # Docker
+        # ---------------------------------------------------------------------
+        if ":" in self.docker_dir:
+            raise ValueError(
+                f"Docker directory should not contain ':' but is "
+                f"{self.docker_dir}"
+            )
+        if not self.docker_dir.startswith("/"):
+            raise ValueError(
+                f"Docker directory should start with '/' but is "
+                f"{self.docker_dir}"
+            )
+
     def switch(self) -> str:
-        assert (
-            ":" not in self.host_dir
-        ), f"Host directory should not contain ':' but is {self.host_dir}"
-        assert (
-            ":" not in self.docker_dir
-        ), f"Docker directory should not contain ':' but is {self.docker_dir}"
-        assert self.docker_dir.startswith(
-            "/"
-        ), f"Docker directory should start with '/' but is {self.docker_dir}"
+        """
+        Returns the Docker switch for the mount.
+        """
         flag = "rw" if self.rw else "ro"
         return f"--volume={self.host_dir}:{self.docker_dir}:{flag}"
 
     def description(self) -> str:
+        """
+        Returns a human-readable description.
+        """
         flag = "read/write" if self.rw else "read only"
         return (
             f"Mounting host directory {self.host_dir!r} as "
@@ -203,14 +246,16 @@ def main() -> None:
 Commands:
 
 - {cmd_bash}
-    Launch a bash shell within the Docker container, interactively, as root.
+    Launch a bash shell within the Docker container, interactively (as the
+    root user).
 
 - {cmd_r}
-    Launch R within the Docker container, interactively (as the root user).
+    Launch R within the Docker container, interactively (as the
+    {DOCKER_R_USER} user).
 
 - {cmd_rscript} SCRIPT [ARGS...]
     Launch an R script via the Rscript tool), with optional arguments (as the
-    root user).
+    {DOCKER_R_USER} user).
 
 - {cmd_rstudio}
     Launch RStudio as a web service (via the root user and then the
@@ -230,8 +275,8 @@ Commands:
     parser.add_argument(
         "--dockerdata",
         help=f"Data directory as seen from Docker. "
-        f"Default is {DEFAULT_DOCKER_DATA_DIR!r}.",
-        default=DEFAULT_DOCKER_DATA_DIR,
+        f"Default is {DOCKER_DATA_DIR!r}.",
+        default=DOCKER_DATA_DIR,
     )
     parser.add_argument(
         "--rw",
@@ -293,8 +338,11 @@ Commands:
         docker_run(
             ["bash", "-c", f"cd {args.dockerdata!r} && R"],
             mounts=mounts,
-            # unnecessary #  user=DOCKER_R_USER
+            user=DOCKER_R_USER
         )
+        # The Docker container must have "root" as its default user for
+        # RStudio. However, where not necessary, there is lower risk with bind
+        # mounts to use a non-privileged user.
     elif args.command == cmd_rscript:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # RScript
@@ -323,7 +371,7 @@ Commands:
         docker_run(
             ["bash", "-c", f"cd {args.dockerdata!r} && Rscript " + textargs],
             mounts=mounts,
-            # unnecessary #  user=DOCKER_R_USER
+            user=DOCKER_R_USER
         )
     elif args.command == cmd_rstudio:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

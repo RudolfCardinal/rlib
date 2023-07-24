@@ -8,12 +8,19 @@
 # =============================================================================
 
 FROM rocker/verse:4.3.1
-# Contains R and RStudio, at a specific version (R 4.3.1). See:
+# Contains R and RStudio, at a specific version (R 4.3.1), with Stan likewise
+# (v2.26.21). See:
 # - https://hub.docker.com/r/rocker/verse
 # - https://rocker-project.org/images/versioned/rstudio.html
 # - https://support.openanalytics.eu/t/using-specific-versions-of-r-packages-in-docker-file/763
 #
-# Sets up a single user, named "rstudio", so $HOME is /home/rstudio.
+# The source Dockerfiles/images are, in sequence:
+# - ubuntu:jammy
+# - https://github.com/rocker-org/rocker-versioned2/blob/master/dockerfiles/r-ver_4.3.1.Dockerfile
+# - https://github.com/rocker-org/rocker-versioned2/blob/master/dockerfiles/rstudio_4.3.1.Dockerfile
+#   ... sets up a single user, named "rstudio"?
+# - https://github.com/rocker-org/rocker-versioned2/blob/master/dockerfiles/tidyverse_4.3.1.Dockerfile
+# - https://github.com/rocker-org/rocker-versioned2/blob/master/dockerfiles/verse_4.3.1.Dockerfile
 
 MAINTAINER "Rudolf Cardinal" rudolf@pobox.com
 
@@ -60,7 +67,7 @@ RUN apt-get update \
 # =============================================================================
 
 RUN mkdir -p $HOME/.R/ \
-    && echo "CXXFLAGS=-O3 -mtune=native -march=native -Wno-unused-variable -Wno-unused-function -flto -ffat-lto-objects  -Wno-unused-local-typedefs -Wno-ignored-attributes -Wno-deprecated-declarations\n" >> $HOME/.R/Makevars
+    && echo "CXXFLAGS=-O3 -mtune=native -march=native -Wno-unused-variable -Wno-unused-function -flto -ffat-lto-objects -Wno-unused-local-typedefs -Wno-ignored-attributes -Wno-deprecated-declarations\n" >> $HOME/.R/Makevars
 
 
 # =============================================================================
@@ -82,7 +89,7 @@ RUN mkdir -p $HOME/.R/ \
 #   devtools    # E.g. install R packages from Github.
 #   DiagrammeR  # Graph/network visualization.
 #   foreign     # Read data from SPSS, etc.
-#   gridExtra   # Misc. functions for  grid graphics.
+#   gridExtra   # Misc. functions for grid graphics.
 #   gtools      # Programming assistance.
 #   inline      # For RStan.
 #   lattice     # Trellis graphics.
@@ -261,7 +268,7 @@ RUN echo "rstan::rstan_options(auto_write = TRUE)\n" >> $HOME/.Rprofile \
 USER rstudio
 
 RUN mkdir -p $HOME/.R/ \
-    && echo "CXXFLAGS=-O3 -mtune=native -march=native -Wno-unused-variable -Wno-unused-function -flto -ffat-lto-objects  -Wno-unused-local-typedefs -Wno-ignored-attributes -Wno-deprecated-declarations\n" >> $HOME/.R/Makevars \
+    && echo "CXXFLAGS=-O3 -mtune=native -march=native -Wno-unused-variable -Wno-unused-function -flto -ffat-lto-objects -Wno-unused-local-typedefs -Wno-ignored-attributes -Wno-deprecated-declarations\n" >> $HOME/.R/Makevars \
     && echo "rstan::rstan_options(auto_write = TRUE)\n" >> $HOME/.Rprofile \
     && echo "options(mc.cores = parallel::detectCores())\n" >> $HOME/.Rprofile
 
@@ -272,7 +279,8 @@ WORKDIR /home/rstudio/.config/rstudio
 COPY docker/rstudio-prefs.json rstudio-prefs.json
 
 # -----------------------------------------------------------------------------
-# Reset to root user/directory.
+# Reset to root user (required for the RStudio web server launch process)
+# and root directory.
 # -----------------------------------------------------------------------------
 
 USER root
