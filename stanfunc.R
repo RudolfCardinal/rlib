@@ -40,6 +40,9 @@ stanfunc$DEFAULT_HIGH_RHAT_THRESHOLD <- 1.1
     #   of 1.2 is a typical threshold and 1.1 is a stringent criterion (Brooks
     #   and Gelman 1998, doi:10.1080/10618600.1998.10474787, p. 444).
 
+stanfunc$DEFAULT_HDI_METHOD <- "coda"
+stanfunc$DEFAULT_HDI_PROPORTION <- 0.95
+
 
 #==============================================================================
 # Core functions for e.g. rstan 2.16.2:
@@ -49,26 +52,66 @@ stanfunc$load_or_run_stan <- function(
         data,
         fit_filename,
         model_name,
-        file = NULL,  # Filename for Stan code
-        model_code = "",  # Text of Stan code
+        file = NULL,
+        model_code = "",
         save_stancode_filename = NULL,
         save_data_filename = NULL,
         save_cpp_filename = NULL,
-        save_code_filename = NULL,  # old name for save_cpp_filename
+        save_code_filename = NULL,  # Deprecated; see below.
         forcerun = FALSE,
         chains = stanfunc$DEFAULT_CHAINS,
         iter = stanfunc$DEFAULT_ITER,
-        init = stanfunc$DEFAULT_INIT,  # the default, "random", uses the range -2 to +2
-        seed = stanfunc$DEFAULT_SEED,  # for consistency across runs
+        init = stanfunc$DEFAULT_INIT,
+        seed = stanfunc$DEFAULT_SEED,
         cache_filetype = c("rds", "rda"),
         ...)
 {
-    # Other potential common parameters:
-    #   control = list(
-    #       adapt_delta = 0.99
-    #           # http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup
-    #           # https://www.rdocumentation.org/packages/rstanarm/versions/2.14.1/topics/adapt_delta
-    #   )
+    # If a fit has been saved to a cache file, load and return it.
+    # Otherwise, run a Stan model (and save it to the cache file).
+    #
+    # Args:
+    #   data
+    #       Stan data, a list.
+    #   fit_filename
+    #       Filename of cache for fit.
+    #   model_name
+    #       Textual name of the model.
+    #   file
+    #       Filename for Stan code source. (Alternative to "model_code".)
+    #   model_code
+    #       Text of Stan code. (Alternative to "file".)
+    #   save_stancode_filename
+    #       Optional filename to save Stan code (as text).
+    #   save_data_filename
+    #       Optional filename to save the data, using saveRDS().
+    #   save_cpp_filename
+    #       Optional filename to save the Stan-generated C++ code. Unnecessary;
+    #       both Stan and C++ code is extractable from the Stan fit.
+    #   save_code_filename
+    #       (DEPRECATED.) Old name for save_cpp_filename.
+    #   forcerun
+    #       Run Stan (and re-save the result) even if the cache exists.
+    #   chains
+    #       Number of chains, for Stan.
+    #   iter
+    #       Number of iterations, for Stan.
+    #   init
+    #       Method for initialization of parameters, for Stan.
+    #       The Stan default, "random", uses the range -2 to +2.
+    #   seed
+    #       Random number generator seed, for Stan. For consistency across
+    #       runs.
+    #   cache_filetype
+    #       Save as RDS (saveRDS/readRDS) or RDA (save/load)?
+    #   ...
+    #       Other arguments to rstan::stan(). Common potential parameters:
+    #           control = list(
+    #               adapt_delta = 0.99
+    #           )
+    #
+    #       For adapt_delta, see e.g.
+    #       - http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup
+    #       - https://www.rdocumentation.org/packages/rstanarm/versions/2.14.1/topics/adapt_delta
 
     if (is.null(file) == (model_code == "")) {
         stop("Specify either 'file' or 'model_code' (and not both).")
@@ -173,19 +216,21 @@ stanfunc$load_or_run_stan <- function(
         }
         n_cores_available <- parallel::detectCores()
         if (n_cores_stan < n_cores_available) {
-            warning(paste(
+            warning(paste0(
                 "Stan is not set to use all available CPU cores; using ",
                 n_cores_stan, " when ", n_cores_available,
                 " are available; retry after issuing the command\n",
-                "    options(mc.cores = parallel::detectCores())",
-                sep = ""))
+                "    options(mc.cores = parallel::detectCores())"
+            ))
         }
         if (n_cores_stan <= 1) {
             warning("Running with a single CPU core; Stan may be slow")
         }
 
-        cat(paste("--- Running Stan, model ", model_name,
-                  ", starting at ", Sys.time(), "...\n", sep = ""))
+        cat(paste0(
+            "--- Running Stan, model ", model_name,
+            ", starting at ", Sys.time(), "...\n"
+        ))
 
         # Stan now supports parallel operation directly
         # Note that it distinguishes between 'file' being NULL (OK) or
@@ -245,9 +290,41 @@ stanfunc$load_or_run_bridge_sampler <- function(
     data = NULL,
     cores = parallel::detectCores(),
     forcerun = FALSE,
-    algorithm = NULL,  # for the rare occasions when you want "Fixed_param"
+    algorithm = NULL,  #
     ...)
 {
+    # Load (from a cache) or run bridge sampling using a Stan fit object.
+    #
+    # NOTE that the Stan model must have been adapted to use
+    # bridgesampling-compatible methods (e.g. "target += lpdf...()... and other
+    # adjustments for clipped parameters), to avoid dropping constants (as Stan
+    # will via "~" sampling notation).
+    #
+    # Args:
+    #   stanfit
+    #       Stan fit object.
+    #   filename
+    #       Cache filename for bridgesampling results.
+    #   assume_stanfit_from_this_R_session
+    #       If the Stan fit was created in this R session, we can use the fit
+    #       object directly; of not, we have to regenerate a model, which is a
+    #       bit slower (or bridgesampling may crash).
+    #   file
+    #       Filename for Stan code source. (Alternative to "model_code".)
+    #   model_code
+    #       Text of Stan code. (Alternative to "file".)
+    #   data
+    #       Stan data, a list.
+    #   cores
+    #       Number of CPU cores to use.
+    #   forcerun
+    #       Run Stan (and re-save the result) even if the cache exists.
+    #   algorithm
+    #       Passed to rstan::stan(). See ?rstan:stan. For the rare occasions
+    #       when you want "Fixed_param".
+    #   ...
+    #       Other arguments to bridgesampling::bridge_sampler().
+
     if (!forcerun && file.exists(filename)) {
         # ---------------------------------------------------------------------
         # Load
@@ -349,8 +426,8 @@ stanfunc$load_or_run_vb <- function(
         # ---------------------------------------------------------------------
         # Run
         # ---------------------------------------------------------------------
-        cat(paste("Running variational Bayes approximation to Stan model ",
-                  model_name, ", starting at ", Sys.time(), "...\n", sep = ""))
+        cat(paste0("Running variational Bayes approximation to Stan model ",
+                   model_name, ", starting at ", Sys.time(), "...\n"))
 
         cat("Building model...")
         if (!is.null(file)) {
@@ -394,31 +471,75 @@ stanfunc$quickrun <- function(
     forcerun = FALSE,
     chains = stanfunc$DEFAULT_CHAINS,
     iter = stanfunc$DEFAULT_ITER,
-    init = stanfunc$DEFAULT_INIT,  # the default, "random", uses the range -2 to +2
-    seed = stanfunc$DEFAULT_SEED,  # for consistency across runs
+    init = stanfunc$DEFAULT_INIT,
+    seed = stanfunc$DEFAULT_SEED,
     control = NULL,
-    vb = FALSE,  # quick-and-dirty variational Bayes
-    save_code = FALSE,  # unnecessary; both Stan and C++ code is extractable from the Stan fit
+    vb = FALSE,
+    save_code = FALSE,
     FIT_SUFFIX = "_stanfit.rds",
     BRIDGE_SUFFIX = "_bridgesampling.rds",
     VBFIT_SUFFIX = "_stanvbfit.rds",
     CPP_SUFFIX = "_code.cpp",
-    ...)  # additional parameters to rstan::stan
+    ...)
 {
+    # A shortcut to (a) run Stan normally or via variational Bayes (VB)
+    # approximation, (b) if not using VB, run bridge sampling.
+    #
+    # Args:
+    #   data
+    #       Stan data, a list.
+    #   model_name
+    #       Textual name of the model.
+    #   fit_cache_dir
+    #       Directory in which to load/save cache information. Appropriate
+    #       filenames are created from model_name.
+    #   file
+    #       Filename for Stan code source. (Alternative to "model_code".)
+    #   model_code
+    #       Text of Stan code. (Alternative to "file".)
+    #   chains
+    #       Number of chains, for Stan.
+    #   iter
+    #       Number of iterations, for Stan.
+    #   init
+    #       Method for initialization of parameters, for Stan.
+    #       The Stan default, "random", uses the range -2 to +2.
+    #   seed
+    #       Random number generator seed, for Stan. For consistency across
+    #       runs.
+    #   control
+    #       The Stan "control" parameter (a list), e.g. for adapt_delta. See
+    #       above.
+    #   vb
+    #       Use quick-and-dirty variational Bayes approximation?
+    #   save_code
+    #       Save the C++ code? Unnecessary; both Stan and C++ code is
+    #       extractable from the Stan fit.
+    #   FIT_SUFFIX
+    #       Suffix for building the filename for the (normal) fit cache.
+    #   BRIDGE_SUFFIX
+    #       Suffix for building the filename for the bridge sampling cache.
+    #   VBFIT_SUFFIX
+    #       Suffix for building the filename for the VB fit cache.
+    #   CPP_SUFFIX
+    #       Suffix for building the filename for C++ code.
+    #   ...
+    #       Additional parameters to rstan::stan().
+
     if (is.null(file) == (model_code == "")) {
         stop("Specify either 'file' or 'model_code' (and not both).")
     }
 
     # Note that C++ code is extractable from the Stan fit.
     fit_filename <- file.path(fit_cache_dir,
-                              paste(model_name, FIT_SUFFIX, sep = ""))
+                              paste0(model_name, FIT_SUFFIX))
     bridge_filename <- file.path(fit_cache_dir,
-                              paste(model_name, BRIDGE_SUFFIX, sep = ""))
+                              paste0(model_name, BRIDGE_SUFFIX))
     vbfit_filename <- file.path(fit_cache_dir,
-                                paste(model_name, VBFIT_SUFFIX, sep = ""))
+                                paste0(model_name, VBFIT_SUFFIX))
     if (save_code) {
         cpp_filename <- file.path(fit_cache_dir,
-                                  paste(model_name, CPP_SUFFIX, sep = ""))
+                                  paste0(model_name, CPP_SUFFIX))
     } else {
         cpp_filename <- NULL
     }
@@ -433,8 +554,8 @@ stanfunc$quickrun <- function(
 
     if (vb) {
 
-        cat(paste("Running variational Bayes approximation to Stan model ",
-                  model_name, "...\n", sep = ""))
+        cat(paste0("Running variational Bayes approximation to Stan model ",
+                   model_name, "...\n"))
         result$vb_fit <- stanfunc$load_or_run_vb(
             data = data,
             file = file,
@@ -448,7 +569,7 @@ stanfunc$quickrun <- function(
 
     } else {
 
-        cat(paste("Running Stan model ", model_name, "...\n", sep = ""))
+        cat(paste0("Running Stan model ", model_name, "...\n"))
 
         # Stan fit
         result$fit <- stanfunc$load_or_run_stan(
@@ -496,41 +617,47 @@ stanfunc$compare_model_evidence <- function(
         rhat_par_exclude_regex = NULL,
         rhat_par_selected_regex = NULL)
 {
-    # CHECK THE OUTPUT AGAINST, e.g.:
-    # bridgesampling::post_prob(b1, b2, b3, b4, b5, b6, model_names = paste("Model", 1:6))
-    # ... verified.
-
-    # bridgesample_list_list
-    #   A list of lists. Each item is a list with names:
-    #           name: the model name
-    #           bridgesample: the output from the
-    #                   bridgesampling::bridge_sampler() function (an item of
-    #                   class bridge_list)
-    #           stanfit (optional): a corresponding Stan fit
-    #                   ... useful to show e.g. maximum R-hat summaries
-    #   (R note: if x is a list, then if x *doesn't* have item y, x$y == NULL.)
+    # Compare, using bridge sampling, multiple Stan fits.
     #
-    # new_quantile_functions:
-    #   optional, but can be a vector containing prior probabilities for
-    #   each model
+    # Args:
+    #   bridgesample_list_list
+    #       A list of lists. Each item is a list with names:
+    #           name:
+    #               the model name
+    #           bridgesample:
+    #               the output from the bridgesampling::bridge_sampler()
+    #               function (an item of class bridge_list)
+    #           stanfit (optional):
+    #               a corresponding Stan fit
+    #               ... useful to show e.g. maximum R-hat summaries
+    #       (R note: if x is a list, then if x *doesn't* have item y, x$y ==
+    #       NULL.)
     #
-    # detail:
-    #   keep the details used for intermediate calculations
+    #   new_quantile_functions:
+    #       Optional, but can be a vector containing prior probabilities for
+    #       each model.
     #
-    # rhat_warning_threshold:
-    #   If this threshold for R-hat is exceeded, warnings are shown. A value
-    #   of 1.2 is a typical threshold and 1.1 is a stringent criterion (Brooks
-    #   and Gelman 1998, doi:10.1080/10618600.1998.10474787, p. 444).
+    #   detail:
+    #       Keep the details used for intermediate calculations?
     #
-    # rhat_par_exclude_regex:
-    #   Regex for parameters to exclude from R-hat calculation.
+    #   rhat_warning_threshold:
+    #       If this threshold for R-hat is exceeded, warnings are shown. A
+    #       value of 1.2 is a typical threshold and 1.1 is a stringent
+    #       criterion (Brooks and Gelman 1998,
+    #       doi:10.1080/10618600.1998.10474787, p. 444).
     #
-    # Note:
+    #   rhat_par_exclude_regex:
+    #       Regex for parameters to exclude from R-hat calculation.
+    #
+    # Notes:
     # - "marginal likelihood" is the same as "evidence" (e.g. Kruschke 2011
     #   p57-58)
+    # - https://stackoverflow.com/questions/9950144/access-lapply-index-names-inside-fun
+    # - https://stackoverflow.com/questions/4227223/r-list-to-data-frame
+    # - CHECK THE OUTPUT AGAINST, e.g.:
+    #   bridgesampling::post_prob(b1, b2, b3, b4, b5, b6, model_names = paste("Model", 1:6))
+    #   ... verified.
 
-    # https://stackoverflow.com/questions/9950144/access-lapply-index-names-inside-fun
-    # https://stackoverflow.com/questions/4227223/r-list-to-data-frame
     d <- data.table(
         t(
             vapply(
@@ -658,6 +785,20 @@ stanfunc$sampled_values_from_stanfit <- function(
         parname,
         method = c("extract", "manual", "as.matrix"))
 {
+    # Extract sampled values from a Stan fit object, for a specific parameter.
+    #
+    # Args:
+    #   fit
+    #       The Stan fit.
+    #   parname
+    #       Name of the parameter
+    #   method
+    #       Options:
+    #       - manual: Laborious hand-crafted way.
+    #       - extract: The way it's meant to be done, via rstan::extract().
+    #         The default.
+    #       - as.matrix: By converting the fit to a matrix.
+
     method <- match.arg(method)
     if (method == "manual") {
 
@@ -738,6 +879,16 @@ stanfunc$sampled_values_from_stanfit <- function(
 
 stanfunc$summary_data_table <- function(fit, ...)
 {
+    # Makes a data table from rstan::summary().
+    #
+    # See https://mc-stan.org/rstan/reference/stanfit-method-summary.html
+    #
+    # Args:
+    #   ...
+    #       Passed to rstan::summary().
+    #       The "probs" argument is a vector of quantiles of interest (for each
+    #       parameter).
+
     # help("summary,stanfit-method")
     s <- rstan::summary(fit, ...)
     # This summary object, s, has members:
@@ -759,8 +910,11 @@ stanfunc$summary_by_par_regex <- function(fit,
                                           par_exclude_regex = NULL,
                                           ...)
 {
+    # Calls stanfunc$summary_data_table() for a subset of parameters.
+    #
     # Extracting parameters can be slow, so we filter parameter names before
     # asking rstan to extract parameters.
+
     if (is.null(pars)) {
         pars <- names(fit)  # all parameter names; this is quick
     }
@@ -785,6 +939,9 @@ stanfunc$params_with_high_rhat <- function(
         threshold = stanfunc$DEFAULT_HIGH_RHAT_THRESHOLD,
         par_exclude_regex = NULL)
 {
+    # Returns rows from stanfunc$summary_by_par_regex() where the R-hat
+    # ("convergence problem") value exceeds (is worse than) a threshold.
+
     s <- stanfunc$summary_by_par_regex(fit,
                                        par_exclude_regex = par_exclude_regex)
     return(s[Rhat >= threshold])
@@ -795,6 +952,9 @@ stanfunc$max_rhat <- function(fit,
                               par_regex = NULL,
                               par_exclude_regex = NULL)
 {
+    # Returns the maximum R-hat value for any parameter in the fit meeting the
+    # filter criteria.
+
     s <- stanfunc$summary_by_par_regex(fit,
                                        par_regex = par_regex,
                                        par_exclude_regex = par_exclude_regex)
@@ -805,94 +965,274 @@ stanfunc$max_rhat <- function(fit,
 stanfunc$annotated_parameters <- function(
         fit,
         pars = NULL,
-        ci = c(0.025, 0.975),  # for the "nonzero" column
-        probs = c(0.025, 0.25, 0.50, 0.75, 0.975),
         par_regex = NULL,
+        par_exclude_regex = NULL,
+        ci = c(0.025, 0.975),
+        probs = c(0.025, 0.50, 0.975),
         annotate = TRUE,
         nonzero_as_hdi = TRUE,
-        hdi_proportion = 0.95,
-        hdi_method = "kruschke_mcmc"
+        hdi_proportion = stanfunc$DEFAULT_HDI_PROPORTION,
+        hdi_method = stanfunc$DEFAULT_HDI_METHOD,
+        vb = FALSE
     )
 {
-    # LARGELY SUPERSEDED BY summarize_fit
-    if (length(ci) != 2) {
-        stop("Bad ci parameter")
+    # Produces a summary table for a Stan fit, with these columns:
+    #   parameter
+    #       Parameter name.
+    #   mean
+    #   se_mean
+    #   sd
+    #       Usual meanings: posterior mean, standard error of the mean,
+    #       standard deviation.
+    #   2.5%, 97.5% (etc.)
+    #       The exact quantile columns used are determined by "probs". These
+    #       are quantiles provided by stanfunc$summary_by_par_regex() and thus
+    #       ultimately by rstan::summary().
+    #   n_eff
+    #       Stan measure (number of effective samples).
+    #   Rhat
+    #       Stan measure of convergence.
+    #   annotation
+    #       Added if "annotate" is TRUE; see below.
+    #   hdi_lower
+    #   hdi_upper
+    #       If nonzero_as_hdi is TRUE, these columns are provided.
+    #       The hdi_lower and hdi_upper columns are calculated using
+    #       stanfunc$hdi() according to the "hdi_proportion" and "hdi_method"
+    #       parameters (q.v.).
+    #   summary
+    #       String with mean, 95% quantile interval, and R-hat.
+    #       Formatted like: "–0.173 [–0.242, –0.093] (R=1.003)".
+    #   rangetype
+    #       QI (quantile interval) or HDI (highest density interval) used for
+    #       "summary" (+/- "vs_zero") column.
+    #   nonzero
+    #       Whether the HDI (if nonzero_as_hdi is TRUE) or QI (if
+    #       nonzero_as_hdi is FALSE) excludes zero.
+    #   qi_vs_zero
+    #       Whether the quantile interval (according to "ci" by Stan-provided
+    #       quantiles) excludes zero. Added if "annotate" is TRUE; see below.
+    #
+    # Args:
+    #   fit
+    #       The Stan fit object.
+    #   pars
+    #       Named parameters to include. (If NULL, not restricted.)
+    #   par_regex
+    #       A regular expression that parameters must MATCH to be included.
+    #   par_exclude_regex
+    #       A regular expression that parameters must NOT MATCH to be included.
+    #   ci
+    #       Credible interval boundary probabilities, e.g. c(0.025, 0.975) for
+    #       a 95% QI or HDI, maybe used for calculating the "nonzero" column
+    #       (q.v.).
+    #   probs
+    #       All quantile probabilities to display. (The "ci" probabilities must
+    #       be within "probs", but you can add any others.)
+    #   annotate
+    #       If true, adds an "annotation" column:
+    #           *** if zero not in 99.9% QI (0.001 outside) -- not the HDI
+    #           **  if zero not in 99% QI (0.01 outside) -- not the HDI
+    #           *   if zero not in 95% QI (0.05 outside) -- not the HDI
+    #           .   if zero not in 90% (0.1 outside) -- not the HDI
+    #       (QI = quantile interval.)
+    #   nonzero_as_hdi
+    #       Use the HDI (see hdi_proportion, hdi_method) for the "nonzero"
+    #       column? If false, uses the quantiles determined by "ci".
+    #   hdi_proportion
+    #       For HDI calculation: what HDI proportion (e.g. 0.95 for 95% HDI).
+    #   hdi_method
+    #       For HDI calculation: method of calculation; see stanfunc$hdi().
+    #   vb
+    #       Was the fit generated via variational Bayes (VB) approximation?
+    #       (Such fits have no R-hat measure.)
+    #
+    # Changes:
+    # - 2023-07-23: (a) changed default hdi_method from "kruschke_mcmc" to
+    #   stanfunc$DEFAULT_HDI_METHOD, now "coda"; (b) absorbed all functions
+    #   from stanfunc$summarize_fit, so there's only one (they were nearly
+    #   identical except the latter supported more filtering but only QIs); (c)
+    #   add "rangetype" column; (d) remove 25%/75% quantiles from the default
+    #   to save space.
+
+    # -------------------------------------------------------------------------
+    # Annotation helper functions
+    # -------------------------------------------------------------------------
+    f <- function(x) {
+        y <- sprintf("%.3f", x)
+        y <- gsub("-", "–", y)
+        return(y)
     }
-    if (!ci[1] %in% probs || !ci[2] %in% probs) {
-        stop("Elements of ci must be in probs")
+    get_p_colname <- function(prob) {
+        # Get column name for quantile.
+        return(paste0(prob * 100, "%"))
     }
-    initial_probs <- probs
-    if (annotate) {
-        probs <- c(probs, c(0.0005, 0.9995,  # p < 0.001 two-tailed
-                0.005, 0.995,  # for "**", p < 0.01 two-tailed
-                0.025, 0.975,  # for "*", p < 0.05 two-tailed
-                0.05, 0.95))  # for ".", p < 0.1 two-tailed
+    get_hdi_colname <- function(prob) {
+        # Get column name for quantile.
+        return(paste0("hdi_", prob))
+    }
+
+    if (nonzero_as_hdi) {
+        ci_lower_colname <- "hdi_lower"
+        ci_upper_colname <- "hdi_upper"
     } else {
-        probs <- initial_probs
-    }
-    probs <- sort(unique(probs))
-    s <- stanfunc$summary_by_par_regex(fit, pars = pars, probs = probs,
-                                       par_regex = par_regex)
-    # Find nonzero parameters (credible interval excludes zero)
-
-    get_colname <- function(prob) {
-        return(paste(prob * 100, "%", sep = ""))
+        ci_lower_colname <- get_p_colname(ci_lower)
+        ci_upper_colname <- get_p_colname(ci_upper)
     }
 
-    nonzero_at <- function(lower, upper) {
-        lower_name <- get_colname(lower)
-        upper_name <- get_colname(upper)
+    qi_nonzero_at <- function(lower, upper) {
+        # Does our QI range exclude zero?
+        lower_colname <- get_p_colname(lower)
+        upper_colname <- get_p_colname(upper)
         return(
-            0 < s[, lower_name, with = FALSE] |
-            s[, upper_name, with = FALSE] < 0
+            0 < s[, lower_colname, with = FALSE] |
+            s[, upper_colname, with = FALSE] < 0
         )
     }
 
-    if (annotate) {
-        p_001 <- nonzero_at(0.0005, 0.9995)
-        p_01 <- nonzero_at(0.005, 0.995)
-        p_05 <- nonzero_at(0.025, 0.975)
-        p_1 <- nonzero_at(0.05, 0.95)
-        s[
-            ,
-            annotation := ifelse(p_001, "***",
-                                 ifelse(p_01, "**",
-                                        ifelse(p_05, "*",
-                                               ifelse(p_1, ".", ""))))
-        ]
+    # -------------------------------------------------------------------------
+    # Sort out arguments
+    # -------------------------------------------------------------------------
+    if (length(ci) != 2) {
+        stop("Bad ci parameter")
     }
-
+    ci <- sort(ci)
+    ci_lower <- ci[1]
+    ci_upper <- ci[2]
+    initial_probs <- probs
+    if (!nonzero_as_hdi) {
+        if (!ci_lower %in% probs || !ci_upper %in% probs) {
+            stop("Elements of ci must be in probs (unless you set nonzero_as_hdi)")
+        }
+        if (annotate) {
+            probs <- c(
+                probs,
+                c(
+                    0.0005, 0.9995,  # by comparison to p < 0.001 two-tailed
+                    0.005, 0.995,  # for "**", cf. p < 0.01 two-tailed
+                    0.025, 0.975,  # for "*", cf. p < 0.05 two-tailed
+                    0.05, 0.95  # for ".", cf. p < 0.1 two-tailed
+                )
+            )
+        }
+    }
+    probs <- sort(unique(probs))
+    # -------------------------------------------------------------------------
+    # Filtered fit object
+    # -------------------------------------------------------------------------
+    s <- stanfunc$summary_by_par_regex(
+        fit,
+        pars = pars,
+        par_regex = par_regex,
+        par_exclude_regex = par_exclude_regex,
+        probs = probs
+    )
+    # -------------------------------------------------------------------------
+    # Determine HDI if required
+    # -------------------------------------------------------------------------
     if (nonzero_as_hdi) {
         s[, hdi_lower := NA_real_]
         s[, hdi_upper := NA_real_]
         for (rownum in 1:nrow(s)) {
             parname <- s[rownum, parameter]
             values <- stanfunc$sampled_values_from_stanfit(fit, parname)
-            hdi_pair <- hdi(values,
-                            hdi_proportion = hdi_proportion,
-                            method = hdi_method)
+            # User-requested HDI
+            hdi_pair <- stanfunc$hdi(
+                values,
+                hdi_proportion = hdi_proportion,
+                method = hdi_method
+            )
             s[rownum, hdi_lower := hdi_pair[1]]
             s[rownum, hdi_upper := hdi_pair[2]]
+            # It would be very slow do to
         }
-        s[, nonzero := (0 < hdi_lower | hdi_upper < 0)]
-    } else {
-        s[, nonzero := nonzero_at(ci[1], ci[2])]
     }
-
+    # -------------------------------------------------------------------------
+    # Summary column
+    # -------------------------------------------------------------------------
+    if (vb) {
+        # Variational Bayes approximation; no R-hat
+        maketextcol <- function(m, a, b) {
+            paste0(f(m), " [", f(a), ", ", f(b), "]")
+        }
+        s[, summary := maketextcol(
+            mean,
+            s[[ci_lower_colname]],
+            s[[ci_upper_colname]]
+        )]
+    } else{
+        # Full Stan fit
+        maketextcol <- function(m, a, b, r) {
+            paste0(f(m), " [", f(a), ", ", f(b), "] (R=", f(r), ")")
+        }
+        s[, summary := maketextcol(
+            mean,
+            s[[ci_lower_colname]],
+            s[[ci_upper_colname]],
+            s[["Rhat"]]
+        )]
+    }
+    # -------------------------------------------------------------------------
+    # "Nonzero" by the user's preferred measure
+    # -------------------------------------------------------------------------
+    s[, nonzero :=
+            0 < s[, ci_lower_colname, with = FALSE] |
+            s[, ci_upper_colname, with = FALSE] < 0
+    ]
+    # -------------------------------------------------------------------------
+    # Make the range type clear
+    # -------------------------------------------------------------------------
+    s[, rangetype := ifelse(nonzero_as_hdi, "HDI", "QI")]
+    # -------------------------------------------------------------------------
+    # Annotate "nonzero" status by QUANTILE INTERVAL (do they exclude zero?)
+    # -------------------------------------------------------------------------
+    if (annotate) {
+        p_001 <- qi_nonzero_at(0.0005, 0.9995)  # 0.001
+        p_01 <- qi_nonzero_at(0.005, 0.995)  # 0.01
+        p_05 <- qi_nonzero_at(0.025, 0.975)  # 0.05
+        p_1 <- qi_nonzero_at(0.05, 0.95)  # 0.1
+        s[
+            ,
+            qi_vs_zero := ifelse(
+                p_001,
+                "***",
+                ifelse(
+                    p_01,
+                    "**",
+                    ifelse(
+                        p_05,
+                        "*",
+                        ifelse(p_1, ".", "")
+                    )
+                )
+            )
+        ]
+    }
+    # -------------------------------------------------------------------------
+    # Tidy up
+    # -------------------------------------------------------------------------
     hidden_probs <- setdiff(probs, initial_probs)  # in former, not latter
     for (remove_prob in hidden_probs) {
-        remove_colname <- get_colname(remove_prob)
+        remove_colname <- get_p_colname(remove_prob)
         # cat(paste("Removing column", remove_colname, "\n"))
         s[, (remove_colname) := NULL]
     }
-
-    s <- s[]  # fix nonprinting bug; see above
+    # -------------------------------------------------------------------------
+    # Done
+    # -------------------------------------------------------------------------
+    s <- s[]  # for data table display bug
     return(s)
 }
 
 
+stanfunc$summarize_fit <- stanfunc$annotated_parameters
+
+
 stanfunc$nonzero_parameters <- function(fit, annotate = FALSE, ...)
 {
+    # Snapshot of the results of stanfunc$annotated_parameters() for which
+    # "nonzero" is TRUE. See that function for help.
+
     s <- stanfunc$annotated_parameters(fit = fit, annotate = annotate, ...)
     s <- s[nonzero == TRUE][]  # restrict
     return(s)
@@ -901,14 +1241,16 @@ stanfunc$nonzero_parameters <- function(fit, annotate = FALSE, ...)
 
 stanfunc$code_from_stanfit <- function(fit)
 {
-    # Returns the Stan source code
+    # Returns the Stan source code from a fitted model.
+
     return(fit@stanmodel@model_code)
 }
 
 
 stanfunc$cpp_from_stanfit <- function(fit)
 {
-    # Returns the C++ code
+    # Returns the C++ code from a fitted model.
+
     return(fit@stanmodel@model_cpp$model_cppcode)
 }
 
@@ -927,6 +1269,11 @@ stanfunc$parallel_stan <- function(
         warmup = floor(iter/2),
         seed = stanfunc$DEFAULT_SEED)
 {
+    # DEPRECATED. Very old helper function, before Stan supported parallel
+    # processing. Runs rstan::stan() for a model -- once to compile, then
+    # several times in parallel, using parallel::mclapply() and
+    # rstan::sflist2stanfit() to combine the results.
+
     warning("stanfunc$parallel_stan: DEPRECATED; superseded by developments to rstan")
     cat("parallel_stan: cores = ", cores,
         ", chains = ", chains,
@@ -936,7 +1283,7 @@ stanfunc$parallel_stan <- function(
         sep = "")
 
     cat("--- Step 1: compile the model (and run it once, very briefly, ignoring its output)\n")
-    f1 <- stan(file = file,
+    f1 <- rstan::stan(file = file,
                model_code = code,
                data = data,
                chains = 1,
@@ -946,11 +1293,11 @@ stanfunc$parallel_stan <- function(
     # sflist1 = list(f1)
 
     cat("--- Step 2: run more chains in parallel\n")
-    sflist2 <- mclapply(
+    sflist2 <- parallel::mclapply(
         1:chains,
         mc.cores = cores,
         function(i) {
-            stan(fit = f1,
+            rstan::stan(fit = f1,
                  data = data,
                  chains = 1,
                  iter = iter,
@@ -965,12 +1312,15 @@ stanfunc$parallel_stan <- function(
 
     sflist <- sflist2
     cat("--- Finished.\n")
-    return(sflist2stanfit(sflist))
+    return(rstan::sflist2stanfit(sflist))
 }
 
 
 stanfunc$load_or_run_stan_old <- function(data, code, file, forcerun = FALSE)
 {
+    # DEPRECATED. Very old helper function, before Stan supported parallel
+    # processing. Cached (RDA) version of stanfunc$parallel_stan().
+
     warning("stanfunc$load_or_run_stan_old: DEPRECATED; superseded by developments to rstan")
     if (!forcerun && file.exists(file)) {
         cat("Loading Stan model from file:", file, "\n")
@@ -991,6 +1341,9 @@ stanfunc$parallel_stan_reuse_fit <- function(f1, data,
                                              iter = stanfunc$DEFAULT_ITER,
                                              seed = stanfunc$DEFAULT_SEED)
 {
+    # DEPRECATED. Very old helper function, before Stan supported parallel
+    # processing. Runs Stan in parallel, using a precompiled model.
+
     warning("stanfunc$parallel_stan_reuse_fit: DEPRECATED; superseded by developments to rstan")
     cat("parallel_stan_reuse_fit: cores = ", cores,
         ", chains = ", chains,
@@ -1024,6 +1377,8 @@ stanfunc$save_plots_from_stanfit <- function(
     tracefile = "teststan_trace.pdf",
     pairfile = "teststan_pairs.pdf")
 {
+    # Saves plots of parameters, traceplots, and pairs, from a Stan fit.
+
     cat("Plotting parameters to", parfile, "\n")
     pdf(file = parfile)
     plot(fit)
@@ -1042,12 +1397,17 @@ stanfunc$save_plots_from_stanfit <- function(
 stanfunc$quick_summary_stanfit <- function(
         fit, probs = c(0.025, 0.25, 0.5, 0.75, 0.975))
 {
+    # Of limited use! Prints a Stan fit for selected probabilities and at 5
+    # decimal places.
+
     print(fit, digits_summary = 5, probs = probs)
 }
 
 
 stanfunc$calculate_mode <- function(sampled_values)
 {
+    # Calculate the mode of sampled values, via a kernel density method.
+
     my_density <- density(sampled_values)
     max_density <- max(my_density$y)
     my_density$x[which(my_density$y == max_density)]
@@ -1056,6 +1416,11 @@ stanfunc$calculate_mode <- function(sampled_values)
 
 stanfunc$density_at_sub <- function(my_density, value)
 {
+    # Given a kernel density estimate ["my_density", being the output of
+    # density()], estimate the density at a particular value. If the density is
+    # known exactly, that is returned; otherwise, the density is interpolated
+    # linearly between the two adjacent values for which it's available.
+
     # Known exactly?
     if (value %in% my_density$x) {
         # cat("density_at: exact\n")
@@ -1079,6 +1444,9 @@ stanfunc$density_at_sub <- function(my_density, value)
 
 stanfunc$density_at <- function(sampled_values, values)
 {
+    # Estimates the probability density of "sampled values" at the values
+    # "values", interpolating if necessary.
+
     my_density <- density(sampled_values)
     result <- NULL
     for (v in values) {
@@ -1091,26 +1459,43 @@ stanfunc$density_at <- function(sampled_values, values)
 stanfunc$cum_density_between_two_values <- function(sampled_values,
                                                     lower, upper)
 {
+    # Using an empirical cumulative density function via ecdf(), provide the
+    # cumulative density between two boundary values.
+
     my_ecdf <- ecdf(sampled_values)
     my_ecdf(upper) - my_ecdf(lower)
 }
 
-stanfunc$find_value_giving_density <- function(sampled_values, target_density)
-{
-    dens <- density(sampled_values)
-    finder <- function(x) {
-        density_at_sub(dens, x) - target_density
-    }
-    uniroot()
-}
+
+# stanfunc$find_value_giving_density <- function(sampled_values, target_density)
+# {
+#     # UNUSED, LIKELY BROKEN.
+#
+#     dens <- density(sampled_values)
+#     finder <- function(x) {
+#         density_at_sub(dens, x) - target_density
+#     }
+#     uniroot()
+# }
+
 
 stanfunc$find_value_giving_cum_density <- function(sampled_values, cum_density)
 {
+    # Find the value (exact or estimated) for which the cumulative density of
+    # "sampled_values" is "cum_density".
+
     cdf <- ecdf(sampled_values)
+    # The output of ecdf() is a FUNCTION that takes one [e.g. 5] or many values
+    # [e.g. c(2, 5)] and returns the estimated CDF at the values given.
+
     find_root <- function(x) {
+        # x is a single value
         cdf(x) - cum_density
     }
+    # Starting interval is the full range of sampled values:
     search_range <- c(min(sampled_values), max(sampled_values))
+    # The uniroot() function searches the interval provided for a root (zero)
+    # of the function provided.
     value <- uniroot(find_root, interval = search_range)$root
 }
 
@@ -1142,14 +1527,31 @@ calculate_hdi_from_sample_interpolating <- function(x, hdi_proportion = 0.95)
 "
 
 
-stanfunc$calculate_hdi_from_sample_piecewise <- function(x, hdi_proportion = 0.95)
+stanfunc$calculate_hdi_from_sample_piecewise <- function(
+        x,
+        hdi_proportion = stanfunc$DEFAULT_HDI_PROPORTION)
 {
-    # WORKS, BUT USE coda::HPDinterval instead
-    # x contains sampled values
-    # ... the shortest interval for which the difference in the empirical cumulative density function values of the endpoints is the nominal probability
+    # Calculates an HDI. WORKS, BUT USE coda::HPDinterval instead.
+    #
+    # Args:
+    #   x
+    #       Sampled values.
+    #   hdi_proportion:
+    #       E.g. 0.95% for a 95% HDI.
+    #
+    # Returns:
+    #   The shortest interval for which the difference in the empirical
+    #   cumulative density function values of the endpoints is the nominal
+    #   probability.
+    #
+    # Adapted from a Javascript version at Rasmus Bååth's blog:
+    # - https://www.sumsar.net/best_online/js/js_mcmc.js
+    # - https://www.sumsar.net/best_online/js
+    #
+    # See:
     # http://stats.stackexchange.com/questions/18533/find-probability-density-intervals
+
     x <- sort(x)
-    # http://www.sumsar.net/best_online/js/js_mcmc.js
     n <- length(x)
     ci_nbr_of_points <- floor(n * hdi_proportion) # want this many samples in the HDI
     min_width_ci <- c(min(x), max(x)) # initialize
@@ -1166,23 +1568,31 @@ stanfunc$calculate_hdi_from_sample_piecewise <- function(x, hdi_proportion = 0.9
 }
 
 
-stanfunc$HDIofMCMC <- function(sampleVec, credMass = 0.95)
+stanfunc$HDIofMCMC <- function(
+        sampleVec,
+        credMass = stanfunc$DEFAULT_HDI_PROPORTION)
 {
-    # Krushke, p628, HDIofMCMC.R
+    # From Kruschke (2011) "Doing Bayesian Data Analysis", p628, HDIofMCMC.R.
+    # No changes apart from trivial formatting for house style.
+    #
     # Computes highest density interval from a sample of representative values,
-    #   estimated as shortest credible interval.
+    # estimated as shortest credible interval.
+    #
     # Arguments:
-    #  sampleVec
-    #    is a vector of representative values from a probability distribution.
-    # credMass
-    #    is a scalar between 0 and 1, indicating the mass within the credible
-    #    interval that is to be estimated.
-    # Value:
-    #  HDIlim is a vector containing the limits of the HDI
-    sortedPts <- sort( sampleVec )
-    ciIdxInc <- floor( credMass * length( sortedPts ) )
-    nCIs <- length( sortedPts ) - ciIdxInc
-    ciWidth <- rep( 0 , nCIs )
+    #   sampleVec
+    #       is a vector of representative values from a probability
+    #       distribution.
+    #   credMass
+    #       is a scalar between 0 and 1, indicating the mass within the
+    #       credible interval that is to be estimated.
+    #
+    # Return value:
+    #   HDIlim is a vector containing the limits of the HDI
+
+    sortedPts <- sort(sampleVec)
+    ciIdxInc <- floor(credMass * length(sortedPts))
+    nCIs <- length(sortedPts) - ciIdxInc
+    ciWidth <- rep(0 , nCIs)
     for (i in 1:nCIs) {
         ciWidth[i] <- sortedPts[i + ciIdxInc] - sortedPts[i]
     }
@@ -1194,7 +1604,7 @@ stanfunc$HDIofMCMC <- function(sampleVec, credMass = 0.95)
 
 
 stanfunc$TEST_HDI_OF_MCMC <- '
-    # See Kruschke (2011) p41, p628
+    # See Kruschke (2011) p41, p628.
     set.seed(1234)
     n = 20000
     symmetric_y <- rnorm(n, mean = 0, sd = 1)
@@ -1212,9 +1622,18 @@ stanfunc$TEST_HDI_OF_MCMC <- '
 '
 
 
-stanfunc$hdi_via_coda <- function(sampled_values, hdi_proportion = 0.95)
+stanfunc$hdi_via_coda <- function(
+        sampled_values,
+        hdi_proportion = stanfunc$DEFAULT_HDI_PROPORTION)
 {
-    hdi_limits_matrix <- coda::HPDinterval(as.mcmc(sampled_values),
+    # Calculates a highest density interval (HDI) via coda::HPDinterval();
+    # see ?coda::HPDinterval.
+    #
+    # Its source code is at e.g. https://rdrr.io/cran/coda/src/R/HPDinterval.R
+
+    # The coda::as.mcmc() function essentially just puts values into a data
+    # object that the Coda library likes.
+    hdi_limits_matrix <- coda::HPDinterval(coda::as.mcmc(sampled_values),
                                            prob = hdi_proportion)
     # ... Sometimes crashes with
     # "Error in dimnames(x)[[2]] : subscript out of bounds"
@@ -1224,33 +1643,70 @@ stanfunc$hdi_via_coda <- function(sampled_values, hdi_proportion = 0.95)
 }
 
 
-stanfunc$hdi_via_lme4 <- function(sampled_values, hdi_proportion = 0.95)
+stanfunc$hdi_via_lme4 <- function(
+        sampled_values,
+        hdi_proportion = stanfunc$DEFAULT_HDI_PROPORTION)
 {
+    # Calculates a highest density interval (HDI) via lme4::HPDinterval();
+    # see ?lme4::HPDinterval. However, while this function was in lme4 in 2013
+    # (e.g.
+    # https://si.biostat.washington.edu/sites/default/files/modules/lme4.pdf),
+    # it has gone by 2023 (e.g.
+    # https://cran.r-project.org/web/packages/lme4/lme4.pdf).
+
     hdi_limits_matrix <- lme4::HPDinterval(as.matrix(sampled_values),
                                            prob = hdi_proportion)
-    return(c( hdi_limits_matrix[1, "lower"], hdi_limits_matrix[1, "upper"]))
+    return(c(hdi_limits_matrix[1, "lower"], hdi_limits_matrix[1, "upper"]))
 }
 
 
-stanfunc$compare_hdi_methods <- function(sampled_values, hdi_proportion)
+stanfunc$compare_hdi_methods <- function(
+        sampled_values,
+        hdi_proportion = stanfunc$DEFAULT_HDI_PROPORTION)
 {
+    # Reports HDI estimates using a variety of methods.
+
     cat("Bååth:\n")
-    print(calculate_hdi_from_sample_piecewise(sampled_values, hdi_proportion))
+    print(stanfunc$calculate_hdi_from_sample_piecewise(sampled_values, hdi_proportion))
     cat("Kruschke:\n")
-    print(HDIofMCMC(sampled_values, hdi_proportion))
+    print(stanfunc$HDIofMCMC(sampled_values, hdi_proportion))
     cat("coda:\n")
-    print(hdi_via_coda(sampled_values, hdi_proportion))
-    cat("lme4:\n")
-    print(hdi_via_lme4(sampled_values, hdi_proportion))
+    print(stanfunc$hdi_via_coda(sampled_values, hdi_proportion))
+    # REMOVED FROM lme4 by 2023
+    # cat("lme4:\n")
+    # print(stanfunc$hdi_via_lme4(sampled_values, hdi_proportion))
 }
 
 
-stanfunc$hdi <- function(sampled_values, hdi_proportion = 0.95,
-                         method = c("kruschke_mcmc",
-                                    "coda",
-                                    "baath",
-                                    "lme4"))
+stanfunc$hdi <- function(
+    sampled_values,
+    hdi_proportion = stanfunc$DEFAULT_HDI_PROPORTION,
+    method = c("coda", "kruschke_mcmc", "baath"))
 {
+    # Calculates a highest density interval (HDI) from sampled values,
+    # according to a variety of methods.
+    #
+    # Args:
+    #   sampled_values
+    #       The values
+    #   hdi_proportion
+    #       E.g. 0.95% for a 95% HDI.
+    #   method:
+    #       Method to use:
+    #       - kruschke_mcmc
+    #           Use stanfunc$HDIofMCMC(); q.v.
+    #       - coda
+    #           Use coda::HPDinterval(coda::as.mcmc(...)).
+    #       - baath
+    #           Use stanfunc$calculate_hdi_from_sample_piecewise(); q.v.
+    #       - (REMOVED) lme4
+    #           Use lme4::HPDinterval(), since removed from the lme4 package.
+    #
+    # Changes:
+    # - 2023-07-27: default changed from "kruschke_mcmc" to "coda". Should
+    #   make no difference but more eyes on the coda package. (This value here
+    #   should also match stanfunc$DEFAULT_HDI_METHOD.)
+
     # Method chooser!
     method <- match.arg(method)
     if (method == "kruschke_mcmc") {
@@ -1259,8 +1715,8 @@ stanfunc$hdi <- function(sampled_values, hdi_proportion = 0.95,
         return(hdi_via_coda(sampled_values, hdi_proportion))
     } else if (method == "baath") {
         return(calculate_hdi_from_sample_piecewise(sampled_values, hdi_proportion))
-    } else if (method == "lme4") {
-        return(hdi_via_lme4(sampled_values, hdi_proportion))
+    # } else if (method == "lme4") {
+    #    return(hdi_via_lme4(sampled_values, hdi_proportion))
     } else {
         stop("Bad method")
     }
@@ -1277,10 +1733,10 @@ stanfunc$interval_includes <- function(interval, testval,
     # The lower_inclusive and upper_inclusive parameters determine whether the
     # interval's boundaries are treated as inclusive or exclusive.
 
+    stopifnot(length(interval) == 2)
     # Ensure ordered from low to high:
-    if (interval[2] < interval[1]) {
-        interval <- c(interval[2], interval[1])
-    }
+    interval <- sort(interval)
+
     lowertest <- ifelse(lower_inclusive,
                         interval[1] <= testval,
                         interval[1] < testval)
@@ -1300,6 +1756,7 @@ stanfunc$interval_excludes <- function(interval, testval,
     #
     # The lower_inclusive and upper_inclusive parameters determine whether the
     # interval's boundaries are treated as inclusive or exclusive.
+
     !stanfunc$interval_includes(interval, testval,
                                 lower_inclusive = lower_inclusive,
                                 upper_inclusive = upper_inclusive)
@@ -1307,17 +1764,37 @@ stanfunc$interval_excludes <- function(interval, testval,
 
 
 stanfunc$hdi_proportion_excluding_test_value <- function(
-        x, test_value = 0, largest_such_interval = TRUE, debug = FALSE)
+        x, test_value = 0, largest_such_interval = TRUE, debug = FALSE,
+        width_accuracy = 0.001)
 {
+    # "What HDI proportion excludes the test value?"
+    #
     # cruddy method! (Inefficient.)
-
-    # NOTE ALSO: neither the lower bound nor the upper bound of an HDI
-    # move monotonically as the HDI proportion is changed (because the
-    # distribution can be asymmetrical). Thus, an ascending approach and a
-    # descending approach can give different answers; the largest_such_interval
-    # parameter determines the direction of search.
-
-    width_accuracy <- 0.001  # 0.1%
+    #
+    # Args:
+    #   x
+    #       Sampled values.
+    #   test_value
+    #       A test value
+    #   largest_such_interval
+    #       - If TRUE, work from 1 (100% HDI) down to 0 (0% HDI) and stop when
+    #         the HDI no longer includes the value.
+    #       - If FALSE, work from 0 (0% HDI) up to 1 (100% HDI) and stop (just
+    #         before) when the HDI includes the value.
+    #   width_accuracy
+    #       Accuracy (step size) for search; default is 0.001 = 0.1%.
+    #
+    # Returns:
+    #   Approximately the largest HDI proportion (e.g. 0.87 for the 87% HDI,
+    #   0.95 for the 95% HDI) that excludes test_value -- either a high-end
+    #   estimate (if largest_such_interval is TRUE) or a low-end estimate (if
+    #   largest_such_interval is FALSE).
+    #
+    # NOTE ALSO: neither the lower bound nor the upper bound of an HDI move
+    # monotonically as the HDI proportion is changed (because the distribution
+    # can be asymmetrical). Thus, an ascending approach and a descending
+    # approach can give different answers; the largest_such_interval parameter
+    # determines the direction of search.
 
     if (largest_such_interval) {
         # Work from 1 (100% HDI) down to 0 (0% HDI) and stop when the HDI
@@ -1325,13 +1802,13 @@ stanfunc$hdi_proportion_excluding_test_value <- function(
         startval <- 1
         endval <- 0
         width_accuracy <- -width_accuracy
-        stoptest <- interval_excludes
+        stoptest <- stanfunc$interval_excludes
     } else {
         # Work from 0 (0% HDI) up to 1 (100% HDI) and stop when the HDI
         # includes the value.
         startval <- 0
         endval <- 1
-        stoptest <- interval_includes
+        stoptest <- stanfunc$interval_includes
     }
     prev_width <- startval
 
@@ -1344,7 +1821,15 @@ stanfunc$hdi_proportion_excluding_test_value <- function(
                        ", fails? ", current_interval_fails,
                        "\n", sep = "")
         if (current_interval_fails) {
-            # current interval fails, so return the previous
+            # Current interval fails...
+            # - if largest_such_interval == TRUE, that means the current
+            #   interval EXCLUDES the test value (but the previous, which
+            #   was larger, included it). We return the previous, which is
+            #   an upper-bound estimate of the true target.
+            # - if largest_such_interval == FALSE, that means the current
+            #   interval INCLUDES the test value (but the previous, which
+            #   was smaller, excluded it) -- so return the previous. This
+            #   gives a lower-bound estimate.
             return(prev_width)
         }
         prev_width <- width
@@ -1353,12 +1838,22 @@ stanfunc$hdi_proportion_excluding_test_value <- function(
 }
 
 
+stanfunc$TEST_HDI_PROP_EXC_VALUE <- "
+    set.seed(0)
+    x <- rbeta(1000, 2, 5)  # asymmetrical
+    hist(x)  # show distribution
+    test_value <- 0.6  # in upper tail
+    stanfunc$hdi_proportion_excluding_test_value(x, test_value, largest_such_interval = TRUE, debug = FALSE)
+    stanfunc$hdi_proportion_excluding_test_value(x, test_value, largest_such_interval = FALSE, debug = FALSE)
+"
+
+
 stanfunc$plot_density_function <- function(
         sampled_values,
-        parname,
+        parname = deparse(substitute(sampled_values)),
         test_value = 0,
         quantile_probs = c(0.025, 0.5, 0.975),
-        hdi_proportion = 0.95,
+        hdi_proportion = stanfunc$DEFAULT_HDI_PROPORTION,
         digits = 3,
         colour_quantiles = "gray",
         colour_mean = "black",
@@ -1378,6 +1873,53 @@ stanfunc$plot_density_function <- function(
         ypos_mean = 0.6,
         ypos_mode = 0.4)
 {
+    # Explore the distribution of a variable, via a plot and a report.
+    # See also stanfunc$ggplot_density_function().
+    #
+    # Includes:
+    # - a density plot
+    # - mean, mode, median or other quantiles (plot, report)
+    # - central interval excluding a target value (report)
+    # - a specified HDI (plot, report)
+    # - largest HDI excluding a target value (report)
+    #
+    # The plot is labelled "posterior distribution" for convenience, but the
+    # posterior nature is from what you feed in! It just plots the
+    # distribution.
+    #
+    # For asymmetric distributions, this illustrates the difference between the
+    # "central interval" (or "quantile interval") and the "highest density
+    # interval" (HDI). Illustrations are also at
+    # - https://stats.stackexchange.com/questions/148439/what-is-a-highest-density-region-hdr
+    # - https://stats.stackexchange.com/questions/240749/how-to-find-95-credible-interval
+    #
+    # Args:
+    #   sampled_values
+    #       The values.
+    #   parname
+    #       Decorative parameter name, for the plot.
+    #   test_value
+    #       Value to test "against", graphically (e.g. zero for "is it
+    #       non-zero"?).
+    #   quantile_probs
+    #       Quantiles to plot.
+    #   hdi_proportion
+    #       HDI to plot (e.g. 0.95 for a 95% HDI).
+    #   digits
+    #       Number of digits for number formatting.
+    #   colour_...
+    #       Colours for quantiles, mean, mode, and HDI plotting.
+    #   lty_...
+    #       Line types for quantiles, mean, mode, and HDI plotting.
+    #   colour_density
+    #       Colour for the density estimate.
+    #   show_hdi_proportion_excluding_test_value:
+    #       Show the (largest) HDI proportion excluding test_value.
+    #   show_...
+    #       Show quantiles, mean, mode, hdi
+    #   ypos_...
+    #       Ordinate (y) value at which to show quantiles, mean, mode.
+
     my_density <- density(sampled_values)
     max_density <- max(my_density$y)
     q <- quantile(sampled_values, probs = quantile_probs)
@@ -1385,40 +1927,54 @@ stanfunc$plot_density_function <- function(
     my_mode <- calculate_mode(sampled_values)
     my_ecdf <- ecdf(sampled_values)
     hdi_percent <- hdi_proportion * 100
-    #debug_quantity(sampled_values)
+    # debug_quantity(sampled_values)
 
-    hdi_limits <- hdi(sampled_values, hdi_proportion)
+    hdi_limits <- stanfunc$hdi(sampled_values, hdi_proportion)
 
-    central_proportion_excluding_test_value <- 1 - 2 * my_ecdf(test_value)
+    cump <- my_ecdf(test_value)
+    if (cump <= 0.5) {
+        # test_value in lower tail
+        central_proportion_excluding_test_value <- 1 - 2 * cump
+    } else {
+        # test_value in upper tail
+        central_proportion_excluding_test_value <- 1 - 2 * (1 - cump)
+    }
 
     cat("\nParameter:", parname, "\n")
     cat("Mean:", my_mean, "\n")
     cat("Mode:", my_mode, "\n")
     cat("Quantiles:\n")
     print(q)
-    cat("Central proportion excluding test value of", test_value, ":",
-        central_proportion_excluding_test_value, "\n")
-    cat(hdi_percent, "% HDI:\n")
+    cat(
+        "Central proportion excluding test value of ", test_value, ": ",
+        central_proportion_excluding_test_value,
+        " (", 100 * central_proportion_excluding_test_value, "%)\n",
+        sep = ""
+    )
+    cat(hdi_percent, "% HDI:\n", sep="")
     print(hdi_limits)
     if (show_hdi_proportion_excluding_test_value) {
+        hdip <- hdi_proportion_excluding_test_value(sampled_values, test_value)
         cat(
-            "HDI proportion excluding test value of"
-            , test_value
-            , ":"
-            , hdi_proportion_excluding_test_value(sampled_values, test_value)
-            , "\n"
+            "HDI proportion excluding test value of ", test_value, ": ",
+            hdip,
+            " (", 100 * hdip, "%)\n",
+            sep = ""
         )
     }
     #cat("Empirical CDF plotted\n")
     #plot(my_ecdf)
 
-    cat("Plotting posterior distribution, with ", hdi_percent, "% HDI\n")
+    cat(
+        "Plotting posterior distribution, with ", hdi_percent, "% HDI\n",
+        sep = ""
+    )
     plot(
         my_density$x,
         my_density$y,
         xlab = parname,
         ylab = "Density",
-        main = paste("Posterior distribution of ", parname, sep = ""),
+        main = paste0("Posterior distribution of ", parname),
         type = "l",
         bty = "n",
         col = colour_density,
@@ -1444,7 +2000,7 @@ stanfunc$plot_density_function <- function(
             text(q[i], ypos_quantiles_upper,
                  prettyNum(q[i], digits = digits), col = colour_quantiles)
             text(q[i], ypos_quantiles_lower,
-                 paste(quantile_probs[i] * 100, "%", sep = ""),
+                 paste0(quantile_probs[i] * 100, "%"),
                  col = colour_quantiles)
         }
     }
@@ -1498,7 +2054,7 @@ stanfunc$plot_density_function <- function(
         ypos_hdi_text <- mean_density_at_hdi + max_density * -0.05
         ypos_hdi_nums <- mean_density_at_hdi + max_density * 0.05
         text(mean(hdi_limits), ypos_hdi_text,
-             paste(hdi_percent, "% HDI", sep = ""), col = colour_hdi)
+             paste0(hdi_percent, "% HDI"), col = colour_hdi)
         text(hdi_limits[1], ypos_hdi_nums,
              prettyNum(hdi_limits[1], digits = digits), col = colour_hdi)
         text(hdi_limits[2], ypos_hdi_nums,
@@ -1509,10 +2065,10 @@ stanfunc$plot_density_function <- function(
 
 stanfunc$ggplot_density_function <- function(
         sampled_values,
-        parname,
-        test_value = 0,
+        parname = deparse(substitute(sampled_values)),
+        # test_value = 0,
         quantile_probs = c(0.025, 0.5, 0.975),
-        hdi_proportion = 0.95,
+        hdi_proportion = stanfunc$DEFAULT_HDI_PROPORTION,
         digits = 3,
         colour_quantiles = "gray",
         colour_mean = "black",
@@ -1531,24 +2087,55 @@ stanfunc$ggplot_density_function <- function(
         ypos_quantiles = 1.15,
         ypos_mean = 0.6,
         ypos_mode = 0.4,
-        xlim = NULL,
-        theme = theme_bw(),
         ypos_hdi_text = NULL,
         ypos_hdi_nums = NULL,
+        xlim = NULL,
+        theme = theme_bw(),
         hdi_text_vjust = 0.5,
         hdi_nums_vjust = 0.5)
 {
+    # As for stanfunc$plot_density_function(), but generating and returning a
+    # ggplot plot object.
+    #
+    # Args:
+    #   sampled_values
+    #       The values.
+    #   parname
+    #       Decorative parameter name, for the plot.
+    #   quantile_probs
+    #       Quantiles to plot.
+    #   hdi_proportion
+    #       HDI to plot (e.g. 0.95 for a 95% HDI).
+    #   digits
+    #       Number of digits for number formatting.
+    #   colour_...
+    #       Colours for quantiles, mean, mode, and HDI plotting.
+    #   lty_...
+    #       Line types for quantiles, mean, mode, and HDI plotting.
+    #   colour_density
+    #       Colour for the density estimate.
+    #   show_...
+    #       Show quantiles, mean, mode, hdi
+    #   ypos_...
+    #       Ordinate (y) value at which to show quantiles, mean, mode, HDI
+    #       text, HDI numbers.
+    #   xlim
+    #       Optional x limits.
+    #   theme
+    #       ggplot theme.
+    #   hdi_text_vjust
+    #   hdi_nums_vjust
+    #       Vertical justification for HDI text/numbers (0.5 = centred).
+
     my_density <- density(sampled_values)
     max_density <- max(my_density$y)
     q <- quantile(sampled_values, probs = quantile_probs)
     my_mean <- mean(sampled_values)
     my_mode <- calculate_mode(sampled_values)
-    my_ecdf <- ecdf(sampled_values)
+    # my_ecdf <- ecdf(sampled_values)
     hdi_percent <- hdi_proportion * 100
 
-    hdi_limits <- hdi(sampled_values, hdi_proportion)
-
-    central_proportion_excluding_test_value <- 1 - 2 * my_ecdf(test_value)
+    hdi_limits <- stanfunc$hdi(sampled_values, hdi_proportion)
 
     df <- data.frame(x = my_density$x, y = my_density$y)
     p <- (
@@ -1557,7 +2144,7 @@ stanfunc$ggplot_density_function <- function(
         + geom_line(colour = colour_density)
         + xlab(parname)
         + ylab("Density")
-        + ggtitle(paste("Posterior distribution of ", parname, sep = ""))
+        + ggtitle(paste0("Posterior distribution of ", parname))
         + ylim(0, max_density * 1.2)
     )
     if (!is.null(xlim)) {
@@ -1566,7 +2153,7 @@ stanfunc$ggplot_density_function <- function(
 
     ypos_quantiles_upper <- max_density * ypos_quantiles
     ypos_quantiles_lower <- max_density * (ypos_quantiles - 0.05)
-    ypos_quantiles_linetop <- max_density * (ypos_quantiles - 0.10)
+    # ypos_quantiles_linetop <- max_density * (ypos_quantiles - 0.10)
     ypos_mean_upper <- max_density * ypos_mean
     ypos_mean_lower <- max_density * (ypos_mean - 0.05)
     ypos_mode_upper <- max_density * ypos_mode
@@ -1583,7 +2170,7 @@ stanfunc$ggplot_density_function <- function(
                            label = prettyNum(q[i], digits = digits),
                            colour = colour_quantiles)
                 + annotate("text", x = q[i], y = ypos_quantiles_lower,
-                           label = paste(quantile_probs[i] * 100, "%", sep = ""),
+                           label = paste0(quantile_probs[i] * 100, "%"),
                            colour = colour_quantiles)
             )
         }
@@ -1637,7 +2224,7 @@ stanfunc$ggplot_density_function <- function(
                 linetype = lty_hdi,
             )
             + annotate("text", x = mean(hdi_limits), y = ypos_hdi_text,
-                       label = paste(hdi_percent, "% HDI", sep = ""),
+                       label = paste0(hdi_percent, "% HDI"),
                        colour = colour_hdi,
                        vjust = hdi_text_vjust)
             + annotate("text", x = hdi_limits[1], y = ypos_hdi_nums,
@@ -1654,8 +2241,57 @@ stanfunc$ggplot_density_function <- function(
 }
 
 
+stanfunc$test_specific_parameter_from_stanfit <- function(fit, parname, ...)
+{
+    # Produce an annotated density plot for a Stan parameter.
+    #
+    # Args:
+    #   fit
+    #       The Stan fit object.
+    #   parname
+    #       The (single) parameter to plot.
+    #   ...
+    #       Other arguments to stanfunc$plot_density_function().
+
+    # ??rstan
+    # ?stan
+    # ?rstan::print.stanfit -- NOTE OPTIONS: probs (quartiles of interest), digits_summary (sig. digits)
+    # ?extract
+    # ?traceplot
+
+    # showClass("stanfit")
+    # methods(class = "stanfit")
+
+    # slot(fit, "model_pars")
+    # print(summary(fit))
+
+    # CAN'T GET HELP:
+    # ?rstan::stanfit-class -- https://code.google.com/p/stan/source/browse/rstan/rstan/man/stanfit-class.Rd?name=web
+    # ?rstan::plot-methods
+
+    # names(slot(fit, "sim"))
+    # ...  [1] "samples" "chains" "iter" "thin" "warmup" "n_save" "warmup2" "permutation" "pars_oi" "dims_oi" "fnames_oi" "n_flatnames"
+    # for chain 1:
+    # slot(fit, "sim")$samples[[1]]$"group_mean_reinf_rate[1]"
+    # quantile(slot(fit, "sim")$samples[[1]]$"group_mean_reinf_rate[1]", probs = c(0.025, 0.25, 0.5, 0.75, 0.975))
+
+    # the opposite of quantile is ecdf:
+    # x = slot(fit, "sim")$samples[[1]]$"gmd_side_stickiness_max"
+    # EF = ecdf(x)
+    # EF(0)
+
+    # NOTE, however, that this contains all runs
+    sampled_values <- stanfunc$sampled_values_from_stanfit(fit, parname)
+    stanfunc$plot_density_function(sampled_values, parname, ...)
+}
+
+
 stanfunc$plot_multiple_stanfit_parameters <- function(fit, parnames, ...)
 {
+    # Plot annotated distributions for MULTIPLE parameters from a Stan fit,
+    # using stanfunc$test_specific_parameter_from_stanfit() and thus
+    # stanfunc$plot_density_function().
+
     npar <- length(parnames)
     nside <- ceiling(sqrt(npar))
     par(mfrow = c(nside, nside))
@@ -1667,6 +2303,10 @@ stanfunc$plot_multiple_stanfit_parameters <- function(fit, parnames, ...)
 
 stanfunc$plot_all_stanfit_parameters <- function(fit, ...)
 {
+    # Plots annotated distributions for ALL parameters from a Stan fit,
+    # using stanfunc$test_specific_parameter_from_stanfit() and thus
+    # stanfunc$plot_density_function().
+
     parnames <- stanfunc$get_all_parameters_from_stanfit(fit)
     stanfunc$plot_multiple_stanfit_parameters(fit, parnames, ...)
 }
@@ -1674,14 +2314,14 @@ stanfunc$plot_all_stanfit_parameters <- function(fit, ...)
 
 stanfunc$points_to_mm <- function(pts)
 {
+    # Converts printers' points to millimetres.
     pts * 0.352777778
 }
 
 
 stanfunc$plot_multiple_stanfit_parameters_vstack <- function(
         fit,
-        params,  # list(list(name = name1, desc = desc1), list(name = name2, desc = desc2)...)
-            # ... inner bit being a list because c() can't hold expressions properly
+        params,
         inner_hdi_proportion = 0.90,
         outer_hdi_proportion = 0.95,
         xlab = bquote(
@@ -1698,11 +2338,55 @@ stanfunc$plot_multiple_stanfit_parameters_vstack <- function(
         title = "Parameter value",
         compare_to = 0,
         theme = theme_bw(),
-        reverse_sign = FALSE,  # flip the sign of all dependent variables
+        reverse_sign = FALSE,
         show_hdi_proportion_excluding_comparison = FALSE,
         hdi_proportion_fontsize_points = 8,
         colour_hdi = TRUE)
 {
+    # Creates what Jonathan Kanen (2019) has named a "TIE Fighter" plot of Stan
+    # fitted parameters, i.e. vertically stacked with HDIs like wings.
+    #
+    # Args:
+    #   fit
+    #       The Stan fit object.
+    #   params
+    #       The parameters to plot, as a list of the form:
+    #           list(
+    #               list(name = name1, desc = desc1),
+    #               list(name = name2, desc = desc2)
+    #               ...
+    #           )
+    #       ... the inner bit being a list because c() can't hold expressions
+    #       properly.
+    #   inner_hdi_proportion
+    #       The HDI proportion for the "liberal" (inner) of two HDIs to plot.
+    #   outer_hdi_proportion
+    #       The HDI proportion for the "conservative" (outer) of two HDIs to
+    #       plot.
+    #   xlab
+    #       The x-axis label.
+    #   ylab
+    #       The y-axis label.
+    #   title
+    #       The plot title.
+    #   compare_to
+    #       The "test value" to compare to (e.g. 0).
+    #   theme
+    #       The ggplot theme.
+    #   reverse_sign
+    #       Flip the sign of all dependent variables? (For example, if you
+    #       calculated CONTROL - DRUG when you meant DRUG - CONTROL.)
+    #   show_hdi_proportion_excluding_comparison
+    #       Show the (estimated) largest HDI interval that excludes
+    #       "compare_to"?
+    #   hdi_proportion_fontsize_points
+    #       Font size, if show_hdi_proportion_excluding_comparison is used.
+    #   colour_hdi
+    #       Make the HDIs colourful?
+    #
+    # Returns:
+    #   A ggplot object.
+
     parnames <- sapply(params, function(x) x$name)
     pardesc <- sapply(params, function(x) {
         item <- ifelse(is.null(x$desc), x$name, x$desc)
@@ -1744,7 +2428,8 @@ stanfunc$plot_multiple_stanfit_parameters_vstack <- function(
     d$parname <- factor(d$parname, levels = rev(d$parname), ordered = TRUE)
 
     show_hdi_exclusion_proportions <- (
-        !is.na(compare_to) && show_hdi_proportion_excluding_comparison)
+        !is.na(compare_to) && show_hdi_proportion_excluding_comparison
+    )
 
     for (i in 1:n) {
         parname <- as.character(d$parname[i])
@@ -1785,11 +2470,10 @@ stanfunc$plot_multiple_stanfit_parameters_vstack <- function(
                 }
             }
             if (show_hdi_exclusion_proportions) {
-                d$hdiprop_excluding_comparison[i] <- paste(
+                d$hdiprop_excluding_comparison[i] <- paste0(
                     100 * hdi_proportion_excluding_test_value(sampled_values,
                                                               compare_to)
                     , "%"
-                    , sep = ""
                 )
             }
         }
@@ -1840,6 +2524,9 @@ stanfunc$plot_multiple_stanfit_parameters_vstack <- function(
 
 stanfunc$plot_all_stanfit_parameters_vstack <- function(fit, ...)
 {
+    # Plot ALL parameters of a Stan fit, via
+    # stanfunc$plot_multiple_stanfit_parameters_vstack().
+
     parnames <- stanfunc$get_all_parameters_from_stanfit(fit)
     stanfunc$plot_multiple_stanfit_parameters_vstack(fit, parnames, ...)
 }
@@ -1847,6 +2534,20 @@ stanfunc$plot_all_stanfit_parameters_vstack <- function(fit, ...)
 
 stanfunc$generate_par_with_indices <- function(pn, pd)
 {
+    # Generates all parameter names for a parameter that has indices in the
+    # Stan fit object.
+    #
+    # Args:
+    #   pn
+    #       Parameter name without indices, e.g. "alpha".
+    #   pd
+    #       Vector (length: number of dimensions) whose contents is the size
+    #       in each dimension.
+    #
+    # Returns:
+    #   For example, stanfunc$generate_par_with_indices("x", c(2, 3)) gives
+    #   c("x[1,1]", "x[2,1]", "x[1,2]", "x[2,2]", "x[1,3]", "x[2,3]").
+
     #debug_quantity(pn)
     #debug_quantity(pd)
     ndims <- length(pd)
@@ -1862,12 +2563,12 @@ stanfunc$generate_par_with_indices <- function(pn, pd)
     #cat("indices: \n"); print(indices)
     parnames <- NULL
     for (r in 1:nrow(indices)) {
-        name <- paste(pn, "[", sep = "")
+        name <- paste0(pn, "[")
         for (c in 1:ncol(indices)) {
-            if (c > 1) name <- paste(name, ",", sep = "")
-            name <- paste(name, indices[r,c], sep = "")
+            if (c > 1) name <- paste0(name, ",")
+            name <- paste0(name, indices[r, c])
         }
-        name <- paste(name, "]", sep = "")
+        name <- paste0(name, "]")
         parnames <- c(parnames, name)
     }
     #cat("parnames: \n"); print(parnames)
@@ -1877,6 +2578,9 @@ stanfunc$generate_par_with_indices <- function(pn, pd)
 
 stanfunc$get_all_parameters_from_stanfit <- function(fit)
 {
+    # Generates all the parameter names for a Stan fit, including e.g.
+    # "alpha[1], alpha[2], alpha[3]..." for an array parameter alpha.
+
     parnames_without_indices <- slot(fit, "model_pars")
     pardims <- slot(fit, "par_dims")
     parnames <- NULL
@@ -1891,6 +2595,9 @@ stanfunc$get_all_parameters_from_stanfit <- function(fit)
 
 stanfunc$get_parameter_mean_from_stanfit <- function(fit, parname)
 {
+    # Returns the mean of sampled values for a specific parameter in a Stan
+    # fit.
+
     sampled_values <- stanfunc$sampled_values_from_stanfit(fit, parname)
     return(mean(sampled_values))
 }
@@ -1898,56 +2605,29 @@ stanfunc$get_parameter_mean_from_stanfit <- function(fit, parname)
 
 stanfunc$get_parameter_means_from_stanfit <- function(fit, parnames)
 {
-    return(aaply(parnames, 1, .fun = function(x) {
+    # Returns the means of sampled values for multiple named parameters in a
+    # Stan fit.
+
+    return(plyr::aaply(parnames, 1, .fun = function(x) {
         stanfunc$get_parameter_mean_from_stanfit(fit, x)
     }))
 }
 
 
-stanfunc$test_specific_parameter_from_stanfit <- function(fit, parname, ...)
-{
-    # ??rstan
-    # ?stan
-    # ?rstan::print.stanfit -- NOTE OPTIONS: probs (quartiles of interest), digits_summary (sig. digits)
-    # ?extract
-    # ?traceplot
-
-    # showClass("stanfit")
-    # methods(class = "stanfit")
-
-    # slot(fit, "model_pars")
-    # print(summary(fit))
-
-    # CAN'T GET HELP:
-    # ?rstan::stanfit-class -- https://code.google.com/p/stan/source/browse/rstan/rstan/man/stanfit-class.Rd?name=web
-    # ?rstan::plot-methods
-
-    # names(slot(fit, "sim"))
-    # ...  [1] "samples" "chains" "iter" "thin" "warmup" "n_save" "warmup2" "permutation" "pars_oi" "dims_oi" "fnames_oi" "n_flatnames"
-    # for chain 1:
-    # slot(fit, "sim")$samples[[1]]$"group_mean_reinf_rate[1]"
-    # quantile(slot(fit, "sim")$samples[[1]]$"group_mean_reinf_rate[1]", probs = c(0.025, 0.25, 0.5, 0.75, 0.975))
-
-    # the opposite of quantile is ecdf:
-    # x = slot(fit, "sim")$samples[[1]]$"gmd_side_stickiness_max"
-    # EF = ecdf(x)
-    # EF(0)
-
-    # NOTE, however, that this contains all runs
-    sampled_values <- stanfunc$sampled_values_from_stanfit(fit, parname)
-    stanfunc$plot_density_function(sampled_values, parname, ...)
-}
-
-
 stanfunc$ggplot_specific_parameter_from_stanfit <- function(fit, parname, ...)
 {
+    # Uses stanfunc$ggplot_density_function() to plot a specific named
+    # parameter from a Stan fit.
+
     sampled_values <- stanfunc$sampled_values_from_stanfit(fit, parname)
-    return( stanfunc$ggplot_density_function(sampled_values, parname, ...) )
+    return(stanfunc$ggplot_density_function(sampled_values, parname, ...))
 }
 
 
 stanfunc$extract_all_means_from_stanfit <- function(fit)
 {
+    # Produce all posterior means from a Stan fit.
+
     parnames <- stanfunc$get_all_parameters_from_stanfit(fit)
     means <- stanfunc$get_parameter_means_from_stanfit(fit, parnames)
     names(means) <- parnames
@@ -1958,6 +2638,19 @@ stanfunc$extract_all_means_from_stanfit <- function(fit)
 stanfunc$scatterplot_params <- function(fit, parnames = NULL, parlabels = NULL,
                                         ignore_lp = TRUE, ...)
 {
+    # Produce scatterplots (via R base graphics) for pairs of parameters in a
+    # Stan fit. (Unwise not to restrict the parameter names for large fits!)
+    #
+    # Args:
+    #   fit
+    #       The Stan fit object.
+    #   parnames
+    #       Parameter names to plot. If NULL, all will be used.
+    #   parlabels
+    #       If supplied, pretty names, to match "parnames".
+    #   ignore_lp
+    #       Ignore the special Stan "lp__" variable?
+
     # https://stackoverflow.com/questions/3735286/create-a-matrix-of-scatterplots-pairs-equivalent-in-ggplot2
     if (is.null(parnames)) {
         parnames <- slot(fit, "sim")$pars_oi  # all parameter names
@@ -1972,104 +2665,6 @@ stanfunc$scatterplot_params <- function(fit, parnames = NULL, parlabels = NULL,
     d <- data.table(matrix(unlist(values), ncol = length(values), byrow = FALSE))
     colnames(d) <- parnames
     pairs(d, parlabels, ...)  # doesn't return anything useful, though
-}
-
-
-stanfunc$summarize_fit <- function(
-    fit,
-    pars = NULL,
-    par_regex = NULL,
-    par_exclude_regex = NULL,
-    probs = c(0.025, 0.25, 0.50, 0.75, 0.975),
-    annotate = TRUE,  # add *, **, etc.
-    vb = FALSE
-)
-{
-    # -------------------------------------------------------------------------
-    # Annotation helper functions
-    # -------------------------------------------------------------------------
-    f <- function(x) {
-        y <- sprintf("%.3f", x)
-        y <- gsub("-", "–", y)
-        return(y)
-    }
-    get_p_colname <- function(prob) {
-        return(paste(prob * 100, "%", sep = ""))
-    }
-    nonzero_at <- function(lower, upper) {
-        lower_name <- get_p_colname(lower)
-        upper_name <- get_p_colname(upper)
-        return(
-            0 < s[, lower_name, with = FALSE]
-            | s[, upper_name, with = FALSE] < 0
-        )
-    }
-    # -------------------------------------------------------------------------
-    # Sort out arguments
-    # -------------------------------------------------------------------------
-    initial_probs <- probs
-    if (annotate) {
-        probs <- c(probs, c(0.0005, 0.9995,  # p < 0.001 two-tailed
-                0.005, 0.995,  # for "**", p < 0.01 two-tailed
-                0.025, 0.975,  # for "*", p < 0.05 two-tailed
-                0.05, 0.95))  # for ".", p < 0.1 two-tailed
-    } else {
-        probs <- initial_probs
-    }
-    probs <- sort(unique(probs))
-    # -------------------------------------------------------------------------
-    # Filtered fit object
-    # -------------------------------------------------------------------------
-    s <- stanfunc$summary_by_par_regex(fit,
-                                       pars = pars,
-                                       par_regex = par_regex,
-                                       par_exclude_regex = par_exclude_regex,
-                                       probs = probs)
-    # -------------------------------------------------------------------------
-    # Summary column
-    # -------------------------------------------------------------------------
-    if (vb) {
-        # Variational Bayes approximation; no R-hat
-        maketextcol <- function(m, a, b) {
-            paste0(f(m), " [", f(a), ", ", f(b), "]")
-        }
-        s[, summary := maketextcol(mean, s[["2.5%"]], s[["97.5%"]])]
-    } else{
-        # Full Stan fit
-        maketextcol <- function(m, a, b, r) {
-            paste0(f(m), " [", f(a), ", ", f(b), "] (R=", f(r), ")")
-        }
-        s[, summary := maketextcol(mean, s[["2.5%"]], s[["97.5%"]], s[["Rhat"]])]
-    }
-    # -------------------------------------------------------------------------
-    # Asterisk annotation
-    # -------------------------------------------------------------------------
-    if (annotate) {
-        p_001 <- nonzero_at(0.0005, 0.9995)
-        p_01 <- nonzero_at(0.005, 0.995)
-        p_05 <- nonzero_at(0.025, 0.975)
-        p_1 <- nonzero_at(0.05, 0.95)
-        s[
-            ,
-            vs_zero := ifelse(p_001, "***",
-                              ifelse(p_01, "**",
-                                     ifelse(p_05, "*",
-                                            ifelse(p_1, ".", ""))))
-        ]
-    }
-    # -------------------------------------------------------------------------
-    # Tidy up
-    # -------------------------------------------------------------------------
-    hidden_probs <- setdiff(probs, initial_probs)  # in former, not latter
-    for (remove_prob in hidden_probs) {
-        remove_colname <- get_p_colname(remove_prob)
-        s[, (remove_colname) := NULL]
-    }
-    # -------------------------------------------------------------------------
-    # Done
-    # -------------------------------------------------------------------------
-    s <- s[]  # for data table display bug
-    return(s)
 }
 
 

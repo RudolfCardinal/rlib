@@ -447,6 +447,18 @@ The multi-way choice situation
         }
 
 
+Inverse temperature in the softmax function
+-------------------------------------------
+
+The default value for beta (inverse temperature) in most softmax
+implementations is 1. However, this strongly limits preferences, e.g.
+
+.. code-block:: R
+
+    softmax(c(1, 0   ), b = 1)  # 0.7310586 0.2689414
+    softmax(c(1, 0, 0), b = 1)  # 0.5761169 0.2119416 0.2119416
+
+
 Parameterizing the model
 ------------------------
 

@@ -235,9 +235,12 @@ RUN installGithub.r \
 # =============================================================================
 # Copy our library files
 # =============================================================================
+# We might store more data here from time to time, so we'll use /srv (which is
+# empty by default in this Docker parent image); this also follows Linux
+# conventions (https://refspecs.linuxfoundation.org/FHS_3.0/fhs/ch03s17.html).
 
 # The WORKDIR command creates the directory if it doesn't exist.
-WORKDIR /cardinal_rlib
+WORKDIR /srv/cardinal_rlib
 COPY . .
 # - Can't use "COPY .. ."; that gives "forbidden path outside the build
 #   context", even if the context extends up beyond the Dockerfile.
