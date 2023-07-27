@@ -146,7 +146,9 @@ RUN install2.r --error --deps TRUE \
     gplots \
     # ... Misc. plotting functions.
     gtools \
-    # ... Programming assistance.
+    # ... Programming assistance. \
+    HDInterval \
+    # ... Highest density intervals (Kruschke et al.)
     Hmisc \
     # ... Harrell Miscellaneous.
     languageR \

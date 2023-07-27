@@ -15,6 +15,7 @@ tmp_require_package_namespace(
     coda,
     data.table,
     ggplot2,
+    HDInterval,
     matrixStats,
     parallel,
     reshape,
@@ -40,7 +41,7 @@ stanfunc$DEFAULT_HIGH_RHAT_THRESHOLD <- 1.1
     #   of 1.2 is a typical threshold and 1.1 is a stringent criterion (Brooks
     #   and Gelman 1998, doi:10.1080/10618600.1998.10474787, p. 444).
 
-stanfunc$DEFAULT_HDI_METHOD <- "coda"
+stanfunc$DEFAULT_HDI_METHOD <- "HDInterval"
 stanfunc$DEFAULT_HDI_PROPORTION <- 0.95
 
 
@@ -1049,11 +1050,37 @@ stanfunc$annotated_parameters <- function(
     #
     # Changes:
     # - 2023-07-23: (a) changed default hdi_method from "kruschke_mcmc" to
-    #   stanfunc$DEFAULT_HDI_METHOD, now "coda"; (b) absorbed all functions
-    #   from stanfunc$summarize_fit, so there's only one (they were nearly
-    #   identical except the latter supported more filtering but only QIs); (c)
-    #   add "rangetype" column; (d) remove 25%/75% quantiles from the default
-    #   to save space.
+    #   stanfunc$DEFAULT_HDI_METHOD, now "HDInterval"; (b) absorbed all
+    #   functions from stanfunc$summarize_fit, so there's only one (they were
+    #   nearly identical except the latter supported more filtering but only
+    #   QIs); (c) add "rangetype" column; (d) remove 25%/75% quantiles from the
+    #   default to save space.
+
+    # -------------------------------------------------------------------------
+    # Sort out arguments
+    # -------------------------------------------------------------------------
+    if (length(ci) != 2) {
+        stop("Bad ci parameter")
+    }
+    ci <- sort(ci)
+    ci_lower <- ci[1]
+    ci_upper <- ci[2]
+    initial_probs <- probs
+    if (!ci_lower %in% probs || !ci_upper %in% probs) {
+        stop("Elements of ci must be in probs (unless you set nonzero_as_hdi)")
+    }
+    if (annotate) {
+        probs <- c(
+            probs,
+            c(
+                0.0005, 0.9995,  # by comparison to p < 0.001 two-tailed
+                0.005, 0.995,  # for "**", cf. p < 0.01 two-tailed
+                0.025, 0.975,  # for "*", cf. p < 0.05 two-tailed
+                0.05, 0.95  # for ".", cf. p < 0.1 two-tailed
+            )
+        )
+    }
+    probs <- sort(unique(probs))
 
     # -------------------------------------------------------------------------
     # Annotation helper functions
@@ -1067,18 +1094,6 @@ stanfunc$annotated_parameters <- function(
         # Get column name for quantile.
         return(paste0(prob * 100, "%"))
     }
-    get_hdi_colname <- function(prob) {
-        # Get column name for quantile.
-        return(paste0("hdi_", prob))
-    }
-
-    if (nonzero_as_hdi) {
-        ci_lower_colname <- "hdi_lower"
-        ci_upper_colname <- "hdi_upper"
-    } else {
-        ci_lower_colname <- get_p_colname(ci_lower)
-        ci_upper_colname <- get_p_colname(ci_upper)
-    }
 
     qi_nonzero_at <- function(lower, upper) {
         # Does our QI range exclude zero?
@@ -1091,33 +1106,6 @@ stanfunc$annotated_parameters <- function(
     }
 
     # -------------------------------------------------------------------------
-    # Sort out arguments
-    # -------------------------------------------------------------------------
-    if (length(ci) != 2) {
-        stop("Bad ci parameter")
-    }
-    ci <- sort(ci)
-    ci_lower <- ci[1]
-    ci_upper <- ci[2]
-    initial_probs <- probs
-    if (!nonzero_as_hdi) {
-        if (!ci_lower %in% probs || !ci_upper %in% probs) {
-            stop("Elements of ci must be in probs (unless you set nonzero_as_hdi)")
-        }
-        if (annotate) {
-            probs <- c(
-                probs,
-                c(
-                    0.0005, 0.9995,  # by comparison to p < 0.001 two-tailed
-                    0.005, 0.995,  # for "**", cf. p < 0.01 two-tailed
-                    0.025, 0.975,  # for "*", cf. p < 0.05 two-tailed
-                    0.05, 0.95  # for ".", cf. p < 0.1 two-tailed
-                )
-            )
-        }
-    }
-    probs <- sort(unique(probs))
-    # -------------------------------------------------------------------------
     # Filtered fit object
     # -------------------------------------------------------------------------
     s <- stanfunc$summary_by_par_regex(
@@ -1127,6 +1115,33 @@ stanfunc$annotated_parameters <- function(
         par_exclude_regex = par_exclude_regex,
         probs = probs
     )
+
+    # -------------------------------------------------------------------------
+    # Annotate "nonzero" status by QUANTILE INTERVAL (do they exclude zero?)
+    # -------------------------------------------------------------------------
+    if (annotate) {
+        p_001 <- qi_nonzero_at(0.0005, 0.9995)  # 0.001
+        p_01 <- qi_nonzero_at(0.005, 0.995)  # 0.01
+        p_05 <- qi_nonzero_at(0.025, 0.975)  # 0.05
+        p_1 <- qi_nonzero_at(0.05, 0.95)  # 0.1
+        s[
+            ,
+            qi_vs_zero := ifelse(
+                p_001,
+                "***",
+                ifelse(
+                    p_01,
+                    "**",
+                    ifelse(
+                        p_05,
+                        "*",
+                        ifelse(p_1, ".", "")
+                    )
+                )
+            )
+        ]
+    }
+
     # -------------------------------------------------------------------------
     # Determine HDI if required
     # -------------------------------------------------------------------------
@@ -1144,12 +1159,21 @@ stanfunc$annotated_parameters <- function(
             )
             s[rownum, hdi_lower := hdi_pair[1]]
             s[rownum, hdi_upper := hdi_pair[2]]
-            # It would be very slow do to
         }
     }
+    # It would be very slow to calculate all the HDIs required for the asterisk
+    # notation as below.
+
     # -------------------------------------------------------------------------
     # Summary column
     # -------------------------------------------------------------------------
+    if (nonzero_as_hdi) {
+        ci_lower_colname <- "hdi_lower"
+        ci_upper_colname <- "hdi_upper"
+    } else {
+        ci_lower_colname <- get_p_colname(ci_lower)
+        ci_upper_colname <- get_p_colname(ci_upper)
+    }
     if (vb) {
         # Variational Bayes approximation; no R-hat
         maketextcol <- function(m, a, b) {
@@ -1179,35 +1203,12 @@ stanfunc$annotated_parameters <- function(
             0 < s[, ci_lower_colname, with = FALSE] |
             s[, ci_upper_colname, with = FALSE] < 0
     ]
+
     # -------------------------------------------------------------------------
     # Make the range type clear
     # -------------------------------------------------------------------------
     s[, rangetype := ifelse(nonzero_as_hdi, "HDI", "QI")]
-    # -------------------------------------------------------------------------
-    # Annotate "nonzero" status by QUANTILE INTERVAL (do they exclude zero?)
-    # -------------------------------------------------------------------------
-    if (annotate) {
-        p_001 <- qi_nonzero_at(0.0005, 0.9995)  # 0.001
-        p_01 <- qi_nonzero_at(0.005, 0.995)  # 0.01
-        p_05 <- qi_nonzero_at(0.025, 0.975)  # 0.05
-        p_1 <- qi_nonzero_at(0.05, 0.95)  # 0.1
-        s[
-            ,
-            qi_vs_zero := ifelse(
-                p_001,
-                "***",
-                ifelse(
-                    p_01,
-                    "**",
-                    ifelse(
-                        p_05,
-                        "*",
-                        ifelse(p_1, ".", "")
-                    )
-                )
-            )
-        ]
-    }
+
     # -------------------------------------------------------------------------
     # Tidy up
     # -------------------------------------------------------------------------
@@ -1217,6 +1218,7 @@ stanfunc$annotated_parameters <- function(
         # cat(paste("Removing column", remove_colname, "\n"))
         s[, (remove_colname) := NULL]
     }
+
     # -------------------------------------------------------------------------
     # Done
     # -------------------------------------------------------------------------
@@ -1531,7 +1533,7 @@ stanfunc$calculate_hdi_from_sample_piecewise <- function(
         x,
         hdi_proportion = stanfunc$DEFAULT_HDI_PROPORTION)
 {
-    # Calculates an HDI. WORKS, BUT USE coda::HPDinterval instead.
+    # Calculates an HDI.
     #
     # Args:
     #   x
@@ -1633,13 +1635,22 @@ stanfunc$hdi_via_coda <- function(
 
     # The coda::as.mcmc() function essentially just puts values into a data
     # object that the Coda library likes.
-    hdi_limits_matrix <- coda::HPDinterval(coda::as.mcmc(sampled_values),
-                                           prob = hdi_proportion)
+    mcmc_obj <- coda::as.mcmc(sampled_values)
+    hdi_limits_matrix <- coda::HPDinterval(mcmc_obj, prob = hdi_proportion)
     # ... Sometimes crashes with
     # "Error in dimnames(x)[[2]] : subscript out of bounds"
     # for perfectly valid-looking data that works with other methods.
 
     return(c(hdi_limits_matrix[1, "lower"], hdi_limits_matrix[1, "upper"]))
+}
+
+stanfunc$hdi_via_hdinterval <- function(
+        sampled_values,
+        hdi_proportion = stanfunc$DEFAULT_HDI_PROPORTION)
+{
+    # Calculates an HDI using the HDInterval package, by Kruschke et al.
+    i <- HDInterval::hdi(sampled_values, credMass = hdi_proportion)
+    return(c(i["lower"], i["upper"]))
 }
 
 
@@ -1668,10 +1679,17 @@ stanfunc$compare_hdi_methods <- function(
 
     cat("Bååth:\n")
     print(stanfunc$calculate_hdi_from_sample_piecewise(sampled_values, hdi_proportion))
-    cat("Kruschke:\n")
-    print(stanfunc$HDIofMCMC(sampled_values, hdi_proportion))
+
     cat("coda:\n")
     print(stanfunc$hdi_via_coda(sampled_values, hdi_proportion))
+    # Sometimes crashes for no obvious reason; see stanfunc$hdi_via_coda().
+
+    cat("HDInterval:\n")
+    print(stanfunc$hdi_via_hdinterval(sampled_values, hdi_proportion))
+
+    cat("Kruschke (2011 book version):\n")
+    print(stanfunc$HDIofMCMC(sampled_values, hdi_proportion))
+
     # REMOVED FROM lme4 by 2023
     # cat("lme4:\n")
     # print(stanfunc$hdi_via_lme4(sampled_values, hdi_proportion))
@@ -1681,7 +1699,7 @@ stanfunc$compare_hdi_methods <- function(
 stanfunc$hdi <- function(
     sampled_values,
     hdi_proportion = stanfunc$DEFAULT_HDI_PROPORTION,
-    method = c("coda", "kruschke_mcmc", "baath"))
+    method = c("HDInterval", "coda", "kruschke_mcmc", "baath"))
 {
     # Calculates a highest density interval (HDI) from sampled values,
     # according to a variety of methods.
@@ -1693,6 +1711,8 @@ stanfunc$hdi <- function(
     #       E.g. 0.95% for a 95% HDI.
     #   method:
     #       Method to use:
+    #       - HDInterval
+    #           Use stanfunc$hdi_via_hdinterval(); q.v.
     #       - kruschke_mcmc
     #           Use stanfunc$HDIofMCMC(); q.v.
     #       - coda
@@ -1703,20 +1723,22 @@ stanfunc$hdi <- function(
     #           Use lme4::HPDinterval(), since removed from the lme4 package.
     #
     # Changes:
-    # - 2023-07-27: default changed from "kruschke_mcmc" to "coda". Should
-    #   make no difference but more eyes on the coda package. (This value here
-    #   should also match stanfunc$DEFAULT_HDI_METHOD.)
+    # - 2023-07-27: default changed from "kruschke_mcmc" to "HDInterval".
+    #   Should make no difference but more eyes on the HDInterval package.
+    #   (This value here should also match stanfunc$DEFAULT_HDI_METHOD.)
 
     # Method chooser!
     method <- match.arg(method)
-    if (method == "kruschke_mcmc") {
-        return(HDIofMCMC(sampled_values, hdi_proportion))
+    if (method == "HDInterval") {
+        return(stanfunc$hdi_via_hdinterval(sampled_values, hdi_proportion))
+    } else if (method == "kruschke_mcmc") {
+        return(stanfunc$HDIofMCMC(sampled_values, hdi_proportion))
     } else if (method == "coda") {
-        return(hdi_via_coda(sampled_values, hdi_proportion))
+        return(stanfunc$hdi_via_coda(sampled_values, hdi_proportion))
     } else if (method == "baath") {
-        return(calculate_hdi_from_sample_piecewise(sampled_values, hdi_proportion))
+        return(stanfunc$calculate_hdi_from_sample_piecewise(sampled_values, hdi_proportion))
     # } else if (method == "lme4") {
-    #    return(hdi_via_lme4(sampled_values, hdi_proportion))
+    #    return(stanfunc$hdi_via_lme4(sampled_values, hdi_proportion))
     } else {
         stop("Bad method")
     }
@@ -1889,9 +1911,9 @@ stanfunc$plot_density_function <- function(
     #
     # For asymmetric distributions, this illustrates the difference between the
     # "central interval" (or "quantile interval") and the "highest density
-    # interval" (HDI). Illustrations are also at
-    # - https://stats.stackexchange.com/questions/148439/what-is-a-highest-density-region-hdr
-    # - https://stats.stackexchange.com/questions/240749/how-to-find-95-credible-interval
+    # interval" (HDI). A good illustration is at
+    # https://cran.r-project.org/web/packages/HDInterval/HDInterval.pdf, for
+    # symmetric (quantile) intervals versus HDIs.
     #
     # Args:
     #   sampled_values
