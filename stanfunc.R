@@ -642,8 +642,8 @@ stanfunc$compare_model_evidence <- function(
     #       Keep the details used for intermediate calculations?
     #
     #   rhat_warning_threshold:
-    #       If this threshold for R-hat is exceeded, warnings are shown. A
-    #       value of 1.2 is a typical threshold and 1.1 is a stringent
+    #       If this threshold for R-hat is reached/exceeded, warnings are
+    #       shown. A value of 1.2 is a typical threshold and 1.1 is a stringent
     #       criterion (Brooks and Gelman 1998,
     #       doi:10.1080/10618600.1998.10474787, p. 444).
     #
@@ -703,13 +703,13 @@ stanfunc$compare_model_evidence <- function(
     d[, rhat_warning := ifelse(
         is.na(max_rhat),
         NA_character_,
-        ifelse(max_rhat > rhat_warning_threshold,
+        ifelse(max_rhat >= rhat_warning_threshold,
                rhat_bad_label, rhat_good_label)
     )]
     d[, rhat_selected_warning := ifelse(
         is.na(max_rhat_selected),
         NA_character_,
-        ifelse(max_rhat_selected > rhat_warning_threshold,
+        ifelse(max_rhat_selected >= rhat_warning_threshold,
                rhat_bad_label, rhat_good_label)
     )]
 
@@ -974,6 +974,7 @@ stanfunc$annotated_parameters <- function(
         nonzero_as_hdi = TRUE,
         hdi_proportion = stanfunc$DEFAULT_HDI_PROPORTION,
         hdi_method = stanfunc$DEFAULT_HDI_METHOD,
+        rhat_warning_threshold = stanfunc$DEFAULT_HIGH_RHAT_THRESHOLD,
         vb = FALSE
     )
 {
@@ -1044,6 +1045,11 @@ stanfunc$annotated_parameters <- function(
     #       For HDI calculation: what HDI proportion (e.g. 0.95 for 95% HDI).
     #   hdi_method
     #       For HDI calculation: method of calculation; see stanfunc$hdi().
+    #   rhat_warning_threshold:
+    #       If this threshold for R-hat is reached/exceeded, warnings are
+    #       shown. A value of 1.2 is a typical threshold and 1.1 is a stringent
+    #       criterion (Brooks and Gelman 1998,
+    #       doi:10.1080/10618600.1998.10474787, p. 444).
     #   vb
     #       Was the fit generated via variational Bayes (VB) approximation?
     #       (Such fits have no R-hat measure.)
@@ -1187,7 +1193,14 @@ stanfunc$annotated_parameters <- function(
     } else{
         # Full Stan fit
         maketextcol <- function(m, a, b, r) {
-            paste0(f(m), " [", f(a), ", ", f(b), "] (R=", f(r), ")")
+            rhat_warning <- ifelse(
+                r >= rhat_warning_threshold,
+                " !",
+                ""
+            )
+            paste0(
+                f(m), " [", f(a), ", ", f(b), "] (R=", f(r), rhat_warning, ")"
+            )
         }
         s[, summary := maketextcol(
             mean,
