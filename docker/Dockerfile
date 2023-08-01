@@ -146,7 +146,7 @@ RUN install2.r --error --deps TRUE \
     gplots \
     # ... Misc. plotting functions.
     gtools \
-    # ... Programming assistance. \
+    # ... Programming assistance.
     HDInterval \
     # ... Highest density intervals (Kruschke et al.)
     Hmisc \
@@ -188,7 +188,9 @@ RUN install2.r --error --deps TRUE \
     raster \
     # ... Geographic data analysis and modelling.
     readODS \
-    # ... Read OpenOffice files.
+    # ... Read OpenOffice files. \
+    readxl \
+    # ... fast XLSX read
     rgeos \
     # ... Interface to GEOS (Geometry Engine - Open Source).
     rgdal \
@@ -209,6 +211,8 @@ RUN install2.r --error --deps TRUE \
     # ... Manipulate data frames using SQL.
     TTR \
     # ... Technical Trading Rules.
+    writexl \
+    # ... fast XLSX write
     visreg \
     # ... Visualize regression models.
     XLConnect \
