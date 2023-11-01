@@ -151,6 +151,8 @@ RUN install2.r --error --deps TRUE \
     # ... Highest density intervals (Kruschke et al.)
     Hmisc \
     # ... Harrell Miscellaneous.
+    imager \
+    # ... Image processing.
     languageR \
     # ... Analysing linguistic data (NLP).
     LMERConvenienceFunctions \
@@ -161,8 +163,6 @@ RUN install2.r --error --deps TRUE \
     # ... Least-squares means.
     ltm \
     # ... Latent trait models.
-    maptools \
-    # ... For spatial maps.
     matrixStats \
     # ... High-performance matrix functions.
     MCMCglmm \
@@ -176,25 +176,27 @@ RUN install2.r --error --deps TRUE \
     openxlsx \
     # ... Manipulate Excel files.
     optimParallel \
-    # ... Parallel version of L-BFGS-B method for optim().
+    # ... Parallel version of L-BFGS-B method for optim(). \
+    pacman \
+    # ... R package management.
     patchwork \
     # ... Arrange ggplot plots; https://patchwork.data-imaginist.com/.
+    pda \
+    # ... Privacy-preserving distributed algorithms.
     plotrix \
     # ... Plotting functions.
     popbio \
     # ... Matrix population models.
     proto \
     # ... Prototype object-based programming.
+    pwr \
+    # ... Power calculations.
     raster \
     # ... Geographic data analysis and modelling.
     readODS \
-    # ... Read OpenOffice files. \
+    # ... Read OpenOffice files.
     readxl \
     # ... fast XLSX read
-    rgeos \
-    # ... Interface to GEOS (Geometry Engine - Open Source).
-    rgdal \
-    # ... Geospatial.
     RMySQL \
     # ... Direct connection to MySQL databases.
     rstanarm \
@@ -209,6 +211,10 @@ RUN install2.r --error --deps TRUE \
     # ... Spatial package, for maps.
     sqldf \
     # ... Manipulate data frames using SQL.
+    synthpop \
+    # ... Produce synthetic data resembling confidential data.
+    terra \
+    # ... Spatial data analysis.
     TTR \
     # ... Technical Trading Rules.
     writexl \
@@ -219,8 +225,6 @@ RUN install2.r --error --deps TRUE \
     # ... Read/write/manipulate Excel files.
     xlsx \
     # ... Read/write/manipulate Excel files.
-    xtermStyle \
-    # ... Terminal text formatting.
     && rm -rf /tmp/downloaded_packages/ /tmp/*.rds
 
 # Additional stuff from Github.
@@ -229,13 +233,34 @@ RUN installGithub.r \
     bbc/bbplot
     # ... BBC styles for ggplot2
 
-# NOT AVAILABLE FOR R 3.6.3, 4.1.2:
+# NOT AVAILABLE FOR R 3.6.3, 4.1.2, or 4.3.1:
 #
-#   Kmisc   # Including cat.cb, to write to the clipboard.
+#   Kmisc
+#       Including cat.cb, to write to the clipboard.
+#   xtermStyle
+#       Terminal text formatting.
+#       https://cran.r-project.org/web/packages/xtermStyle/index.html
+#       Removed.
+#   maptools
+#       For spatial maps.
+#       https://cran.r-project.org/web/packages/maptools/index.html
+#       Removed; suggests 'sf' or 'terra' instead.
+#   rgdal
+#       Geospatial.
+#       https://cran.r-project.org/web/packages/rgdal/index.html
+#       Removed; suggests 'sf' or 'terra' instead.
+#   rgeos
+#       Interface to GEOS (Geometry Engine - Open Source).
+#       https://cran.r-project.org/web/packages/rgeos/index.html
+#       Removed; suggests 'sf' or 'terra' instead.
 #
 # Don't need:
 #
-#   RODBC   # ODBC connector; use DBI or odbc instead; https://www.mainard.co.uk/post/database-connections-in-r/
+#   easypackages
+#       Another route to R package management, but pacman is better.
+#   RODBC
+#       ODBC connector; use DBI or odbc instead;
+#       https://www.mainard.co.uk/post/database-connections-in-r/
 
 
 # =============================================================================
@@ -286,6 +311,7 @@ RUN mkdir -p $HOME/.R/ \
 WORKDIR /home/rstudio/.config/rstudio
 # Set our RStudio preferences.
 COPY docker/rstudio-prefs.json rstudio-prefs.json
+# ... see e.g. https://docs.posit.co/ide/server-pro/1.3.465-2/session-user-settings.html
 
 # -----------------------------------------------------------------------------
 # Reset to root user (required for the RStudio web server launch process)
