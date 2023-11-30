@@ -139,10 +139,14 @@ RUN install2.r --error --deps TRUE \
     # ... Use SNOW for parallel computing.
     ez \
     # ... ezANOVA; simple analysis of variance.
+    flextable \
+    # ... Pretty table creation: https://ardata-fr.github.io/flextable-book/index.html
     gdata \
     # ... Miscellaneous data manipulation tools.
     ggmcmc \
     # ... Tools for analysing MCMC simulations from Bayesian inference.
+    ggtext \
+    # ... provides element_markdown() etc.
     gplots \
     # ... Misc. plotting functions.
     gtools \
@@ -172,11 +176,13 @@ RUN install2.r --error --deps TRUE \
     multcomp \
     # ... Multiple comparisons for generalized linear models etc.
     nortest \
-    # ... Tests for normality.
+    # ... Tests for normality. \
+    officer \
+    # ... Interface with Office (Word, Powerpoint) documents; https://davidgohel.github.io/officer/
     openxlsx \
     # ... Manipulate Excel files.
     optimParallel \
-    # ... Parallel version of L-BFGS-B method for optim(). \
+    # ... Parallel version of L-BFGS-B method for optim().
     pacman \
     # ... R package management.
     patchwork \
