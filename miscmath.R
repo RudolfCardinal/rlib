@@ -76,6 +76,9 @@ miscmath$ln_odds_from_probability <- function(p) {
 miscmath$probability_from_odds <- function(odds) {
     # Returns probability, given odds.
     return(odds / (1 + odds))
+    # Since o = p / (1 - p), 
+    # therefore (1 + o) = (1 - p) / (1 - p) + p / (1 - p) = 1 / (1 - p)
+    # and from that, o / (1 + o) = p.
 }
 
 

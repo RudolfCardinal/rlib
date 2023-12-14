@@ -39,9 +39,9 @@ IMAGE = "rudolfcardinal/r_default:r4.3.1-stan2.26.21-1"
 
 DOCKER_RSTUDIO_PORT = 8787  # default TCP/IP port for RStudio (do not change)
 DEFAULT_HOST_RSTUDIO_PORT = 8787
-SEP = "=" * 79
 DOCKER_CMD = "docker"
 DOCKER_R_USER = "rstudio"
+RPROFILE_FILENAME = ".Rprofile"
 
 
 # =============================================================================
@@ -123,16 +123,18 @@ class VolumeMount:
         )
 
 
-def announce(lines: Union[str, List[str]]) -> None:
+def announce(lines: Union[str, List[str]], level: int = 1) -> None:
     """
     Write something obviously to the screen.
     """
+    sepchar = "=" if level <= 1 else "-"
+    sep = sepchar * 79
     if isinstance(lines, str):
         lines = [lines]
-    print(SEP)
+    print(sep)
     for line in lines:
         print(line)
-    print(SEP)
+    print(sep)
 
 
 def run(cmdargs: List[str]) -> None:
@@ -141,6 +143,24 @@ def run(cmdargs: List[str]) -> None:
     """
     log.debug(cmdargs)
     subprocess.check_call(cmdargs)
+
+
+def warn_if_overriding_rprofile(mount: VolumeMount) -> None:
+    """
+    The caller will mount, and change directory to, this mount point. If the
+    host has a .Rprofile here, that may override default settings inside the
+    Docker container (such as /home/rstudio/.Rprofile), because of the "cd"
+    command. This can cause unexpected behaviour, so warn the user.
+    """
+    candidate = join(mount.host_dir, RPROFILE_FILENAME)
+    if exists(candidate):
+        announce(
+            f"Warning: the file {candidate} will be mounted as "
+            f"{join(mount.docker_dir, RPROFILE_FILENAME)} and may "
+            f"override {RPROFILE_FILENAME} settings within the Docker "
+            f"container",
+            level=2,
+        )
 
 
 # =============================================================================
@@ -331,13 +351,16 @@ Commands:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Bash
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        announce("Running Bash shell.")
+        announce("Running Bash shell (as root user).")
         docker_run("bash", mounts=mounts)
     elif args.command == cmd_r:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # R
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        announce("Starting R inside Docker container.")
+        announce(
+            f"Starting R inside Docker container (as {DOCKER_R_USER} user)."
+        )
+        warn_if_overriding_rprofile(datamount)
         docker_run(
             ["bash", "-c", f"cd {args.dockerdata!r} && R"],
             mounts=mounts,
@@ -368,9 +391,11 @@ Commands:
         announce(
             [
                 f"Running R script: {host_script}",
+                f"User: " + DOCKER_R_USER,
                 "Arguments: " + " ".join(otherargs),
             ]
         )
+        warn_if_overriding_rprofile(datamount)
         docker_run(
             ["bash", "-c", f"cd {args.dockerdata!r} && Rscript " + textargs],
             mounts=mounts,
@@ -402,6 +427,7 @@ Commands:
                 "Press Ctrl-C to terminate Docker when you've finished.",
             ]
         )
+        warn_if_overriding_rprofile(datamount)
         docker_run(
             mounts=mounts,
             envvars=dict(PASSWORD=pw),

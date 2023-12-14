@@ -292,14 +292,38 @@ WORKDIR /
 # =============================================================================
 
 # -----------------------------------------------------------------------------
+# Information used more than once
+# -----------------------------------------------------------------------------
+
+ARG RPROFILETEXT='# .Rprofile file written by Docker\n\
+\n\
+  # Set up options for RStan:\n\
+rstan::rstan_options(auto_write = TRUE)\n\
+options(mc.cores = parallel::detectCores())\n\
+\n\
+  # Set CRAN repository; the default is http, so use https:\n\
+r <- getOption("repos")\n\
+r["CRAN"] <- "https://cran.ma.imperial.ac.uk/"\n\
+options(repos = r)\n\
+rm(r)\n'
+
+# Curiously, the lines with leading # characters (even if preceded by
+# whitespace get stripped out. That's probably a Dockerfile "feature".
+
+# NOTE ALSO -- this is subtle: if your "data" directory (e.g. the directory
+# you launch from using our run_r_in_docker.py script) contains a .Rprofile,
+# that will ALSO be executed; this may undo some of our good work.
+# Discovered via command inside Docker: find / -type f -iname "*rprofile*"
+
+
+# -----------------------------------------------------------------------------
 # Further config for root user.
 # -----------------------------------------------------------------------------
 
 # $HOME is currently /root, when seen within RUN commands.
 # (However, not within WORKDIR commands, I think! See below.)
 
-RUN echo "rstan::rstan_options(auto_write = TRUE)\n" >> $HOME/.Rprofile \
-    && echo "options(mc.cores = parallel::detectCores())\n" >> $HOME/.Rprofile
+RUN echo "${RPROFILETEXT}" >> $HOME/.Rprofile
 
 # -----------------------------------------------------------------------------
 # Config for rstudio user. (This is pre-created by the parent image.)
@@ -309,8 +333,7 @@ USER rstudio
 
 RUN mkdir -p $HOME/.R/ \
     && echo "CXXFLAGS=-O3 -mtune=native -march=native -Wno-unused-variable -Wno-unused-function -flto -ffat-lto-objects -Wno-unused-local-typedefs -Wno-ignored-attributes -Wno-deprecated-declarations\n" >> $HOME/.R/Makevars \
-    && echo "rstan::rstan_options(auto_write = TRUE)\n" >> $HOME/.Rprofile \
-    && echo "options(mc.cores = parallel::detectCores())\n" >> $HOME/.Rprofile
+    && echo "${RPROFILETEXT}" >> $HOME/.Rprofile
 
 # I think WORKDIR does not respect the $HOME variable, which appears blank in
 # this context.
