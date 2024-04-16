@@ -185,7 +185,7 @@ def docker_build() -> None:
         # is the default of "Dockerfile", but never mind.
         "--tag",
         IMAGE,
-        # Give the image this image (or optionally, name:tag).
+        # Give the image this tag (or optionally, name:tag).
         CONTEXT
         # The context is the top-level directory used for building the Docker
         # image. All files used by COPY must be within the context.

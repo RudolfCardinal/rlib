@@ -83,7 +83,7 @@ miscmath$probability_from_odds <- function(odds) {
 
 
 miscmath$probability_from_log_odds <- function(log_odds) {
-    # Returns probability, given log odds.
+    # Returns probability, given (natural) log odds.
     return(miscmath$probability_from_odds(exp(log_odds)))
 }
 

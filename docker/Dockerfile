@@ -137,6 +137,8 @@ RUN install2.r --error --deps TRUE \
     # ... Parallel computing.
     doSNOW \
     # ... Use SNOW for parallel computing.
+    Epi \
+    # ... epidemiology functions inc. the "poisreg" Poisson regression family.
     ez \
     # ... ezANOVA; simple analysis of variance.
     flextable \
@@ -157,6 +159,8 @@ RUN install2.r --error --deps TRUE \
     # ... Harrell Miscellaneous.
     imager \
     # ... Image processing.
+    invgamma \
+    # ... inverse gamma distribution
     languageR \
     # ... Analysing linguistic data (NLP).
     LMERConvenienceFunctions \
@@ -193,6 +197,8 @@ RUN install2.r --error --deps TRUE \
     # ... Plotting functions.
     popbio \
     # ... Matrix population models.
+    popEpi \
+    # ... e.g. splitMulti().
     proto \
     # ... Prototype object-based programming.
     pwr \
@@ -217,6 +223,8 @@ RUN install2.r --error --deps TRUE \
     # ... Spatial package, for maps.
     sqldf \
     # ... Manipulate data frames using SQL.
+    survminer \
+    # ... Extras for survival analysis/visualization.
     synthpop \
     # ... Produce synthetic data resembling confidential data.
     terra \
