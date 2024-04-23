@@ -343,12 +343,17 @@ Softmax
     j = Idx("j")  # an index
 
     # Functions:
-    odds = Lambda(p, p / (1 - p))
-    logit = Lambda(p, log(odds(p)))
+    odds = Lambda(p, p / (1 - p))  # https://en.wikipedia.org/wiki/Odds
+    logit = Lambda(p, log(odds(p)))  # https://en.wikipedia.org/wiki/Logit
 
     # The two-choice situation:
     p2 = exp(beta * X_i) / (exp(beta * X_i) + exp(beta * X_j))
     print(simplify(logit(p2)))  # beta*(X_i - X_j)
+
+    # Just to be clear (e.g. when "inverse temperatures" are applied to multiple
+    # components which then go into the softmax):
+    p2a = exp(X_i) / (exp(X_i) + exp(X_j))
+    print(simplify(logit(p2a)))  # X_i - X_j
 
     # Some concrete numbers for the two-choice situation:
     concrete2 = {beta:1.0, X_i:0.5, X_j:0.5}
@@ -358,11 +363,18 @@ Softmax
     # A three-choice version:
     p3 = exp(beta * X_i) / (exp(beta * X_i) + exp(beta * X_j) + exp(beta * X_k))
     print(simplify(logit(p3)))  # X_i*beta - log(exp(X_j*beta) + exp(X_k*beta))
+    # Without the explicit softmax again:
+    p3a = exp(X_i) / (exp(X_i) + exp(X_j) + exp(X_k))
+    print(simplify(logit(p3a)))  # X_i - log(exp(X_j) + exp(X_k))
 
     # The n-choice situation:
     pn = exp(beta * Indexed(X, i)) / Sum(exp(beta * Indexed(X, j)), (j, 1, n))
     print(simplify(logit(pn)))  # no simple expression
     # ... beta*X[i] + log(1/(-exp(beta*X[i]) + Sum(exp(beta*X[j]), (j, 1, n))))
+
+    pna = exp(Indexed(X, i)) / Sum(exp(Indexed(X, j)), (j, 1, n))
+    print(simplify(logit(pna)))  # no simple expression
+    # ... log(1/(-exp(X[i]) + Sum(exp(X[j]), (j, 1, n)))) + X[i]
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Try to reduce from the general to the specific, to learn SymPy a little:
@@ -375,6 +387,18 @@ Softmax
     concrete2b = {beta:1.0, X[1]:0.5, X[2]:0.5}
     print(p2b.evalf(subs=concrete2b))  # 0.5
     print(logit(p2b).evalf(subs=concrete2b))  # 0
+
+Thus, for the common **two-choice situation**, the following are equivalent:
+
+.. code-block:: none
+
+    (a)
+        p = softmax(x1, x2)
+        p_left = p[1]
+        chose_left ~ bernoulli(p_left)
+    (b)
+        log_odds_left = x1 - x2
+        chose_left ~ bernoulli_logit(log_odds_left)
 
 
 The multi-way choice situation
