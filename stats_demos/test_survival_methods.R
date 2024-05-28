@@ -37,6 +37,7 @@ library(data.table)
 library(Epi)  # for poisreg, glm.Lexis
 library(mgcv)  # includes s() for splines
 library(patchwork)
+library(rms)  # for vif
 library(survival)
 library(survminer)
 library(tidyverse)  # for ggplot
@@ -416,6 +417,18 @@ if (DEBUG) {
     print(d1)
 }
 
+# For a later test, we'll also add something highly correlated with x, but
+# also binary:
+
+to_binary <- function(x) {
+    # Forces to 0/1, with 0.5 being the split point.
+    # Use floor(x + 0.5), not round(x); the latter rounds e.g. 0.5 to 0.
+    pmin(pmax(0, floor(x + 0.5)), 1)
+}
+d1[, correl_with_x := to_binary(x + rnorm(n = length(x), mean = 0, sd = 0.3))]
+# print(cor(d1$x, d1$correl_with_x))  # high
+d1[, copy_of_x := x]
+
 
 # =============================================================================
 # Model d1
@@ -635,3 +648,48 @@ combinedplot <- (
     + plot_layout(heights = c(10, 1))
 )
 print(combinedplot)
+
+
+# =============================================================================
+# Correlated predictors
+# =============================================================================
+
+if (TRUE) {
+    # surv1 created above
+
+    cph_correl_pred_1 <- survival::coxph(surv1 ~ x, data = d1)
+    print(cph_correl_pred_1)
+    # x: coef=0.68713, p<2e-16
+
+    cph_correl_pred_2 <- survival::coxph(surv1 ~ correl_with_x, data = d1)
+    print(cph_correl_pred_2)
+    # correl_with_x: coef=0.60214, p=4.8e-13 (with seed as above)
+
+    cph_correl_pred_3 <- survival::coxph(surv1 ~ x + correl_with_x, data = d1)
+    print(cph_correl_pred_3)
+    # x: coef=0.71321, p=9.86e-5; correl_with_x: coef=-0.02925, p=0.873
+
+    cph_correl_pred_4 <- survival::coxph(surv1 ~ correl_with_x + x, data = d1)
+    print(cph_correl_pred_4)
+    # correl_with_x: coef=-0.02925, p=0.873; x: coef=0.71321, p=9.86e-5
+
+    cph_correl_pred_5 <- survival::coxph(surv1 ~ x + copy_of_x, data = d1)
+    print(cph_correl_pred_5)
+    # x: coef=0.68713, p<2e-16; copy_of_x: coef=NA, p=NA
+
+    # Note:
+    # It is ORDER-INDEPENDENT.
+    # This is the problem of MULTICOLLINEARITY.
+    # - Excellent explanation:
+    #   https://www.graphpad.com/guides/prism/latest/statistics/stat_cox_reg_results_multicollinearity.htm
+    # - Some discussion about the approach, and model comparison:
+    #   https://stats.stackexchange.com/questions/248935/correlated-variables-in-cox-model-which-one-is-best
+    #   ... obviously an important approach in practice.
+    # - Testing for it:
+    #   https://stackoverflow.com/questions/23518075/testing-multicollinearity-in-cox-proportional-hazards-using-r
+    rms::vif(cph_correl_pred_1)  # 1, as expected
+    rms::vif(cph_correl_pred_3)  # 4.8 and 4.8
+    car::vif(cph_correl_pred_3)  # 4.8 and 4.8; also gives warning
+    # - Discussion of interpretation of variance inflation factors (VIFs):
+    #   https://en.wikipedia.org/wiki/Variance_inflation_factor
+}

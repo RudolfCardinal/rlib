@@ -143,6 +143,8 @@ RUN install2.r --error --deps TRUE \
     # ... ezANOVA; simple analysis of variance.
     flextable \
     # ... Pretty table creation: https://ardata-fr.github.io/flextable-book/index.html
+    ftExtra \
+    # ... For markup (e.g. superscript) within flextable.
     gdata \
     # ... Miscellaneous data manipulation tools.
     ggmcmc \
@@ -180,7 +182,7 @@ RUN install2.r --error --deps TRUE \
     multcomp \
     # ... Multiple comparisons for generalized linear models etc.
     nortest \
-    # ... Tests for normality. \
+    # ... Tests for normality.
     officer \
     # ... Interface with Office (Word, Powerpoint) documents; https://davidgohel.github.io/officer/
     openxlsx \

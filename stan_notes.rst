@@ -237,15 +237,9 @@ The two-choice situation
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 - For a two-choice situation, you can model ``p_do_something`` against the
-  binary data ``did_something``, via the Bernoulli distribution, or log
+  binary data ``did_something``, via the Bernoulli distribution, or the log-odds
   equivalent. For a choice like "left or right", you can model
   ``p_choose_left``.
-
-- For the ``y ~ bernoulli(theta)`` distribution, ``y`` is in {0, 1} and
-  ``theta`` is a probability in the range [0, 1]. However, if you start with
-  log odds, use ``y ~ bernoulli_logit(alpha)``, where alpha is a logit (log
-  odds) in the range [-inf, +inf]. This is more efficient than converting the
-  log odds into a probability and then using ``bernoulli()``.
 
 - **Probabilities.** For the ``y ~ bernoulli(theta)`` distribution, ``y`` is in
   {0, 1} and ``theta`` is a probability in the range [0, 1].
@@ -346,6 +340,9 @@ Softmax
     odds = Lambda(p, p / (1 - p))  # https://en.wikipedia.org/wiki/Odds
     logit = Lambda(p, log(odds(p)))  # https://en.wikipedia.org/wiki/Logit
 
+    # =========================================================================
+    # CORE RESULT:
+    # -------------------------------------------------------------------------
     # The two-choice situation:
     p2 = exp(beta * X_i) / (exp(beta * X_i) + exp(beta * X_j))
     print(simplify(logit(p2)))  # beta*(X_i - X_j)
@@ -354,6 +351,7 @@ Softmax
     # components which then go into the softmax):
     p2a = exp(X_i) / (exp(X_i) + exp(X_j))
     print(simplify(logit(p2a)))  # X_i - X_j
+    # =========================================================================
 
     # Some concrete numbers for the two-choice situation:
     concrete2 = {beta:1.0, X_i:0.5, X_j:0.5}
