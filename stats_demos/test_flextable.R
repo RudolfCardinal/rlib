@@ -93,7 +93,8 @@ td <- data.table::transpose(
 # =============================================================================
 
 ft <- (
-    flextable(td)
+    td
+    %>% flextable()
     %>% ftExtra::colformat_md()  # apply markdown
     %>% autofit()  # size columns
     %>% set_caption("My first flextable")

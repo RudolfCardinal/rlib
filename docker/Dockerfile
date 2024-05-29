@@ -143,7 +143,7 @@ RUN install2.r --error --deps TRUE \
     # ... ezANOVA; simple analysis of variance.
     flextable \
     # ... Pretty table creation: https://ardata-fr.github.io/flextable-book/index.html
-    ftExtra \
+    # ftExtra \
     # ... For markup (e.g. superscript) within flextable.
     gdata \
     # ... Miscellaneous data manipulation tools.
@@ -242,6 +242,11 @@ RUN install2.r --error --deps TRUE \
     xlsx \
     # ... Read/write/manipulate Excel files.
     && rm -rf /tmp/downloaded_packages/ /tmp/*.rds
+
+# In separate steps because some sort of conflict happens:
+RUN install2.r --error --deps TRUE \
+    ftExtra
+    # ... For markup (e.g. superscript) within flextable.
 
 # Additional stuff from Github.
 # - "installGithub.r" is from littler, installed via rocker/verse

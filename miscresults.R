@@ -156,13 +156,15 @@ miscresults$mk_df_text <- function(df) {
 }
 
 
-miscresults$mk_n_percent <- function(
+miscresults$fmt_n_percent <- function(
     n,
-    total,
+    proportion,
     sig_fig = miscresults$DEFAULT_SIG_FIG
 ) {
-    # Format a number as "n (x%)", where x is the percentage form of n / total.
-    pct <- 100 * n / total
+    # Given a number n and a proportion (for which 1 represents 100%), format
+    # as "n (pct%)". But see also flextable::fmt_n_percent(), which does
+    # essentially the same thing.
+    pct <- 100 * proportion
     pct_txt <- paste0(
         miscresults$fmt_float(pct, sig_fig = sig_fig, allow_sci_notation = FALSE),
         "%"
@@ -171,29 +173,39 @@ miscresults$mk_n_percent <- function(
 }
 
 
-miscresults$mk_mean_sd <- function(
-    x,
+miscresults$mk_n_percent <- function(
+    n,
+    total,
+    ...
+) {
+    # Format a number as "n (x%)", where x is the percentage form of n / total.
+    # Additional parameters are passed to fmt_n_percent().
+    proportion <- n / total
+    return(fmt_n_percent(n, proportion, ...))
+}
+
+
+miscresults$fmt_mean_sd <- function(
+    mu,
+    sigma,
     sig_fig = miscresults$DEFAULT_SIG_FIG,
     allow_sci_notation = TRUE,
-    na.rm = TRUE,
     with_brackets = TRUE,
     with_plus_minus = TRUE
 ) {
-    # Calculate a mean and standard deviation (SD) from the vector provided, and
-    # show this as "μ (± σ)", or "μ ± σ" if with_brackets is FALSE. If
-    # with_plus_minus is FALSE, omit "±" (but brackets required).
+    # Given a mean mu and a standard deviation sigma, show this as "μ (± σ)",
+    # or "μ ± σ" if with_brackets is FALSE. If with_plus_minus is FALSE, omit
+    # "±" (but brackets required).
     if (!with_brackets && !with_plus_minus) {
         stop(
             "Parameters with_brackets and with_plus_minus cannot both be FALSE"
         )
     }
-    m <- mean(x, na.rm = na.rm)
-    s <- sd(x, na.rm = na.rm)
     m_text <- miscresults$fmt_float(
-        m, sig_fig = sig_fig, allow_sci_notation = allow_sci_notation
+        mu, sig_fig = sig_fig, allow_sci_notation = allow_sci_notation
     )
     s_text <- miscresults$fmt_float(
-        s, sig_fig = sig_fig, allow_sci_notation = allow_sci_notation
+        sigma, sig_fig = sig_fig, allow_sci_notation = allow_sci_notation
     )
     if (with_plus_minus) {
         s_group <- paste0("± ", s_text)
@@ -208,25 +220,37 @@ miscresults$mk_mean_sd <- function(
 }
 
 
-miscresults$mk_mean_ci <- function(
+miscresults$mk_mean_sd <- function(
     x,
-    ci = 0.95,
+    na.rm = TRUE,
+    ...
+) {
+    # Calculate a mean and standard deviation (SD) from the vector provided, and
+    # show this as "μ (± σ)", or similar. Additional parameters are passed to
+    # fmt_mean_sd().
+    return(fmt_mean_sd(
+        mu = mean(x, na.rm = na.rm),
+        sigma = sd(x, na.rm = na.rm),
+        ...
+    ))
+}
+
+
+miscresults$fmt_mean_ci <- function(
+    mu,
+    ci_lower,
+    ci_upper,
     range_text = "–",  # en dash; " to " or ", " are other sensible options
     ci_prefix = "(",
     ci_suffix = ")",
     sig_fig = miscresults$DEFAULT_SIG_FIG,
-    allow_sci_notation = TRUE,
-    na.rm = TRUE
+    allow_sci_notation = TRUE
 ) {
-    # From a vector, show a mean and confidence interval (e.g. 95% CI) as e.g.
-    # "μ (a–b)".
-    m <- mean(x, na.rm = na.rm)
-    ci_pair <- miscstat$confidence_interval_t(x, ci = ci, na.rm = na.rm)
-    ci_lower <- ci_pair["ci_lower"]
-    ci_upper <- ci_pair["ci_upper"]
+    # Given a mean mu and confidence interval limits ci_lower, ci_upper, show
+    # this as e.g. "μ (a–b)".
     return(paste0(
         miscresults$fmt_float(
-            m,
+            mu,
             sig_fig = sig_fig, allow_sci_notation = allow_sci_notation
         ),
         " ",
@@ -241,6 +265,27 @@ miscresults$mk_mean_ci <- function(
             sig_fig = sig_fig, allow_sci_notation = allow_sci_notation
         ),
         ci_suffix
+    ))
+}
+
+
+miscresults$mk_mean_ci <- function(
+    x,
+    ci = 0.95,
+    na.rm = TRUE,
+    ...
+) {
+    # From a vector, show a mean and confidence interval (e.g. 95% CI) as e.g.
+    # "μ (a–b)". Additional parameters are passed to fmt_mean_ci().
+    mu <- mean(x, na.rm = na.rm)
+    ci_pair <- miscstat$confidence_interval_t(x, ci = ci, na.rm = na.rm)
+    ci_lower <- ci_pair["ci_lower"]
+    ci_upper <- ci_pair["ci_upper"]
+    return(fmt_mean_ci(
+        mu = mu,
+        ci_lower = ci_lower,
+        ci_upper = ci_upper,
+        ...
     ))
 }
 
