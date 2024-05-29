@@ -66,9 +66,6 @@ miscresults$fmt_float <- function(
     # Format a floating-point (real) number, according to a number of
     # significant figures, allowing scientific notation or not. Return values
     # might look like "0.1", "2.2 × 10^−16^" (the latter using ftExtra markup).
-    if (is.na(x)) {
-        return(na_text)
-    }
     if (allow_sci_notation) {
         txt <- as.character(signif(x, digits = sig_fig))
         # May or may not be in scientific notation.
@@ -96,6 +93,11 @@ miscresults$fmt_float <- function(
     HYPHEN <- "-"
     MINUS <- "−"
     txt <- stringr::str_replace_all(txt, HYPHEN, MINUS)
+    return(ifelse(
+        is.na(x),
+        na_text,
+        txt
+    ))
     return(txt)
 }
 
@@ -107,15 +109,16 @@ miscresults$mk_p_text <- function(
 ) {
     # From a p value, return a string such as "*p* = 0.03" or "p < ***". Uses
     # fmt_float().
-    if (p < minimum_shown) {
-        return(paste0(
+    return(ifelse(
+        p < minimum_shown,
+        paste0(
             "*p* < ",
             miscresults$fmt_float(minimum_shown, sig_fig = sig_fig)
-        ))
-    }
-    return(paste0(
-        "*p* = ",
-        miscresults$fmt_float(p, sig_fig = sig_fig)
+        ),
+        paste0(
+            "*p* = ",
+            miscresults$fmt_float(p, sig_fig = sig_fig)
+        )
     ))
 }
 
@@ -149,10 +152,11 @@ miscresults$mk_df_text <- function(df) {
     # Format degrees of freedom (df) appropriately -- as an exact integer, or
     # to 1 dp if it is not integer (since knowing the fact of not being an
     # integer is often quite important!).
-    if (as.integer(df) == df) {
-        return(as.character(df))
-    }
-    return(sprintf("%.1f", df))
+    return(ifelse(
+        as.integer(df) == df,
+        as.character(df),  # integer version
+        sprintf("%.1f", df)  # floating-point version
+    ))
 }
 
 
