@@ -23,6 +23,12 @@ miscresults <- new.env()
 # Constants
 #==============================================================================
 
+miscresults$HYPHEN <- "-"
+miscresults$MINUS <- "−"
+miscresults$EN_DASH <- "–"
+miscresults$PLUS_MINUS <- "±"
+miscresults$MULTIPLICATION_DOT <- "⋅"
+
 miscresults$DEFAULT_SIG_FIG <- 3
 miscresults$MINIMUM_P_SHOWN <- 2.2e-16
     # .Machine$double.eps is 2.220446e-16; however, readers are used to seeing
@@ -90,9 +96,7 @@ miscresults$fmt_float <- function(
         )
     }
     # Convert hyphens to proper minus signs:
-    HYPHEN <- "-"
-    MINUS <- "−"
-    txt <- stringr::str_replace_all(txt, HYPHEN, MINUS)
+    txt <- stringr::str_replace_all(txt, miscresults$HYPHEN, miscresults$MINUS)
     return(ifelse(
         is.na(x),
         na_text,
@@ -212,7 +216,7 @@ miscresults$fmt_mean_sd <- function(
         sigma, sig_fig = sig_fig, allow_sci_notation = allow_sci_notation
     )
     if (with_plus_minus) {
-        s_group <- paste0("± ", s_text)
+        s_group <- paste(miscresults$PLUS_MINUS, s_text)
     } else {
         s_group <- s_text
     }
@@ -244,7 +248,7 @@ miscresults$fmt_mean_ci <- function(
     mu,
     ci_lower,
     ci_upper,
-    range_text = "–",  # en dash; " to " or ", " are other sensible options
+    range_text = miscresults$EN_DASH,  # " to " or ", " are also sensible
     ci_prefix = "(",
     ci_suffix = ")",
     sig_fig = miscresults$DEFAULT_SIG_FIG,
