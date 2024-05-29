@@ -1,5 +1,9 @@
 #!/usr/bin/env Rscript
 
+# =============================================================================
+# Notes
+# =============================================================================
+
 NOTATION <- "
 
 ~
@@ -104,13 +108,34 @@ Oh well -- done.
 
 "
 
+
+# =============================================================================
+# Libraries
+# =============================================================================
+
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(
     ggtext,
     patchwork,
     tidyverse
 )
+RLIB_PREFIX <- "/srv/cardinal_rlib/"
+source(paste0(RLIB_PREFIX, "miscfile.R"))
+
+
+# =============================================================================
+# RNG
+# =============================================================================
+
 set.seed(1234)
+
+
+# =============================================================================
+# Constants
+# =============================================================================
+
+SCRIPT_DIR <- miscfile$current_script_directory()
+OUTPUT_PNG <- file.path(SCRIPT_DIR, "_explore_priors.png")
 
 N_VALUES <- 1e6  # use 1e6 for sketch, 5e6 for medium, 1e7 for high accuracy
 
@@ -122,9 +147,31 @@ PRIOR_HALF_NORMAL_SD_FOR_SD_IN_RANGE_0_1 <- 0.05  # Kanen 2019, Table 2
 # Try 0 for reassurance and 5 for a large value -- it's different from the
 # underlying Beta(1.2, 1.2) distribution, but reassuringly little.
 
+AHN2017_SD_CAUCHY_SCALE <- 5
+ROMEU2020_SD_HALFNORMAL_SD <- 0.2
+
 LINEWIDTH <- 1
 KERNEL_DENSITY_N <- 2048  # default 512
 
+
+# =============================================================================
+# Basic maths
+# =============================================================================
+
+clip <- function(x, lower = -Inf, upper = +Inf) {
+    # Returns the value, clipped to the range
+    ifelse(x < lower, lower, ifelse(x > upper, upper, x))
+}
+
+restrict <- function(x, lower = -Inf, upper = +Inf) {
+    # Returns the value, or NA if out of range.
+    ifelse(x < lower, NA, ifelse(x > upper, NA, x))
+}
+
+
+# =============================================================================
+# Standard distribution functions
+# =============================================================================
 
 std_normal <- function(n) {
     rnorm(n, mean = 0, sd = 1)
@@ -152,22 +199,17 @@ halfcauchy <- function(n, location = 0, scale = 1) {
     abs(rcauchy(n, location = 0, scale = scale)) + location
 }
 
-clip <- function(x, lower = -Inf, upper = +Inf) {
-    # Returns the value, clipped to the range
-    ifelse(x < lower, lower, ifelse(x > upper, upper, x))
-}
-
-restrict <- function(x, lower = -Inf, upper = +Inf) {
-    # Returns the value, or NA if out of range.
-    ifelse(x < lower, NA, ifelse(x > upper, NA, x))
-}
-
 phi <- function(x) {
     # Cumulative distribution function (in R terminology: distribution
     # function) of the standard normal distribution, Φ(). It maps [−∞, +∞] to
     # [0, 1].
     pnorm(x)
 }
+
+
+# =============================================================================
+# Distributions of interest
+# =============================================================================
 
 kanen2019_beta_plus_normal_clipped <- function(n) {
     group_mean <- rbeta(
@@ -231,9 +273,6 @@ beta_plus_normal_constrained <- function(n) {
     subject_effect <- rnorm(n = n, mean = 0, sd = intersubject_sd)
     return(restrict(group_mean + subject_effect, lower = 0, upper = 1))
 }
-
-AHN2017_SD_CAUCHY_SCALE <- 5
-ROMEU2020_SD_HALFNORMAL_SD <- 0.2
 
 ahn2017_constrained <- function(n, lower = 0, upper = 1) {
     # Ahn (2017, PMID 29601060, hBayesDM, pp. 38-40): "For parameters that are
@@ -384,6 +423,11 @@ normal_uniform_arbitrary_beta <- function(n) {
         }
     "
 }
+
+
+# =============================================================================
+# Demonstration data
+# =============================================================================
 
 PARAMNAME_01 <- "param [0, 1]"
 PARAMNAME_0_INF <- "param [0, +∞)"
@@ -605,5 +649,5 @@ p_expanded <- (
     + COMMON_GRAPH_ELEMENTS
 )
 p <- (p_01 / p_0_inf / p_unconstrained / p_sd / p_expanded)
-ggsave("_explore_priors.png", p, units = "cm", width = 25, height = 60)
+ggsave(OUTPUT_PNG, p, units = "cm", width = 25, height = 60)
 # ... PDF doesn't get the theta character right

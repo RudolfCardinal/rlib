@@ -5,8 +5,18 @@ library(flextable)
 library(ftExtra)  # https://cran.r-project.org/web/packages/ftExtra/vignettes/format_columns.html
 library(officer)  # for prop_section, etc.
 library(tidyverse)
-source("/srv/cardinal_rlib/miscstat.R")
-# *** # source("/srv/cardinal_rlib/miscresults.R")
+RLIB_PREFIX <- "/srv/cardinal_rlib/"
+source(paste0(RLIB_PREFIX, "miscfile.R"))
+source(paste0(RLIB_PREFIX, "miscstat.R"))
+source(paste0(RLIB_PREFIX, "miscresults.R"))
+
+
+# =============================================================================
+# Constants
+# =============================================================================
+
+SCRIPT_DIR <- miscfile$current_script_directory()
+OUTPUT_DOCX <- file.path(SCRIPT_DIR, "test_flextable.docx")
 
 
 # =============================================================================
@@ -30,7 +40,6 @@ weight_drug <- rnorm(n = total_drug, mean = 65.78, sd = 2)
 height_drug <- rnorm(n = total_drug, mean = -1.8, sd = 0.1)
 n_dullness_measured_drug <- 5
 dullness_drug <- rnorm(n = n_dullness_measured_drug, mean = 7.7, sd = 0.1)
-
 
 fakedata <- data.table(
     groupname = c("placebo", "drug", "comparison"),
@@ -78,6 +87,11 @@ td <- data.table::transpose(
 )
 # print(td)
 
+
+# =============================================================================
+# Formatting demostrations
+# =============================================================================
+
 ft <- (
     flextable(td)
     %>% ftExtra::colformat_md()  # apply markdown
@@ -88,7 +102,7 @@ print(ft)
 flextable::save_as_docx(
     `Table 1` = ft,
     `Table 1 again` = ft,
-    path = "test_flextable.docx",
+    path = OUTPUT_DOCX,
     align = "left",
     pr_section = prop_section(  # from "officer" package
         # These do not use all the width appropriately, despite correct margin
