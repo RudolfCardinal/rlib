@@ -185,8 +185,7 @@ miscresults$mk_df_text <- function(df, dp = miscresults$DEFAULT_DP_FOR_DF) {
 
 miscresults$mk_n_percent <- function(
     n,
-    total,
-    ...
+    total
 ) {
     # Format a number as "n (x%)", where x is the percentage form of n / total.
     # Additional parameters are passed to fmt_n_percent().
@@ -239,7 +238,7 @@ miscresults$mk_mean_sd <- function(
     # Calculate a mean and standard deviation (SD) from the vector provided, and
     # show this as "μ (± σ)", or similar. Additional parameters are passed to
     # fmt_mean_sd().
-    return(fmt_mean_sd(
+    return(miscresults$fmt_mean_sd(
         mu = mean(x, na.rm = na.rm),
         sigma = sd(x, na.rm = na.rm),
         ...
@@ -292,7 +291,7 @@ miscresults$mk_mean_ci <- function(
     ci_pair <- miscstat$confidence_interval_t(x, ci = ci, na.rm = na.rm)
     ci_lower <- ci_pair["ci_lower"]
     ci_upper <- ci_pair["ci_upper"]
-    return(fmt_mean_ci(
+    return(miscresults$fmt_mean_ci(
         mu = mu,
         ci_lower = ci_lower,
         ci_upper = ci_upper,
