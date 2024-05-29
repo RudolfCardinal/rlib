@@ -185,7 +185,8 @@ miscresults$mk_df_text <- function(df, dp = miscresults$DEFAULT_DP_FOR_DF) {
 
 miscresults$mk_n_percent <- function(
     n,
-    total
+    total,
+    ...
 ) {
     # Format a number as "n (x%)", where x is the percentage form of n / total.
     # Additional parameters are passed to fmt_n_percent().
