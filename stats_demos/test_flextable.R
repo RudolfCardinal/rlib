@@ -20,13 +20,13 @@ OUTPUT_DOCX <- file.path(SCRIPT_DIR, "test_flextable.docx")
 
 
 # =============================================================================
-# Made-up data and formatting demostrations
+# Made-up data and formatting demonstrations
 # =============================================================================
 
 set.seed(1)
 
-total_placebo <- 520
-n_explosions_placebo <- 500
+total_placebo <- 520000
+n_explosions_placebo <- 501
 n_implosions_placebo <- 250
 weight_placebo <- rnorm(n = total_placebo, mean = 40.25, sd = 2)
 height_placebo <- rnorm(n = total_placebo, mean = 1.4, sd = 0.1)
@@ -34,7 +34,7 @@ n_dullness_measured_placebo <- 5
 dullness_placebo <- rnorm(n = n_dullness_measured_placebo, mean = 7.7, sd = 0.1)
 
 total_drug <- 525
-n_explosions_drug <- 300
+n_explosions_drug <- 301
 n_implosions_drug <- 251
 weight_drug <- rnorm(n = total_drug, mean = 65.78, sd = 2)
 height_drug <- rnorm(n = total_drug, mean = -1.8, sd = 0.1)
@@ -43,7 +43,11 @@ dullness_drug <- rnorm(n = n_dullness_measured_drug, mean = 7.7, sd = 0.1)
 
 fakedata <- data.table(
     groupname = c("placebo", "drug", "comparison"),
-    n = c(total_placebo, total_drug, "–"),
+    n = c(
+        fmt_int(total_placebo),
+        fmt_int(total_drug),
+        "–"
+    ),
     explosions = c(
         mk_n_percent(n_explosions_placebo, total_placebo),
         mk_n_percent(n_explosions_drug, total_drug),
@@ -71,8 +75,8 @@ fakedata <- data.table(
         mk_t_test(height_placebo, height_drug)
     ),
     n_dullness_measured = c(
-        n_dullness_measured_placebo,
-        n_dullness_measured_drug,
+        fmt_int(n_dullness_measured_placebo),
+        fmt_int(n_dullness_measured_drug),
          "–"
      ),
     dullness = c(
@@ -91,6 +95,14 @@ td <- data.table::transpose(
 # =============================================================================
 # Formatting demostrations
 # =============================================================================
+
+flextable::set_flextable_defaults(
+    font.family = "Arial",
+    font.size = 8,
+    border.color = "gray",
+    digits = 3,  # usually significant figures
+    big.mark = ","  # thousands separator
+)
 
 ft <- (
     td

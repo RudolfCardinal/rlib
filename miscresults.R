@@ -29,7 +29,7 @@ miscresults$EN_DASH <- "–"
 miscresults$PLUS_MINUS <- "±"
 miscresults$MULTIPLICATION_DOT <- "⋅"
 
-miscresults$DEFAULT_SIG_FIG <- 3
+miscresults$DEFAULT_DP_FOR_DF <- 1  # decimal places for non-integer degrees of freedom
 miscresults$MINIMUM_P_SHOWN <- 2.2e-16
     # .Machine$double.eps is 2.220446e-16; however, readers are used to seeing
     # "2.2e-16" or equivalent representations in output from R, not "2.22e-16".
@@ -65,15 +65,26 @@ miscresults$mk_sig_label <- function(
 
 miscresults$fmt_float <- function(
     x,
-    sig_fig = miscresults$DEFAULT_SIG_FIG,
     allow_sci_notation = TRUE,
-    na_text = "NA"
+    sf = get_flextable_defaults()$digits,
+    big.mark = get_flextable_defaults()$big.mark,
+    decimal.mark = get_flextable_defaults()$decimal.mark,
+    na_str = get_flextable_defaults()$na_str,
+    nan_str = get_flextable_defaults()$nan_str
 ) {
     # Format a floating-point (real) number, according to a number of
     # significant figures, allowing scientific notation or not. Return values
     # might look like "0.1", "2.2 × 10^−16^" (the latter using ftExtra markup).
+    # An extension for flextable::fmt_dbl, using its notation.
+
     if (allow_sci_notation) {
-        txt <- as.character(signif(x, digits = sig_fig))
+        txt <- formatC(
+            signif(x, digits = sf),
+            digits = sf,
+            format = "g",
+            big.mark = big.mark,
+            decimal.mark = decimal.mark
+        )
         # May or may not be in scientific notation.
         # If scientific notation:
         scimatch <- stringr::str_match(txt, "(.+)e(-?)(\\d+)")
@@ -82,46 +93,54 @@ miscresults$fmt_float <- function(
             radix <- scimatch[2]
             sign <- scimatch[3]
             exponent <- stringr::str_replace(scimatch[4], "^0+" ,"")
-            # ... remove leading zeros
+            # ... remove leading zeros from exponent
             # Use ^...^ for superscript with ftExtra.
             txt <- paste0(radix, " × 10^", sign, exponent, "^")
         }
     } else {
         # https://stackoverflow.com/questions/3245862
         txt <- formatC(
-            signif(x, digits = sig_fig),
-            digits = sig_fig,
+            signif(x, digits = sf),
+            digits = sf,
             format = "fg",
-            flag = "#"
+            flag = "#",
+            big.mark = big.mark,
+            decimal.mark = decimal.mark
         )
     }
-    # Convert hyphens to proper minus signs:
-    txt <- stringr::str_replace_all(txt, miscresults$HYPHEN, miscresults$MINUS)
+    # Convert hyphens to proper minus signs, and trim whitespace:
+    txt <- stringr::str_trim(
+        stringr::str_replace_all(txt, miscresults$HYPHEN, miscresults$MINUS)
+    )
+    # Deal with NaN and NA (in parallel):
     return(ifelse(
-        is.na(x),
-        na_text,
-        txt
+        is.nan(x),
+        nan_str,
+        ifelse(
+            is.na(x),
+            na_str,
+            txt
+        )
     ))
-    return(txt)
 }
 
 
 miscresults$mk_p_text <- function(
     p,
-    sig_fig = miscresults$DEFAULT_SIG_FIG,
+    sf = get_flextable_defaults()$digits,
     minimum_shown = miscresults$MINIMUM_P_SHOWN
 ) {
-    # From a p value, return a string such as "*p* = 0.03" or "p < ***". Uses
-    # fmt_float().
+    # From a p value, return a string such as "*p* = 0.03" or "*p* < 2.2e-16".
+    # Uses fmt_float().
     return(ifelse(
         p < minimum_shown,
         paste0(
             "*p* < ",
-            miscresults$fmt_float(minimum_shown, sig_fig = sig_fig)
+            miscresults$fmt_float(minimum_shown, sf = sf)
         ),
         paste0(
             "*p* = ",
-            miscresults$fmt_float(p, sig_fig = sig_fig)
+            miscresults$fmt_float(p, sf = sf)
         )
     ))
 }
@@ -129,7 +148,7 @@ miscresults$mk_p_text <- function(
 
 miscresults$mk_p_text_with_label <- function(
     p,
-    sig_fig = miscresults$DEFAULT_SIG_FIG,
+    sf = get_flextable_defaults()$digits,
     sidak_correction_n_for_asterisks = 1,
     minimum_shown = miscresults$MINIMUM_P_SHOWN,
     ns_text = miscresults$NOT_SIGNIFICANT
@@ -140,7 +159,7 @@ miscresults$mk_p_text_with_label <- function(
     return(paste0(
         miscresults$mk_p_text(
             p,
-            sig_fig = sig_fig,
+            sf = sf,
             minimum_shown = minimum_shown
         ),
         miscresults$mk_sig_label(
@@ -152,32 +171,15 @@ miscresults$mk_p_text_with_label <- function(
 }
 
 
-miscresults$mk_df_text <- function(df) {
+miscresults$mk_df_text <- function(df, dp = miscresults$DEFAULT_DP_FOR_DF) {
     # Format degrees of freedom (df) appropriately -- as an exact integer, or
     # to 1 dp if it is not integer (since knowing the fact of not being an
     # integer is often quite important!).
     return(ifelse(
         as.integer(df) == df,
-        as.character(df),  # integer version
-        sprintf("%.1f", df)  # floating-point version
+        flextable::fmt_int(df),  # integer version
+        formatC(df, format = "f", digits = dp)  # floating-point version
     ))
-}
-
-
-miscresults$fmt_n_percent <- function(
-    n,
-    proportion,
-    sig_fig = miscresults$DEFAULT_SIG_FIG
-) {
-    # Given a number n and a proportion (for which 1 represents 100%), format
-    # as "n (pct%)". But see also flextable::fmt_n_percent(), which does
-    # essentially the same thing.
-    pct <- 100 * proportion
-    pct_txt <- paste0(
-        miscresults$fmt_float(pct, sig_fig = sig_fig, allow_sci_notation = FALSE),
-        "%"
-    )
-    return(sprintf("%d (%s)", n, pct_txt))
 }
 
 
@@ -189,14 +191,14 @@ miscresults$mk_n_percent <- function(
     # Format a number as "n (x%)", where x is the percentage form of n / total.
     # Additional parameters are passed to fmt_n_percent().
     proportion <- n / total
-    return(fmt_n_percent(n, proportion, ...))
+    return(flextable::fmt_n_percent(n, proportion, ...))
 }
 
 
 miscresults$fmt_mean_sd <- function(
     mu,
     sigma,
-    sig_fig = miscresults$DEFAULT_SIG_FIG,
+    sf = get_flextable_defaults()$digits,
     allow_sci_notation = TRUE,
     with_brackets = TRUE,
     with_plus_minus = TRUE
@@ -204,16 +206,17 @@ miscresults$fmt_mean_sd <- function(
     # Given a mean mu and a standard deviation sigma, show this as "μ (± σ)",
     # or "μ ± σ" if with_brackets is FALSE. If with_plus_minus is FALSE, omit
     # "±" (but brackets required).
+    # See also flextable::fmt_avg_dev(avg, dev), which is less flexible.
     if (!with_brackets && !with_plus_minus) {
         stop(
             "Parameters with_brackets and with_plus_minus cannot both be FALSE"
         )
     }
     m_text <- miscresults$fmt_float(
-        mu, sig_fig = sig_fig, allow_sci_notation = allow_sci_notation
+        mu, sf = sf, allow_sci_notation = allow_sci_notation
     )
     s_text <- miscresults$fmt_float(
-        sigma, sig_fig = sig_fig, allow_sci_notation = allow_sci_notation
+        sigma, sf = sf, allow_sci_notation = allow_sci_notation
     )
     if (with_plus_minus) {
         s_group <- paste(miscresults$PLUS_MINUS, s_text)
@@ -251,7 +254,7 @@ miscresults$fmt_mean_ci <- function(
     range_text = miscresults$EN_DASH,  # " to " or ", " are also sensible
     ci_prefix = "(",
     ci_suffix = ")",
-    sig_fig = miscresults$DEFAULT_SIG_FIG,
+    sf = get_flextable_defaults()$digits,
     allow_sci_notation = TRUE
 ) {
     # Given a mean mu and confidence interval limits ci_lower, ci_upper, show
@@ -259,18 +262,18 @@ miscresults$fmt_mean_ci <- function(
     return(paste0(
         miscresults$fmt_float(
             mu,
-            sig_fig = sig_fig, allow_sci_notation = allow_sci_notation
+            sf = sf, allow_sci_notation = allow_sci_notation
         ),
         " ",
         ci_prefix,
         miscresults$fmt_float(
             ci_lower,
-            sig_fig = sig_fig, allow_sci_notation = allow_sci_notation
+            sf = sf, allow_sci_notation = allow_sci_notation
         ),
         range_text,
         miscresults$fmt_float(
             ci_upper,
-            sig_fig = sig_fig, allow_sci_notation = allow_sci_notation
+            sf = sf, allow_sci_notation = allow_sci_notation
         ),
         ci_suffix
     ))
