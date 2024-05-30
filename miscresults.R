@@ -93,6 +93,7 @@ miscresults$mk_sig_label <- function(
 miscresults$fmt_float <- function(
     x,
     allow_sci_notation = TRUE,
+    include_trailing_zero = TRUE,
     sf = get_flextable_defaults()$digits,
     use_plus = FALSE,  # prepend "+" for positive numbers?
     big.mark = get_flextable_defaults()$big.mark,
@@ -105,12 +106,19 @@ miscresults$fmt_float <- function(
     # might look like "0.1", "2.2 × 10^−16^" (the latter using ftExtra markup).
     # An extension for flextable::fmt_dbl, using its notation.
 
+    flag <- ""
+    if (include_trailing_zero) {
+        flag <- paste0(flag, "#")
+    }
+    if (use_plus) {
+        flag <- paste0(flag, "+")
+    }
     if (allow_sci_notation) {
         txt <- formatC(
             signif(x, digits = sf),
             digits = sf,
             format = "g",
-            flag = ifelse(use_plus, "+", ""),
+            flag = flag,
             big.mark = big.mark,
             decimal.mark = decimal.mark
         )
@@ -134,7 +142,7 @@ miscresults$fmt_float <- function(
             signif(x, digits = sf),
             digits = sf,
             format = "fg",
-            flag = ifelse(use_plus, "+#", "#"),
+            flag = flag,
             big.mark = big.mark,
             decimal.mark = decimal.mark
         )
@@ -214,6 +222,55 @@ miscresults$mk_df_text <- function(df, dp = miscresults$DEFAULT_DP_FOR_DF) {
 }
 
 
+miscresults$fmt_pct <- function(
+    proportion,
+    include_trailing_zero = FALSE,
+    ...
+) {
+    # Format a proportion (e.g. 0.5) as a percentage (e.g. "50%").
+    pct <- 100 * proportion
+    txt <- paste0(
+        miscresults$fmt_float(
+            pct,
+            allow_sci_notation = FALSE,
+            include_trailing_zero = include_trailing_zero
+        ),
+        "%"
+    )
+    return(ifelse(
+        is.nan(x),
+        nan_str,
+        ifelse(
+            is.na(x),
+            na_str,
+            txt
+        )
+    ))
+}
+
+miscresults$fmt_n_percent <- function(
+    n,
+    proportion,
+    na_str = get_flextable_defaults()$na_str,
+    ...
+) {
+    # Format a number and a proportion as "n (x%)", where x is the percentage
+    # form of the proportion. As for flextable::fmt_n_percent, but emphasizes
+    # significant figures rather than decimal places for the percentage.
+    # Additional parameters are passed to fmt_pct().
+    ifelse(
+        is.na(n) | is.na(proportion),
+        na_str,
+        paste0(
+            flextable::fmt_int(n),
+            " (",
+            miscresults$fmt_pct(proportion, ...),
+            ")"
+        )
+    )
+}
+
+
 miscresults$mk_n_percent <- function(
     n,
     total,
@@ -222,7 +279,7 @@ miscresults$mk_n_percent <- function(
     # Format a number as "n (x%)", where x is the percentage form of n / total.
     # Additional parameters are passed to fmt_n_percent().
     proportion <- n / total
-    return(flextable::fmt_n_percent(n, proportion, ...))
+    return(miscresults$fmt_n_percent(n, proportion, ...))
 }
 
 
