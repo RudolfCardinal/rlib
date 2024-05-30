@@ -154,6 +154,14 @@ tsumm <- (
             TRUE ~ variable
         )
     )
+    %>% add_row(
+        variable = "Primary outcomes",
+        .before = 2
+    )
+    %>% add_row(
+        variable = "Secondary outcomes",
+        .before = 5
+    )
 )
 # Get the groups in the right order:
 setcolorder(tsumm, c("variable", "placebo", "drug", "comparison"))
@@ -186,6 +194,8 @@ ft <- (
         i = ~ miscresults$detect_significant_in_result_str(Comparison),
         j = c("Drug")
     )
+    # Make some subheadings bold, in a primitive way.
+    %>% bold(i = ~ str_detect(Variable, "outcomes"))
 )
 print(ft)
 flextable::save_as_docx(
