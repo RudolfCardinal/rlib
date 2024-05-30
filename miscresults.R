@@ -238,10 +238,10 @@ miscresults$fmt_pct <- function(
         "%"
     )
     return(ifelse(
-        is.nan(x),
+        is.nan(proportion),
         nan_str,
         ifelse(
-            is.na(x),
+            is.na(proportion),
             na_str,
             txt
         )
