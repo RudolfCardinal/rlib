@@ -1,4 +1,20 @@
 # miscresults.R
+#
+# Some guidelines on reporting statistics include:
+# - https://support.jmir.org/hc/en-us/articles/360019690851-Guidelines-for-Reporting-Statistics
+# - https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2959222/
+#   ... argues for "mean (SD)" not "mean ± SD" because some will assume that
+#   ± is for confidence intervals.
+# - https://en.wikipedia.org/wiki/Plus%E2%80%93minus_sign
+#   ... ± typically SD or SE.
+# - https://en.wikipedia.org/wiki/Margin_of_error
+# - Confidence intervals in JMIR style use an en dash "a–b", or "a to b" if
+#   any are negative. And confidence intervals frequently do involve a negative
+#   number. An alternative is [a, b], using inclusive (square) brackets.
+# - Ranges typically use en dashes in writing, and less frequently involve
+#   negative numbers.
+# - But generally it's good to be explicit! So we'll be explicit for the
+#   defaults.
 
 tmp_require_package_namespace <- function(...) {
     packages <- as.character(match.call(expand.dots = FALSE)[[2]])
@@ -7,21 +23,22 @@ tmp_require_package_namespace <- function(...) {
 tmp_require_package_namespace(
     flextable,
     ftExtra,  # for markup within flextable tables
+    rcompanion,  # for wilcoxonZ
     stringr
 )
 rm(tmp_require_package_namespace)
 
 
-#==============================================================================
+# =============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
-#==============================================================================
+# =============================================================================
 
 miscresults <- new.env()
 
 
-#==============================================================================
+# =============================================================================
 # Constants
-#==============================================================================
+# =============================================================================
 
 miscresults$HYPHEN <- "-"
 miscresults$MINUS <- "−"
@@ -36,9 +53,19 @@ miscresults$MINIMUM_P_SHOWN <- 2.2e-16
 miscresults$NOT_SIGNIFICANT <- "NS"
 
 
-#==============================================================================
+# =============================================================================
+# Helper functions
+# =============================================================================
+
+miscresults$is.wholenumber <- function(x, tol = .Machine$double.eps^0.5) {
+    # per example in ?base::integer
+    abs(x - round(x)) < tol
+}
+
+
+# =============================================================================
 # Formatting results: basic conversion to "pretty" text formats
-#==============================================================================
+# =============================================================================
 
 miscresults$mk_sig_label <- function(
     p,
@@ -67,6 +94,7 @@ miscresults$fmt_float <- function(
     x,
     allow_sci_notation = TRUE,
     sf = get_flextable_defaults()$digits,
+    use_plus = FALSE,  # prepend "+" for positive numbers?
     big.mark = get_flextable_defaults()$big.mark,
     decimal.mark = get_flextable_defaults()$decimal.mark,
     na_str = get_flextable_defaults()$na_str,
@@ -82,16 +110,19 @@ miscresults$fmt_float <- function(
             signif(x, digits = sf),
             digits = sf,
             format = "g",
+            flag = ifelse(use_plus, "+", ""),
             big.mark = big.mark,
             decimal.mark = decimal.mark
         )
         # May or may not be in scientific notation.
         # If scientific notation:
-        scimatch <- stringr::str_match(txt, "(.+)e(-?)(\\d+)")
+        scimatch <- stringr::str_match(txt, "(.+)e([-+]?)(\\d+)")
         if (!is.na(scimatch[1])) {
             # Using scientific notation. Make it pretty!
             radix <- scimatch[2]
             sign <- scimatch[3]
+            sign <- stringr::str_replace(sign, "[+]", "")
+            # ... remove + from exponent
             exponent <- stringr::str_replace(scimatch[4], "^0+" ,"")
             # ... remove leading zeros from exponent
             # Use ^...^ for superscript with ftExtra.
@@ -103,7 +134,7 @@ miscresults$fmt_float <- function(
             signif(x, digits = sf),
             digits = sf,
             format = "fg",
-            flag = "#",
+            flag = ifelse(use_plus, "+#", "#"),
             big.mark = big.mark,
             decimal.mark = decimal.mark
         )
@@ -200,34 +231,23 @@ miscresults$fmt_mean_sd <- function(
     sigma,
     sf = get_flextable_defaults()$digits,
     allow_sci_notation = TRUE,
-    with_brackets = TRUE,
-    with_plus_minus = TRUE
+    mean_prefix = "",
+    # sd_prefix = paste0(" (", miscresults$PLUS_MINUS, " "),
+    sd_prefix = " (SD ",
+    sd_suffix = ")",
+    na_str = get_flextable_defaults()$na_str
 ) {
     # Given a mean mu and a standard deviation sigma, show this as "μ (± σ)",
-    # or "μ ± σ" if with_brackets is FALSE. If with_plus_minus is FALSE, omit
-    # "±" (but brackets required).
+    # or similar.
     # See also flextable::fmt_avg_dev(avg, dev), which is less flexible.
-    if (!with_brackets && !with_plus_minus) {
-        stop(
-            "Parameters with_brackets and with_plus_minus cannot both be FALSE"
-        )
-    }
     m_text <- miscresults$fmt_float(
         mu, sf = sf, allow_sci_notation = allow_sci_notation
     )
     s_text <- miscresults$fmt_float(
         sigma, sf = sf, allow_sci_notation = allow_sci_notation
     )
-    if (with_plus_minus) {
-        s_group <- paste(miscresults$PLUS_MINUS, s_text)
-    } else {
-        s_group <- s_text
-    }
-    if (with_brackets) {
-        return(sprintf("%s (%s)", m_text, s_group))
-    } else {
-        return(sprintf("%s %s", m_text, s_group))
-    }
+    results <- paste0(mean_prefix, m_text, sd_prefix, s_text, sd_suffix)
+    return(ifelse(is.na(mu), na_str, results))
 }
 
 
@@ -251,32 +271,35 @@ miscresults$fmt_mean_ci <- function(
     mu,
     ci_lower,
     ci_upper,
-    range_text = miscresults$EN_DASH,  # " to " or ", " are also sensible
-    ci_prefix = "(",
+    mean_prefix = "",
+    ci_prefix = " (CI ",
+    ci_sep = " to ",  # miscresults$EN_DASH also possible
     ci_suffix = ")",
     sf = get_flextable_defaults()$digits,
-    allow_sci_notation = TRUE
+    allow_sci_notation = TRUE,
+    na_str = get_flextable_defaults()$na_str
 ) {
     # Given a mean mu and confidence interval limits ci_lower, ci_upper, show
     # this as e.g. "μ (a–b)".
-    return(paste0(
+    results <- paste0(
+        mean_prefix,
         miscresults$fmt_float(
             mu,
             sf = sf, allow_sci_notation = allow_sci_notation
         ),
-        " ",
         ci_prefix,
         miscresults$fmt_float(
             ci_lower,
             sf = sf, allow_sci_notation = allow_sci_notation
         ),
-        range_text,
+        ci_sep,
         miscresults$fmt_float(
             ci_upper,
             sf = sf, allow_sci_notation = allow_sci_notation
         ),
         ci_suffix
-    ))
+    )
+    return(ifelse(is.na(mu), na_str, results))
 }
 
 
@@ -301,9 +324,73 @@ miscresults$mk_mean_ci <- function(
 }
 
 
-#==============================================================================
+miscresults$fmt_median_range <- function(
+    med,
+    range_lower,
+    range_upper,
+    median_prefix = "median ",
+    range_prefix = " (range ",
+    range_sep = miscresults$EN_DASH,
+    range_suffix = ")",
+    sf = get_flextable_defaults()$digits,
+    allow_sci_notation = TRUE,
+    na_str = get_flextable_defaults()$na_str
+) {
+    # Given a median and range limits, this as e.g. "m (a–b)".
+    # Remember to think in parallel.
+    all_three_integer <- (
+        miscresults$is.wholenumber(range_lower)
+        & miscresults$is.wholenumber(range_lower)
+        & miscresults$is.wholenumber(range_upper)
+    )
+    formatter <- function(x) {
+        ifelse(
+            all_three_integer,
+            flextable::fmt_int(x),
+            miscresults$fmt_float(
+                x,
+                sf = sf, allow_sci_notation = allow_sci_notation
+            )
+        )
+    }
+    median_text <- formatter(med)
+    range_lower_text <- formatter(range_lower)
+    range_upper_text <- formatter(range_upper)
+    results <- paste0(
+        median_prefix,
+        median_text,
+        range_prefix,
+        range_lower_text,
+        range_sep,
+        range_upper_text,
+        range_suffix
+    )
+    return(ifelse(is.na(med), na_str, results))
+}
+
+
+miscresults$mk_median_range <- function(
+    x,
+    na.rm = TRUE,
+    ...
+) {
+    # From a vector, show a median and range as e.g. "m (a–b)". Additional
+    # parameters are passed to fmt_median_range().
+    med <- median(x, na.rm = na.rm)
+    range_lower <- min(x, na.rm = na.rm)
+    range_upper <- max(x, na.rm = na.rm)
+    return(miscresults$fmt_median_range(
+        med = med,
+        range_lower = range_lower,
+        range_upper = range_upper,
+        ...
+    ))
+}
+
+
+# =============================================================================
 # Formatted statistical tests
-#==============================================================================
+# =============================================================================
 
 miscresults$mk_chisq_contingency <- function(
     x_counts,
@@ -315,14 +402,16 @@ miscresults$mk_chisq_contingency <- function(
     #     threshold.
     ns_text = miscresults$NOT_SIGNIFICANT,
     check_alpha = 0.05,
-    debug = FALSE
+    debug = FALSE,
+    ...
 ) {
     # Reports chi-squared to 1 dp.
     # Both x_counts and y_counts should be vectors of integers. (They are not
     # named x and y because of the differing syntax of chisq.test for x-and-y
     # rather than the contingency table/matrix form.)
+    # Any additional parameters are passed to chisq.test().
     d <- matrix(c(x_counts, y_counts), nrow = 2)
-    result <- chisq.test(d)
+    result <- chisq.test(d, ...)
     if (debug) {
         print(result)
     }
@@ -331,6 +420,7 @@ miscresults$mk_chisq_contingency <- function(
     df_txt <- miscresults$mk_df_text(result$parameter)
     chisq_symbol_df_txt <- sprintf("*Χ*^2^~%s~", df_txt)
     p <- result$p.value
+    # NB chisq can only be positive.
     if (chisq < minimum_chisq_shown) {
         if (p <= check_alpha) {
             stop(sprintf(
@@ -351,9 +441,6 @@ miscresults$mk_chisq_contingency <- function(
 miscresults$mk_t_test <- function(
     x,
     y = NULL,
-    paired = FALSE,
-    var.equal = FALSE,
-    conf.level = 0.95,
     minimum_abs_t_shown = 1,
     # ... critical value for a two-tailed test at α = 0.05 is ±qt(0.975, df),
     #     decreasing for higher df, and approaching qnorm(0.975) as df → ∞.
@@ -362,21 +449,17 @@ miscresults$mk_t_test <- function(
     #     threshold.
     ns_text = miscresults$NOT_SIGNIFICANT,
     check_alpha = 0.05,
-    debug = FALSE
+    debug = FALSE,
+    ...
 ) {
-    # Reports a two-sample t test, following argument conventions for t.test.
-    result <- t.test(
-        x = x,
-        y = y,
-        paired = paired,
-        var.equal = var.equal,
-        conf.level = conf.level
-    )
+    # Reports a t test. Any additional parameters are passed to t.test().
+    # The direction of Z is "x - y" (i.e. positive if x > y, negative if x < y).
+    result <- t.test(x = x, y = y, ...)
     if (debug) {
         print(result)
     }
     t <- result$statistic
-    t_txt <- miscresults$fmt_float(t)
+    t_txt <- miscresults$fmt_float(t, use_plus = TRUE)
     df_txt <- miscresults$mk_df_text(result$parameter)
     t_symbol_df_txt <- sprintf("*t*~%s~", df_txt)
     p <- result$p.value
@@ -388,12 +471,57 @@ miscresults$mk_t_test <- function(
             ))
         }
         min_t_txt <- miscresults$fmt_float(minimum_abs_t_shown)
-        return(sprintf("%s < %s, %s", t_symbol_df_txt, min_t_txt, ns_text))
+        # Note the |t| symbol below.
+        return(sprintf("|%s| < %s, %s", t_symbol_df_txt, min_t_txt, ns_text))
     }
     p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
     return(sprintf("%s = %s, %s", t_symbol_df_txt, t_txt, p_txt))
 }
 
+
+miscresults$mk_wilcoxon_test <- function(
+    x,
+    y = NULL,
+    ns_text = miscresults$NOT_SIGNIFICANT,
+    debug = FALSE,
+    ...
+) {
+    # Reports a Wilcoxon one- or two-sample test; the two-sample test is the
+    # Mann-Whitney U test, which is the same as the Wilcoxon rank-sum test.
+    # Follows argument convension for wilcox.test(); any additional parameters
+    # are passed to that, and likewise to rcompanion::wilcoxonZ().
+    # The direction of Z is "x - y" (i.e. positive if x > y, negative if x < y).
+    # See also:
+    # - https://www.researchgate.net/post/How_do_I_report_a_Two-sample_Wilcoxon_Test
+    result <- wilcox.test(x = x, y = y, ...)
+    w <- result$statistic  # can be non-integer
+    z <- rcompanion::wilcoxonZ(x = x, y = y, ...)
+    if (debug) {
+        print(result)
+        print(z)
+    }
+    w_txt <- miscresults$fmt_float(w)
+    # There is no df parameter here; result$parameter will be NULL.
+    p <- result$p.value
+    p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
+    z_txt <- miscresults$fmt_float(z, use_plus = TRUE)
+    return(sprintf("*W* = %s, *Z* = %s, %s", w_txt, z_txt, p_txt))
+}
+
+
+# =============================================================================
+# Manipulating display
+# =============================================================================
+
+miscresults$detect_significant_in_result_str <- function(x) {
+    # Use to mark significant differences (e.g. in bold).
+    # This requires identifying "significance markers", traditionally
+    # asterisks. To make this harder, note that asterisks are present in the
+    # markdown text! So we're looking for whitespace (\s), one or more
+    # asterisks (\*+), end of string ($). Then additional backslashes for R.
+    # See example of usage in test_flextable.R.
+    stringr::str_detect(x, "\\s\\*+$")
+}
 
 # =============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786

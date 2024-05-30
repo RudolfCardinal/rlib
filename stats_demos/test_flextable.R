@@ -1,15 +1,22 @@
 # test_flextable.R
 
-library(data.table)
-library(flextable)
-library(ftExtra)  # https://cran.r-project.org/web/packages/ftExtra/vignettes/format_columns.html
-library(officer)  # for prop_section, etc.
-library(tidyverse)
-RLIB_PREFIX <- "/srv/cardinal_rlib/"
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+    data.table,
+    flextable,  # for creating tabular publication output
+    ftExtra,  # for markdown in flextable tables
+    officer,  # for embedding flextable tables in Word documents
+    tidyverse
+)
+
+# RLIB_PREFIX <- "/srv/cardinal_rlib/"
+RLIB_PREFIX <- ""
 source(paste0(RLIB_PREFIX, "miscfile.R"))
 source(paste0(RLIB_PREFIX, "miscstat.R"))
 source(paste0(RLIB_PREFIX, "miscresults.R"))
 
+# Re mutating rows:
+# - https://github.com/tidyverse/dplyr/issues/4050
 
 # =============================================================================
 # Constants
@@ -25,71 +32,133 @@ OUTPUT_DOCX <- file.path(SCRIPT_DIR, "test_flextable.docx")
 
 set.seed(1)
 
-total_placebo <- 520000
-n_explosions_placebo <- 501
-n_implosions_placebo <- 250
-weight_placebo <- rnorm(n = total_placebo, mean = 40.25, sd = 2)
-height_placebo <- rnorm(n = total_placebo, mean = 1.4, sd = 0.1)
-n_dullness_measured_placebo <- 5
-dullness_placebo <- rnorm(n = n_dullness_measured_placebo, mean = 7.7, sd = 0.1)
-
-total_drug <- 525
-n_explosions_drug <- 301
-n_implosions_drug <- 251
-weight_drug <- rnorm(n = total_drug, mean = 65.78, sd = 2)
-height_drug <- rnorm(n = total_drug, mean = -1.8, sd = 0.1)
-n_dullness_measured_drug <- 5
-dullness_drug <- rnorm(n = n_dullness_measured_drug, mean = 7.7, sd = 0.1)
-
+# -----------------------------------------------------------------------------
+# Individual-level data
+# -----------------------------------------------------------------------------
+n_placebo <- 2201
+n_drug <- 1258
 fakedata <- data.table(
-    groupname = c("placebo", "drug", "comparison"),
-    n = c(
-        fmt_int(total_placebo),
-        fmt_int(total_drug),
-        "–"
+    group = c(
+        rep("placebo", n_placebo),
+        rep("drug", n_drug)
     ),
-    explosions = c(
-        mk_n_percent(n_explosions_placebo, total_placebo),
-        mk_n_percent(n_explosions_drug, total_drug),
-        mk_chisq_contingency(
-            c(total_placebo, n_explosions_placebo),
-            c(total_drug, n_explosions_drug)
-        )
-    ),
-    implosions = c(
-        mk_n_percent(n_implosions_placebo, total_placebo),
-        mk_n_percent(n_implosions_drug, total_drug),
-        mk_chisq_contingency(
-            c(total_placebo, n_implosions_placebo),
-            c(total_drug, n_implosions_drug)
-        )
-    ),
+    exploded = as.integer(c(
+        miscstat$coin(rep(0.2, n_placebo)),
+        miscstat$coin(rep(0.1, n_drug))
+    )),
+    imploded = as.integer(c(
+        miscstat$coin(rep(0.2,  n_placebo)),
+        miscstat$coin(rep(0.25, n_drug))
+    )),
     weight = c(
-        mk_mean_sd(weight_placebo),
-        mk_mean_sd(weight_drug),
-        mk_t_test(weight_placebo, weight_drug)
+        rnorm(n = n_placebo, mean = 60.25, sd = 2),
+        rnorm(n = n_drug,    mean = 65.78, sd = 2)
     ),
     height = c(
-        mk_mean_ci(height_placebo),
-        mk_mean_ci(height_drug),
-        mk_t_test(height_placebo, height_drug)
+        rnorm(n = n_placebo, mean = 1.7, sd = 0.1),
+        rnorm(n = n_drug,    mean = 1.7, sd = 0.1)
     ),
-    n_dullness_measured = c(
-        fmt_int(n_dullness_measured_placebo),
-        fmt_int(n_dullness_measured_drug),
-         "–"
-     ),
+    response = c(
+        rnorm(n = n_placebo, mean =  0.2, sd = 3),
+        rnorm(n = n_drug,    mean = -0.2, sd = 3)
+    ),
     dullness = c(
-        mk_mean_ci(dullness_placebo),
-        mk_mean_ci(dullness_drug),
-        mk_t_test(dullness_placebo, dullness_drug)
+        floor(runif(n = n_placebo, min = 10, max = 40)),
+        floor(runif(n = n_drug,    min = 11, max = 40))
     )
 )
-# print(fakedata)
-td <- data.table::transpose(
-    fakedata, make.names = "groupname", keep.names = "variable"
+
+# -----------------------------------------------------------------------------
+# Group-level numerical summaries
+# -----------------------------------------------------------------------------
+
+summary <- (
+    fakedata
+    %>% group_by(group)
+    %>% summarize(
+        # Numerical
+        n = n(),
+        n_explosions = sum(exploded),
+        n_not_explosions = n - n_explosions,
+        n_implosions = sum(imploded),
+        n_not_implosions = n - n_implosions,
+        # Textual
+        N = fmt_int(n),
+        explosions = mk_n_percent(n_explosions, n),
+        implosions = mk_n_percent(n_implosions, n),
+        weight = mk_mean_sd(weight),
+        height = mk_mean_sd(height),
+        response = mk_mean_ci(response),
+        dullness = mk_median_range(dullness)
+    )
+    %>% as.data.table()
 )
-# print(td)
+# Keep in this "variables as columns" format for calculation. Only transpose
+# once we don't care about a mix of text and numbers.
+
+# -----------------------------------------------------------------------------
+# Transposed, textual summaries
+# -----------------------------------------------------------------------------
+
+tsumm <- (
+    summary
+    %>% select(-c(
+        # Columns to remove
+        "n",
+        "n_explosions", "n_not_explosions",
+        "n_implosions", "n_not_implosions"
+    ))
+    %>% data.table::transpose(make.names = "group", keep.names = "variable")
+    %>% mutate(
+        comparison = case_when(
+            # Add comparisons.
+            # Use x = drug, y = placebo, giving "drug - placebo" for the tests.
+            variable == "explosions" ~ mk_chisq_contingency(
+                c(summary[group == "drug"]$n_explosions,
+                  summary[group == "drug"]$n_not_explosions),
+                c(summary[group == "placebo"]$n_explosions,
+                  summary[group == "placebo"]$n_not_explosions)
+            ),
+            variable == "implosions" ~ mk_chisq_contingency(
+                c(summary[group == "drug"]$n_implosions,
+                  summary[group == "drug"]$n_not_implosions),
+                c(summary[group == "placebo"]$n_implosions,
+                  summary[group == "placebo"]$n_not_implosions)
+            ),
+            variable == "weight" ~ mk_t_test(
+                fakedata[group == "drug"   ]$weight,
+                fakedata[group == "placebo"]$weight
+            ),
+            variable == "height" ~ mk_t_test(
+                fakedata[group == "drug"   ]$height,
+                fakedata[group == "placebo"]$height
+            ),
+            variable == "response" ~ mk_t_test(
+                fakedata[group == "drug"   ]$response,
+                fakedata[group == "placebo"]$response
+            ),
+            variable == "dullness" ~ mk_wilcoxon_test(
+                fakedata[group == "drug"   ]$dullness,
+                fakedata[group == "placebo"]$dullness
+            ),
+            TRUE ~ miscresults$EN_DASH
+        ),
+        # Make variable names prettier
+        variable = case_when(
+            variable == "explosions" ~ "Explosions",
+            variable == "implosions" ~ "Implosions",
+            variable == "weight" ~ "Weight (kg)",
+            variable == "height" ~ "Height (m)",
+            variable == "response" ~ "Response (response units)",
+            variable == "dullness" ~ "Dullness (bishops)",
+            TRUE ~ variable
+        )
+    )
+)
+# Get the groups in the right order:
+setcolorder(tsumm, c("variable", "placebo", "drug", "comparison"))
+# Make it prettier:
+colnames(tsumm) <- c("Variable", "Placebo", "Drug", "Comparison")
 
 
 # =============================================================================
@@ -98,18 +167,25 @@ td <- data.table::transpose(
 
 flextable::set_flextable_defaults(
     font.family = "Arial",
-    font.size = 8,
+    font.size = 12,
     border.color = "gray",
     digits = 3,  # usually significant figures
     big.mark = ","  # thousands separator
 )
-
 ft <- (
-    td
+    tsumm
     %>% flextable()
     %>% ftExtra::colformat_md()  # apply markdown
     %>% autofit()  # size columns
     %>% set_caption("My first flextable")
+    # Mark significant differences in bold. To make this harder, note that
+    # asterisks are present in the markdown text! So we're looking for
+    # whitespace (\s), one or more asterisks (\*+), end of string ($). Then
+    # additional backslashes for R.
+    %>% bold(
+        i = ~ miscresults$detect_significant_in_result_str(Comparison),
+        j = c("Drug")
+    )
 )
 print(ft)
 flextable::save_as_docx(
