@@ -63,8 +63,8 @@ fakedata <- data.table(
         rnorm(n = n_drug,    mean = -0.2, sd = 3)
     ),
     dullness = c(
-        floor(runif(n = n_placebo, min = 10, max = 40)),
-        floor(runif(n = n_drug,    min = 11, max = 40))
+        floor(runif(n = n_placebo, min = -10, max = 40)),
+        floor(runif(n = n_drug,    min =  -9, max = 40))
     )
 )
 
@@ -88,7 +88,8 @@ summary <- (
         implosions = mk_n_percent(n_implosions, n),
         weight = mk_mean_sd(weight),
         height = mk_mean_sd(height),
-        response = mk_mean_ci(response),
+        response_mean = mk_mean_ci(response),
+        response_median = mk_median_range(response),
         dullness = mk_median_range(dullness)
     )
     %>% as.data.table()
@@ -133,7 +134,7 @@ tsumm <- (
                 fakedata[group == "drug"   ]$height,
                 fakedata[group == "placebo"]$height
             ),
-            variable == "response" ~ mk_t_test(
+            variable == "response_mean" ~ mk_t_test(
                 fakedata[group == "drug"   ]$response,
                 fakedata[group == "placebo"]$response
             ),
@@ -149,7 +150,8 @@ tsumm <- (
             variable == "implosions" ~ "Implosions",
             variable == "weight" ~ "Weight (kg)",
             variable == "height" ~ "Height (m)",
-            variable == "response" ~ "Response (response units)",
+            variable == "response_mean" ~ "Response (response units) (mean)",
+            variable == "response_median" ~ "Response (response units) (median)",
             variable == "dullness" ~ "Dullness (bishops)",
             TRUE ~ variable
         )

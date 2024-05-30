@@ -90,6 +90,41 @@ miscresults$mk_sig_label <- function(
 }
 
 
+miscresults$fmt_int <- function(
+    x,
+    big.mark = get_flextable_defaults()$big.mark,
+    use_plus = FALSE,  # prepend "+" for positive numbers?
+    na_str = get_flextable_defaults()$na_str,
+    nan_str = get_flextable_defaults()$nan_str
+) {
+    # Replaces flextable::fmt_int().
+    flag <- ""
+    if (use_plus) {
+        flag <- paste0(flag, "+")
+    }
+    txt <- formatC(
+        x,
+        format = "d",
+        flag = flag,
+        big.mark = big.mark
+    )
+    # Convert hyphens to proper minus signs, and trim whitespace:
+    txt <- stringr::str_trim(
+        stringr::str_replace_all(txt, miscresults$HYPHEN, miscresults$MINUS)
+    )
+    # Deal with NaN and NA (in parallel):
+    return(ifelse(
+        is.nan(x),
+        nan_str,
+        ifelse(
+            is.na(x),
+            na_str,
+            txt
+        )
+    ))
+}
+
+
 miscresults$fmt_float <- function(
     x,
     allow_sci_notation = TRUE,
@@ -216,7 +251,7 @@ miscresults$mk_df_text <- function(df, dp = miscresults$DEFAULT_DP_FOR_DF) {
     # integer is often quite important!).
     return(ifelse(
         as.integer(df) == df,
-        flextable::fmt_int(df),  # integer version
+        miscresults$fmt_int(df),  # integer version
         formatC(df, format = "f", digits = dp)  # floating-point version
     ))
 }
@@ -262,7 +297,7 @@ miscresults$fmt_n_percent <- function(
         is.na(n) | is.na(proportion),
         na_str,
         paste0(
-            flextable::fmt_int(n),
+            miscresults$fmt_int(n),
             " (",
             miscresults$fmt_pct(proportion, ...),
             ")"
@@ -403,7 +438,7 @@ miscresults$fmt_median_range <- function(
     formatter <- function(x) {
         ifelse(
             all_three_integer,
-            flextable::fmt_int(x),
+            miscresults$fmt_int(x),
             miscresults$fmt_float(
                 x,
                 sf = sf, allow_sci_notation = allow_sci_notation
