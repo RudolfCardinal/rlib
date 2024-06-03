@@ -15,8 +15,16 @@ source(paste0(RLIB_PREFIX, "miscfile.R"))
 source(paste0(RLIB_PREFIX, "miscstat.R"))
 source(paste0(RLIB_PREFIX, "miscresults.R"))
 
-# Re mutating rows:
-# - https://github.com/tidyverse/dplyr/issues/4050
+# Set up flextable defaults before ANY functions using flextable formatting.
+
+flextable::set_flextable_defaults(
+    font.family = "Arial",
+    font.size = 12,
+    border.color = "gray",
+    digits = 3,  # usually significant figures
+    big.mark = ","  # thousands separator
+)
+
 
 # =============================================================================
 # Constants
@@ -101,6 +109,9 @@ summary <- (
 # Transposed, textual summaries
 # -----------------------------------------------------------------------------
 
+# Re mutating rows:
+# - https://github.com/tidyverse/dplyr/issues/4050
+
 tsumm <- (
     summary
     %>% select(-c(
@@ -175,17 +186,11 @@ colnames(tsumm) <- c("Variable", "Placebo", "Drug", "Comparison")
 # Formatting demostrations
 # =============================================================================
 
-flextable::set_flextable_defaults(
-    font.family = "Arial",
-    font.size = 12,
-    border.color = "gray",
-    digits = 3,  # usually significant figures
-    big.mark = ","  # thousands separator
-)
 ft <- (
     tsumm
     %>% flextable()
     %>% ftExtra::colformat_md()  # apply markdown
+    %>% flextable::valign(valign = "top")  # align all cells top
     %>% autofit()  # size columns
     %>% set_caption("My first flextable")
     # Mark significant differences in bold. To make this harder, note that
