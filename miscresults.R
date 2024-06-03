@@ -46,11 +46,13 @@ miscresults <- new.env()
 # preferable to use "\u<hexcode">, e.g. "\u2013" for an en dash. This is an
 # ASCII file representation of a Unicode character, which works fine.
 
+miscresults$CHI_LOWER <- "\u03C7"
+miscresults$EN_DASH <- "\u2013"
 miscresults$HYPHEN <- "-"  # plain ASCII
 miscresults$MINUS <- "\u2212"
-miscresults$EN_DASH <- "\u2013"
-miscresults$PLUS_MINUS <- "\u00B1"  # case-insensitive
+miscresults$MULTIPLY <- "\u00D7"
 miscresults$MULTIPLICATION_DOT <- "\u22C5"
+miscresults$PLUS_MINUS <- "\u00B1"  # case-insensitive
 
 miscresults$DEFAULT_DP_FOR_DF <- 1  # decimal places for non-integer degrees of freedom
 miscresults$MINIMUM_P_SHOWN <- 2.2e-16
@@ -175,7 +177,9 @@ miscresults$fmt_float <- function(
             exponent <- stringr::str_replace(scimatch[4], "^0+" ,"")
             # ... remove leading zeros from exponent
             # Use ^...^ for superscript with ftExtra.
-            txt <- paste0(radix, " × 10^", sign, exponent, "^")
+            txt <- paste0(
+                radix, " ", miscresults$MULTIPLY, " 10^", sign, exponent, "^"
+            )
         }
     } else {
         # https://stackoverflow.com/questions/3245862
@@ -428,7 +432,9 @@ miscresults$fmt_median_range <- function(
     range_upper,
     median_prefix = "median ",
     range_prefix = " (range ",
-    range_sep = miscresults$EN_DASH,
+    range_sep = " to ",
+    # ... an en dash is feasible but does break with scientific notation and is
+    # a little confusing if there are also minus signs.
     range_suffix = ")",
     sf = get_flextable_defaults()$digits,
     allow_sci_notation = TRUE,
@@ -516,7 +522,10 @@ miscresults$mk_chisq_contingency <- function(
     chisq <- result$statistic
     chisq_txt <- miscresults$fmt_float(chisq)
     df_txt <- miscresults$mk_df_text(result$parameter)
-    chisq_symbol_df_txt <- sprintf("*Χ*^2^~%s~", df_txt)
+    chisq_symbol_df_txt <- sprintf(
+        paste0("*", miscresults$CHI_LOWER, "*^2^~%s~"),
+        df_txt
+    )
     p <- result$p.value
     # NB chisq can only be positive.
     if (chisq < minimum_chisq_shown) {

@@ -207,6 +207,8 @@ RUN install2.r --error --deps TRUE \
     # ... Power calculations.
     raster \
     # ... Geographic data analysis and modelling.
+    rcompanion \
+    # ... e.g. wilcoxonZ
     readODS \
     # ... Read OpenOffice files.
     readxl \
