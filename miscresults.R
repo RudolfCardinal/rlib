@@ -40,11 +40,17 @@ miscresults <- new.env()
 # Constants
 # =============================================================================
 
-miscresults$HYPHEN <- "-"
-miscresults$MINUS <- "−"
-miscresults$EN_DASH <- "–"
-miscresults$PLUS_MINUS <- "±"
-miscresults$MULTIPLICATION_DOT <- "⋅"
+# NOTE RE UNICODE: This can be challenging under Windows. The problem isn't
+# usually in handling Unicode, it's in representing it in the file encoding,
+# since Windows does not use UTF-8 file encoding by default. It's therefore
+# preferable to use "\u<hexcode">, e.g. "\u2013" for an en dash. This is an
+# ASCII file representation of a Unicode character, which works fine.
+
+miscresults$HYPHEN <- "-"  # plain ASCII
+miscresults$MINUS <- "\u2212"
+miscresults$EN_DASH <- "\u2013"
+miscresults$PLUS_MINUS <- "\u00B1"  # case-insensitive
+miscresults$MULTIPLICATION_DOT <- "\u22C5"
 
 miscresults$DEFAULT_DP_FOR_DF <- 1  # decimal places for non-integer degrees of freedom
 miscresults$MINIMUM_P_SHOWN <- 2.2e-16
