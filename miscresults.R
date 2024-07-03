@@ -255,14 +255,25 @@ miscresults$mk_p_text_with_label <- function(
 }
 
 
-miscresults$mk_df_text <- function(df, dp = miscresults$DEFAULT_DP_FOR_DF) {
+miscresults$mk_df_text <- function(
+    df,
+    dp = miscresults$DEFAULT_DP_FOR_DF,
+    big.mark = get_flextable_defaults()$big.mark,
+    decimal.mark = get_flextable_defaults()$decimal.mark
+) {
     # Format degrees of freedom (df) appropriately -- as an exact integer, or
     # to 1 dp if it is not integer (since knowing the fact of not being an
     # integer is often quite important!).
     return(ifelse(
         as.integer(df) == df,
-        miscresults$fmt_int(df),  # integer version
-        formatC(df, format = "f", digits = dp)  # floating-point version
+        miscresults$fmt_int(df, big.mark = big.mark),  # integer version
+        formatC(
+            df,
+            format = "f",
+            digits = dp,
+            big.mark = big.mark,
+            decimal.mark = decimal.mark
+        )  # floating-point version
     ))
 }
 
@@ -613,6 +624,47 @@ miscresults$mk_wilcoxon_test <- function(
     p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
     z_txt <- miscresults$fmt_float(z, use_plus = TRUE)
     return(sprintf("*W* = %s, *Z* = %s, %s", w_txt, z_txt, p_txt))
+}
+
+
+miscresults$mk_oneway_anova <- function(
+    depvar,
+    factorvar,
+    ns_text = miscresults$NOT_SIGNIFICANT,
+    debug = FALSE,
+    ...
+) {
+    # Reports a one-way ANOVA predicting depvar by factorvar.
+    # - Note that for one-way ANOVA, the sum of squares "type" is not
+    #   applicable, since there is only one predictor.
+    d <- data.frame(dv = depvar, x = factorvar)
+    a <- aov(dv ~ x, data = d)
+    s <- summary(a)
+    stopifnot(length(s) == 1)
+    s1 <- s[[1]]
+    F <- s1$`F value`[1]
+    df <- s1$Df
+    stopifnot(length(df) == 2)
+    df_num <- df[1]
+    df_denom <- df[2]
+    p <- s1$`Pr(>F)`[1]
+    if (debug) {
+        cat("---\n")
+        print(s)
+        print(F)
+        print(df_num)
+        print(df_denom)
+        print(p)
+        cat("---\n")
+    }
+    # No commas in degrees of freedom (big.mark = ""), since they are separated
+    # by commas anyway.
+    df_num_txt <- miscresults$mk_df_text(df_num, big.mark = "")
+    df_denom_txt <- miscresults$mk_df_text(df_denom, big.mark = "")
+    F_symbol_df_txt <- sprintf("*F*~%s,%s~", df_num_txt, df_denom_txt)
+    F_txt <- miscresults$fmt_float(F)
+    p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
+    return(sprintf("%s = %s, %s", F_symbol_df_txt, F_txt, p_txt))
 }
 
 

@@ -183,6 +183,84 @@ colnames(tsumm) <- c("Variable", "Placebo", "Drug", "Comparison")
 
 
 # =============================================================================
+# A three-group example
+# =============================================================================
+
+n_lowdose <- 1010
+n_highdose <- 1258
+fd2 <- data.table(
+    group = c(
+        rep("placebo", n_placebo),
+        rep("lowdose", n_lowdose),
+        rep("highdose", n_highdose)
+    ),
+    sbp = c(
+        rnorm(n = n_placebo,  mean = 138, sd = 2),
+        rnorm(n = n_lowdose,  mean = 130, sd = 2),
+        rnorm(n = n_highdose, mean = 87, sd = 2)  # unhappy occurrence
+    ),
+    collapsed = as.integer(c(
+        miscstat$coin(rep(0.05, n_placebo)),
+        miscstat$coin(rep(0.06, n_lowdose)),
+        miscstat$coin(rep(0.15, n_highdose))
+    ))
+)
+s2 <- (
+    fd2
+    %>% group_by(group)
+    %>% summarize(
+        # Numerical
+        n = n(),
+        n_collapsed = sum(collapsed),
+        n_not_collapsed = n - n_collapsed,
+        # Textual
+        N = fmt_int(n),
+        collapsed = mk_n_percent(n_collapsed, n),
+        sbp = mk_mean_sd(sbp)
+    )
+    %>% as.data.table()
+)
+t2 <- (
+    s2
+    %>% select(-c(
+        # Columns to remove
+        "n",
+        "n_collapsed",
+        "n_not_collapsed",
+    ))
+    %>% data.table::transpose(make.names = "group", keep.names = "variable")
+    %>% mutate(
+        comparison = case_when(
+            # Add comparisons.
+            # Use x = drug, y = placebo, giving "drug - placebo" for the tests.
+            variable == "collapsed" ~ mk_chisq_contingency(
+                c(s2[group == "placebo" ]$n_collapsed,
+                  s2[group == "lowdose" ]$n_collapsed,
+                  s2[group == "highdose"]$n_collapsed),
+                c(s2[group == "placebo" ]$n_not_collapsed,
+                  s2[group == "lowdose" ]$n_not_collapsed,
+                  s2[group == "highdose"]$n_not_collapsed)
+            ),
+            variable == "sbp" ~ mk_oneway_anova(fd2$sbp, fd2$group),
+            TRUE ~ miscresults$EN_DASH
+        ),
+        # Make variable names prettier
+        variable = case_when(
+            variable == "collapsed" ~ "Collapsed",
+            variable == "sbp" ~ "Systolic BP (mmHg)",
+            TRUE ~ variable
+        )
+    )
+)
+setcolorder(t2, c(
+    "variable", "placebo", "lowdose", "highdose", "comparison"
+))
+colnames(t2) <- c(
+    "Variable", "Placebo", "Low dose", "High dose", "Comparison"
+)
+
+
+# =============================================================================
 # Formatting demostrations
 # =============================================================================
 
@@ -205,15 +283,29 @@ ft <- (
     %>% bold(i = ~ str_detect(Variable, "outcomes"))
 )
 print(ft)
+ft2 <- (
+    t2
+    %>% flextable()
+    %>% ftExtra::colformat_md()  # apply markdown
+    %>% flextable::valign(valign = "top")  # align all cells top
+    %>% autofit()  # size columns
+    %>% set_caption("Three-group table")
+    %>% bold(
+        i = ~ miscresults$detect_significant_in_result_str(Comparison),
+        j = c("Placebo", "Low dose", "High dose")
+    )
+)
 flextable::save_as_docx(
     `Table 1` = ft,
-    `Table 1 again` = ft,
-    path = OUTPUT_DOCX,
-    align = "left",
+    `Table 1 again` = ft,  # a second copy
+    `Table 2` = ft2,
+    path = OUTPUT_DOCX,  # file will be created or overwritten
+    align = "left",  # table (and caption) within page (not text within table)
     pr_section = prop_section(  # from "officer" package
         # These do not use all the width appropriately, despite correct margin
         # settings (with flextable 0.9.4 and officer 0.6.3):
         page_size = page_size(orient = "landscape")  # default is A4 portrait
+        # page_size = page_size(orient = "portrait")  # default is A4 portrait
         # page_size = page_size(width = 29.7 / 2.54, height = 21 / 2.54, orient = "portrait")  # doesn't work properly
         # page_size = page_size(width = 29.7 / 2.54, height = 21 / 2.54, orient = "landscape")  # doesn't work properly
         # page_margins = page_mar(...),  # default is 1" margins
