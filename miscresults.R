@@ -47,12 +47,22 @@ miscresults <- new.env()
 # ASCII file representation of a Unicode character, which works fine.
 
 miscresults$CHI_LOWER <- "\u03C7"
+
 miscresults$EN_DASH <- "\u2013"
 miscresults$HYPHEN <- "-"  # plain ASCII
 miscresults$MINUS <- "\u2212"
 miscresults$MULTIPLY <- "\u00D7"
 miscresults$MULTIPLICATION_DOT <- "\u22C5"
 miscresults$PLUS_MINUS <- "\u00B1"  # case-insensitive
+
+# Traditional order for footnotes:
+# - https://en.wikipedia.org/wiki/Note_(typography)
+# - asterisk (*), then:
+miscresults$DAGGER <- "\u2020"
+miscresults$DOUBLE_DAGGER <- "\u2021"
+miscresults$SECTION <- "\u00A7"
+miscresults$DOUBLE_VERTICAL_LINE <- "\u2016"
+miscresults$PILCROW <- "\u00B6"
 
 miscresults$NEWLINE <- "\\\n"  # two characters: backslash, newline
 # ... ftExtra uses Pandoc markdown;
