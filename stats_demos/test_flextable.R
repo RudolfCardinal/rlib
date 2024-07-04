@@ -33,6 +33,16 @@ flextable::set_flextable_defaults(
 SCRIPT_DIR <- miscfile$current_script_directory()
 OUTPUT_DOCX <- file.path(SCRIPT_DIR, "test_flextable.docx")
 
+FOOTNOTE_SEP <- " "
+FOOTNOTE_OPTIONS <- ftExtra::footnote_options(
+    ref = "a",  # E.g. "a" (letters), "i" (Roman), 1 (Arabic), "*", etc.
+    prefix = "",  # Before the numbered/lettered part.
+    suffix = "",  # After the numbered/lettered part.
+    start = 1,  # e.g. 2 = start at "b", "ii", "2", etc.
+    inline = TRUE,  # Footnotes in same line within table footer?
+    sep = FOOTNOTE_SEP  # Between footnotes. Only applicable if inline == TRUE.
+)
+
 
 # =============================================================================
 # Made-up data and formatting demonstrations
@@ -80,6 +90,7 @@ fakedata <- data.table(
 # Group-level numerical summaries
 # -----------------------------------------------------------------------------
 
+suppression_threshold <- 300  # silly; would normally be e.g. 10
 summary <- (
     fakedata
     %>% group_by(group)
@@ -94,6 +105,11 @@ summary <- (
         N = fmt_int(n),
         explosions = mk_n_percent(n_explosions, n),
         implosions = mk_n_percent(n_implosions, n),
+        implosions_suppressed = mk_n_percent(
+            n_implosions,
+            n,
+            min_threshold = suppression_threshold
+        ),
         weight = mk_mean_sd(weight),
         height = mk_mean_sd(height),
         response_mean = mk_mean_ci(response),
@@ -159,6 +175,7 @@ tsumm <- (
         variable = case_when(
             variable == "explosions" ~ "Explosions",
             variable == "implosions" ~ "Implosions",
+            variable == "implosions_suppressed" ~ "Implosions (suppressed)",
             variable == "weight" ~ "Weight (kg)",
             variable == "height" ~ "Height (m)",
             variable == "response_mean" ~ "Response (response units) (mean)",
@@ -168,12 +185,12 @@ tsumm <- (
         )
     )
     %>% add_row(
-        variable = "Primary outcomes",
+        variable = "Primary outcomes ^[First footnote.]",
         .before = 2
     )
     %>% add_row(
-        variable = "Secondary outcomes",
-        .before = 5
+        variable = "Secondary outcomes ^[Second footnote.]",
+        .before = 6
     )
 )
 # Get the groups in the right order:
@@ -246,7 +263,12 @@ t2 <- (
         ),
         # Make variable names prettier
         variable = case_when(
-            variable == "collapsed" ~ "Collapsed",
+            variable == "collapsed" ~ paste(
+                "Collapsed",
+                "line_2",
+                "line_3",
+                sep = miscresults$NEWLINE
+            ),
             variable == "sbp" ~ "Systolic BP (mmHg)",
             TRUE ~ variable
         )
@@ -267,7 +289,9 @@ colnames(t2) <- c(
 ft <- (
     tsumm
     %>% flextable()
-    %>% ftExtra::colformat_md()  # apply markdown
+    %>% ftExtra::colformat_md(
+        .footnote_options = FOOTNOTE_OPTIONS
+    )  # apply markdown
     %>% flextable::valign(valign = "top")  # align all cells top
     %>% autofit()  # size columns
     %>% set_caption("My first flextable")
@@ -281,12 +305,35 @@ ft <- (
     )
     # Make some subheadings bold, in a primitive way.
     %>% bold(i = ~ str_detect(Variable, "outcomes"))
+    # For a footnote with multiple "citations":
+    %>% footnote(
+        # i and j represent row, column pairs
+        i = c(3, 3),  # rows
+        j = c(2, 3),  # columns
+        value = as_paragraph("Hello, world!"),
+        ref_symbols = c(" †"),
+        part = "body",
+        inline = TRUE,
+        sep = FOOTNOTE_SEP
+    )
+    %>% footnote(
+        # i and j represent row, column pairs
+        i = c(4, 4),  # rows
+        j = c(2, 3),  # columns
+        value = as_paragraph("May be volatile."),
+        ref_symbols = c(" ‡"),
+        part = "body",
+        inline = TRUE,
+        sep = FOOTNOTE_SEP
+    )
 )
 print(ft)
 ft2 <- (
     t2
     %>% flextable()
-    %>% ftExtra::colformat_md()  # apply markdown
+    %>% ftExtra::colformat_md(
+        .footnote_options = FOOTNOTE_OPTIONS
+    )  # apply markdown
     %>% flextable::valign(valign = "top")  # align all cells top
     %>% autofit()  # size columns
     %>% set_caption("Three-group table")

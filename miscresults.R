@@ -54,6 +54,11 @@ miscresults$MULTIPLY <- "\u00D7"
 miscresults$MULTIPLICATION_DOT <- "\u22C5"
 miscresults$PLUS_MINUS <- "\u00B1"  # case-insensitive
 
+miscresults$NEWLINE <- "\\\n"  # two characters: backslash, newline
+# ... ftExtra uses Pandoc markdown;
+# - https://www.uv.es/wikibase/doc/cas/pandoc_manual_2.7.3.wiki?53
+# - https://ftextra.atusy.net/articles/format_columns
+
 miscresults$DEFAULT_DP_FOR_DF <- 1  # decimal places for non-integer degrees of freedom
 miscresults$MINIMUM_P_SHOWN <- 2.2e-16
     # .Machine$double.eps is 2.220446e-16; however, readers are used to seeing
