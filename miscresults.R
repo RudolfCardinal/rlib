@@ -330,12 +330,28 @@ miscresults$fmt_n_percent <- function(
 miscresults$mk_n_percent <- function(
     n,
     total,
+    min_threshold = NA,
+    less_than_symbol = "< ",
     ...
 ) {
     # Format a number as "n (x%)", where x is the percentage form of n / total.
-    # Additional parameters are passed to fmt_n_percent().
+    # - min_threshold: if specified (not NA), numbers below this are replaced
+    #   by "<[threshold]", and similarly for percentages (small number
+    #   suppression)
+    # - Additional parameters are passed to fmt_n_percent().
     proportion <- n / total
-    return(miscresults$fmt_n_percent(n, proportion, ...))
+    return(ifelse(
+        !is.na(min_threshold) & n < min_threshold,
+        paste0(
+            less_than_symbol,
+            miscresults$fmt_int(min_threshold),
+            " (",
+            less_than_symbol,
+            miscresults$fmt_pct(min_threshold / total, ...),
+            ")"
+        ),  # with small-number suppression
+        miscresults$fmt_n_percent(n, proportion, ...)  # unsuppressed
+    ))
 }
 
 
