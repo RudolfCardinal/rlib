@@ -369,6 +369,37 @@ miscresults$mk_n_percent <- function(
     ))
 }
 
+miscresults$fmt_n_percent_low_high <- function(
+    n_low, n_high, total,
+    range_sep = " to ",
+    # ... an en dash is feasible but does break with scientific notation and is
+    # a little confusing if there are also minus signs.
+    na_str = get_flextable_defaults()$na_str,
+    ...
+) {
+    # Format a number as "n_low-n_high (x-y%)": a "vague" version of
+    # mk_n_percent that can be used for small-number suppression for totals.
+    # For example, if you have group sizes A=50, B=50, C=<10, then the total is
+    # 100-109.
+    # - Additional parameters are passed to fmt_pct().
+    prop_low = n_low / total
+    prop_high = n_high / total
+    ifelse(
+        is.na(n_low) | is.na(n_high) | is.na(prop_low) | is.na(prop_high),
+        na_str,
+        paste0(
+            miscresults$fmt_int(n_low),
+            range_sep,
+            miscresults$fmt_int(n_high),
+            " (",
+            miscresults$fmt_pct(prop_low, ...),
+            range_sep,
+            miscresults$fmt_pct(prop_high, ...),
+            ")"
+        )
+    )
+}
+
 
 miscresults$fmt_mean_sd <- function(
     mu,

@@ -110,6 +110,11 @@ summary <- (
             n,
             min_threshold = suppression_threshold
         ),
+        implosions_vague = fmt_n_percent_low_high(
+            n_implosions - 5,
+            n_implosions + 5,
+            n
+        ),
         weight = mk_mean_sd(weight),
         height = mk_mean_sd(height),
         response_mean = mk_mean_ci(response),
@@ -176,6 +181,7 @@ tsumm <- (
             variable == "explosions" ~ "Explosions",
             variable == "implosions" ~ "Implosions",
             variable == "implosions_suppressed" ~ "Implosions (suppressed)",
+            variable == "implosions_vague" ~ "Implosions (vague)",
             variable == "weight" ~ "Weight (kg)",
             variable == "height" ~ "Height (m)",
             variable == "response_mean" ~ "Response (response units) (mean)",
