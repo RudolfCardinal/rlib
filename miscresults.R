@@ -74,6 +74,10 @@ miscresults$MINIMUM_P_SHOWN <- 2.2e-16
     # .Machine$double.eps is 2.220446e-16; however, readers are used to seeing
     # "2.2e-16" or equivalent representations in output from R, not "2.22e-16".
 miscresults$NOT_SIGNIFICANT <- "NS"
+miscresults$P_ASTERISK_CAPTION <- paste0(
+    "*"
+    "NS, not significant."
+)
 
 
 # =============================================================================
@@ -110,6 +114,25 @@ miscresults$mk_sig_label <- function(
         p < 0.05    ~ paste0(prefix, paste(rep(symbol, 1), collapse = "")),  # Fisher!
         TRUE        ~ paste0(prefix_ns, ns_text)
     ))
+}
+
+
+miscresults$mk_p_asterisk_caption <- function(
+    symbol = "*",
+    ns_text = miscresults$NOT_SIGNIFICANT,
+    ns_explanation = "not significant",
+    suffix = "."
+) {
+    # Makes a helpful caption to match miscresults$mk_sig_label().
+    paste0(
+        paste(rep(symbol, 5), collapse = ""), " p < 0.00001; ",
+        paste(rep(symbol, 4), collapse = ""), " p < 0.0001; ",
+        paste(rep(symbol, 3), collapse = ""), " p < 0.001; ",
+        paste(rep(symbol, 2), collapse = ""), " p < 0.01; ",
+        paste(rep(symbol, 1), collapse = ""), " p < 0.05; ",
+        ns_text, ", ", ns_explanation,
+        suffix
+    )
 }
 
 
