@@ -625,16 +625,15 @@ miscresults$mk_chisq_contingency <- function(
         result <- chisq.test(x = d, ...)
         if (debug) {
             print(d)
+            print(result)
         }
     } else {
         result <- chisq.test(x = x_counts, p = p, ...)
         if (debug) {
             print(x_counts)
             print(p)
+            print(result)
         }
-    }
-    if (debug) {
-        print(result)
     }
 
     # Extract results
