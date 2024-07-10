@@ -74,10 +74,6 @@ miscresults$MINIMUM_P_SHOWN <- 2.2e-16
     # .Machine$double.eps is 2.220446e-16; however, readers are used to seeing
     # "2.2e-16" or equivalent representations in output from R, not "2.22e-16".
 miscresults$NOT_SIGNIFICANT <- "NS"
-miscresults$P_ASTERISK_CAPTION <- paste0(
-    "*"
-    "NS, not significant."
-)
 
 
 # =============================================================================
