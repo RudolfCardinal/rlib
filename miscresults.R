@@ -573,7 +573,8 @@ miscresults$mk_median_range <- function(
 
 miscresults$mk_chisq_contingency <- function(
     x_counts,
-    y_counts,
+    y_counts = NULL,
+    p = rep(1 / length(x_counts), length(x_counts)),
     minimum_chisq_shown = 1,
     # ... critical value is qchisq(0.95, df) at α=0.05 and df=1, increasing
     #     for higher df. We might want to report things that didn't
@@ -587,13 +588,56 @@ miscresults$mk_chisq_contingency <- function(
     # Reports chi-squared to 1 dp.
     # Both x_counts and y_counts should be vectors of integers. (They are not
     # named x and y because of the differing syntax of chisq.test for x-and-y
-    # rather than the contingency table/matrix form.)
+    # rather than the contingency table/matrix form.) The alternative is to
+    # specify p (expected probabilities) instead of y_counts.
     # Any additional parameters are passed to chisq.test().
-    d <- matrix(c(x_counts, y_counts), nrow = 2)
-    result <- chisq.test(d, ...)
+
+    # TESTS:
+    #
+    # - p75 of RNC's 2004 stats handout:
+    # mk_chisq_contingency(x_counts = c(153, 105), y_counts = c(24, 76), correct = FALSE)
+    # ... gives chisq = 35.93, df = 1 as expected, without continuity
+    #     correction.
+    # ... with correct = TRUE (the default), a slightly different answer.
+    #
+    # - p84, Q4 (answers p101):
+    # mk_chisq_contingency(c(53, 48, 75, 49, 60, 57), correct = FALSE)
+    # ... gives chisq = 8.67, df = 5 as expected.
+
+    # Check parameters
+    if (!all(x_counts == floor(x_counts))) {
+        stop("x_counts should contain only integers")
+    }
+    if (!is.null(y_counts)) {
+        # using y_counts
+        stopifnot(length(x_counts) == length(y_counts))
+        if (!all(y_counts == floor(y_counts))) {
+            stop("y_counts should contain only integers")
+        }
+    } else {
+        # using p
+        stopifnot(length(x_counts) == length(p))
+    }
+
+    # Perform chi-square test
+    if (!is.null(y_counts)) {
+        d <- matrix(c(x_counts, y_counts), ncol = 2)
+        result <- chisq.test(x = d, ...)
+        if (debug) {
+            print(d)
+        }
+    } else {
+        result <- chisq.test(x = x_counts, p = p, ...)
+        if (debug) {
+            print(x_counts)
+            print(p)
+        }
+    }
     if (debug) {
         print(result)
     }
+
+    # Extract results
     chisq <- result$statistic
     chisq_txt <- miscresults$fmt_float(chisq)
     df_txt <- miscresults$mk_df_text(result$parameter)
