@@ -330,12 +330,6 @@ fd3[, performance := y_start + y_age + y_sex + y_drug + err]
 fd3[,
     succeeded := as.integer(performance > mean(performance))
 ]
-lm3a <- lm(performance ~ age + drug * sex, data = fd3)
-lm3b <- glm(
-    succeeded ~ age + drug * sex,
-    data = fd3,
-    family = binomial(link = "logit")
-)
 M3_PREDICTOR_REPLACEMENTS <- c(
     # Factors
     "age" = "Age",
@@ -406,8 +400,19 @@ ft2 <- (
         j = c("Placebo", "Low dose", "High dose")
     )
 )
-ft3a <- fmt_lm(lm3a, predictor_replacements = M3_PREDICTOR_REPLACEMENTS)
-ft3b <- fmt_lm(lm3b, predictor_replacements = M3_PREDICTOR_REPLACEMENTS)
+ft3a <- fmt_model(
+    model_fn = lm,
+    formula = performance ~ age + drug * sex,
+    data = fd3,
+    predictor_replacements = M3_PREDICTOR_REPLACEMENTS
+)
+ft3b <- fmt_model(
+    model_fn = glm,
+    formula = succeeded ~ age + drug * sex,
+    family = binomial(link = "logit"),
+    data = fd3,
+    predictor_replacements = M3_PREDICTOR_REPLACEMENTS
+)
 
 
 # =============================================================================

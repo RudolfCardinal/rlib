@@ -50,10 +50,14 @@
 # =============================================================================
 
 library(data.table)  # for data.table()
-library(tidyr)  # for uncount(), %>%
+library(tidyverse)  # for uncount(), %>%
 
 library(car)  # for car::Anova()
 library(ez)  # for ezANOVA(), ezStats()
+
+# RLIB_PREFIX <- "/srv/cardinal_rlib/"
+RLIB_PREFIX <- ""
+source(paste0(RLIB_PREFIX, "miscresults.R"))
 
 
 # =============================================================================
@@ -339,6 +343,18 @@ if (TRUE) {
         wid = subject,
         type = 3
     ))
+}
+
+if (TRUE) {
+    heading("Type III: via miscresults$fmt_model()")
+    # ... matches e.g. ezANOVA, and coefficients are correct
+    ft_d1 <- miscresults$fmt_model(
+        model_fn = lm,
+        formula = y ~ x_bool * x_factor,
+        data = d1,
+        print_anova_summary = TRUE
+    )
+    print(ft_d1)
 }
 
 

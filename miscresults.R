@@ -24,9 +24,8 @@ tmp_require_package_namespace(
     car,  # for car::Anova
     flextable,
     ftExtra,  # for markup within flextable tables
-    plyr,
     rcompanion,  # for wilcoxonZ
-    stringr
+    tidyverse
 )
 rm(tmp_require_package_namespace)
 
@@ -90,6 +89,16 @@ R_INTERCEPT_LABEL <- "(Intercept)"
 miscresults$is.wholenumber <- function(x, tol = .Machine$double.eps^0.5) {
     # per example in ?base::integer
     abs(x - round(x)) < tol
+}
+
+
+# Can't use miscresults$ prefix here.
+contr.sum.keepnames <- function(...) {
+    # See type_III_sums_of_squares.R
+    # https://stackoverflow.com/questions/10808853/why-does-changing-contrast-type-change-row-labels-in-r-lm-summary
+    conS <- contr.sum(...)
+    colnames(conS) <- rownames(conS)[-length(rownames(conS))]
+    conS
 }
 
 
@@ -1042,9 +1051,13 @@ miscresults$which_anova_term_matches_coeff <- function(
 }
 
 
-miscresults$fmt_lm <- function(
-    m,  # a linear model
-    type = "III",  # type for sums of squares, via car::Anova
+miscresults$fmt_model <- function(
+    model_fn,
+    formula,
+    data,
+    type = "III",
+    contrasts_anova_model = NULL,
+    contrasts_summary_model = NULL,
     ns_text = miscresults$NOT_SIGNIFICANT,
     # reference_label = "(reference)",
     interaction_txt = paste0(" ", miscresults$MULTIPLY, " "),
@@ -1052,10 +1065,11 @@ miscresults$fmt_lm <- function(
     as_flextable = TRUE,
     suppress_nonsig_coeffs = TRUE,
     suppress_nonsig_coeff_tests = TRUE,
-    alpha_show_coeffs = miscresults$DEFAULT_ALPHA,  # or NULL
+    alpha_show_coeffs = miscresults$DEFAULT_ALPHA,
     include_intercept = TRUE,
     print_anova_summary = FALSE,
-    debug = FALSE
+    debug = FALSE,
+    ...
 ) {
     # Format a linear model as a results table.
     # - e.g. per style of Cardinal et al. (2023), PMID 37147600, Table 5.
@@ -1063,10 +1077,20 @@ miscresults$fmt_lm <- function(
     #
     # Parameters:
     #
-    #   m:
-    #       A linear model.
+    #   model_fn:
+    #       A modelling function: e.g. lm, glm.
+    #   formula:
+    #       A formula, passed to model_fn.
+    #   data:
+    #       Data, passed to model_fn.
     #   type:
     #       Type for sums of squares, via car::Anova, e.g. "II", "III"
+    #   contrasts_anova_model:
+    #       Global contrast options to specify for the ANOVA model. If NULL, do
+    #       something sensible.
+    #   contrasts_summary_model:
+    #       Global contrast options to specify for the summary model. If NULL,
+    #       do something sensible.
     #   ns_text:
     #       Text to indicate "not significant", e.g. "NS".
     #   interaction_txt:
@@ -1086,19 +1110,48 @@ miscresults$fmt_lm <- function(
     #       statistical tests of those coefficients.
     #   alpha_show_coeffs:
     #       The alpha value to use for suppress_nonsig_coeffs and
-    #       suppress_nonsig_coeff_tests.
+    #       suppress_nonsig_coeff_tests; can be NULL if not used.
     #   print_anova_summary:
     #       Print the ANOVA and summary in passing.
     #   debug:
     #       Be verbose?
+    #   ...:
+    #       Passed to model_fn.
 
     # -------------------------------------------------------------------------
     # Collate ANOVA and coefficient information
     # -------------------------------------------------------------------------
 
-    a <- car::Anova(m, type = type, test.statistic = "F")
+    r_default_contrasts <- c(
+        unordered = "contr.treatment",
+        ordered = "contr.poly"
+    )
+    type_III_contrasts <- c(
+        unordered = "contr.sum.keepnames",  # see above
+        ordered = "contr.poly"
+    )
+    if (is.null(contrasts_anova_model)) {
+        if (type == "III" || type == 3) {
+            # Should override contrasts for car::Anova using type III SS.
+            contrasts_anova_model <- type_III_contrasts
+        } else {
+            contrasts_anova_model <- r_default_contrasts
+        }
+    }
+    if (is.null(contrasts_summary_model)) {
+        contrasts_summary_model <- r_default_contrasts
+    }
+
+    saved_options_contrasts <- getOption("contrasts")  # save
+    options(contrasts = contrasts_anova_model)  # set
+    m1 <- model_fn(formula, data = data, ...)
+    options(contrasts = contrasts_summary_model)  # set
+    m2 <- model_fn(formula, data = data, ...)
+    options(contrasts = saved_options_contrasts)  # restore
+
+    a <- car::Anova(m1, type = type, test.statistic = "F")
     # ... of classes: anova, data.frame
-    s <- summary(m)
+    s <- summary(m2)
     # ... of class e.g. summary.lm, and of mode list
     coeffs <- s$coefficients
     # ... of classes: matrix, array
@@ -1242,13 +1295,17 @@ miscresults$fmt_lm <- function(
     # Merge the ANOVA and coefficients
     # -------------------------------------------------------------------------
     intermediate <- (
-        plyr::join(
+        dplyr::full_join(
             x = intermediate_anova,
             y = intermediate_coeffs,
-            by = c("term_idx", "subterm_idx"),
-            type = "full"
+            by = c("term_idx", "subterm_idx")
         )
         %>% mutate(
+            is_subterm = ifelse(
+                !is.na(is_subterm.x),
+                is_subterm.x,
+                is_subterm.y
+            ),
             is_intercept = ifelse(
                 is.na(anova_term_name),
                 FALSE,
@@ -1260,7 +1317,8 @@ miscresults$fmt_lm <- function(
                 is_subterm
             )
         )
-        %>% arrange(term_idx, subterm_idx)
+        %>% dplyr::select(-is_subterm.x, -is_subterm.y)
+        %>% dplyr::arrange(term_idx, subterm_idx)
     )
     if (!include_intercept) {
         intermediate <- intermediate %>% filter(!is_intercept)
