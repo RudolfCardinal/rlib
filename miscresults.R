@@ -1107,6 +1107,9 @@ miscresults$fmt_lm <- function(
     # For others, e.g. from lm(), may be
     #       Estimate, Std. Error, t value, Pr(>|t|)
     using_t_not_Z <- "t value" %in% colnames(coeffs)
+    if (!using_t_not_Z && !("z value" %in% colnames(coeffs))) {
+        stop("Neither t nor z (Z) present in coefficients")
+    }
     coeff_rdf_for_t <- s$df[2]
     # ... see summary.lm:
     #       ans$coefficients <- cbind(Estimate = est, `Std. Error` = se,
