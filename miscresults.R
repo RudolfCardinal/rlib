@@ -21,8 +21,10 @@ tmp_require_package_namespace <- function(...) {
     for (p in packages) if (!requireNamespace(p)) install.packages(p)
 }
 tmp_require_package_namespace(
+    car,  # for car::Anova
     flextable,
     ftExtra,  # for markup within flextable tables
+    plyr,
     rcompanion,  # for wilcoxonZ
     stringr
 )
@@ -74,6 +76,11 @@ miscresults$MINIMUM_P_SHOWN <- 2.2e-16
     # .Machine$double.eps is 2.220446e-16; however, readers are used to seeing
     # "2.2e-16" or equivalent representations in output from R, not "2.22e-16".
 miscresults$NOT_SIGNIFICANT <- "NS"
+miscresults$DEFAULT_ALPHA <- 0.05  # Per Fisher.
+
+R_INTERACTION_MARKER <- stringr::fixed(":")
+R_RESIDUALS_LABEL <- "Residuals"
+R_INTERCEPT_LABEL <- "(Intercept)"
 
 
 # =============================================================================
@@ -202,19 +209,23 @@ miscresults$fmt_float <- function(
         # May or may not be in scientific notation.
         # If scientific notation:
         scimatch <- stringr::str_match(txt, "(.+)e([-+]?)(\\d+)")
-        if (!is.na(scimatch[1])) {
-            # Using scientific notation. Make it pretty!
-            radix <- scimatch[2]
-            sign <- scimatch[3]
-            sign <- stringr::str_replace(sign, "[+]", "")
-            # ... remove + from exponent
-            exponent <- stringr::str_replace(scimatch[4], "^0+" ,"")
-            # ... remove leading zeros from exponent
-            # Use ^...^ for superscript with ftExtra.
-            txt <- paste0(
+        # ... may be a matrix, indexed [item, matchgroupnum]
+        # In case using scientific notation: make it pretty!
+        radix <- scimatch[, 2]
+        sign <- scimatch[, 3]
+        exponent <- scimatch[, 4]
+        sign <- stringr::str_replace(sign, "[+]", "")
+        # ... remove + from exponent
+        exponent <- stringr::str_replace(exponent, "^0+" ,"")
+        # ... remove leading zeros from exponent
+        # Use ^...^ for superscript with ftExtra.
+        txt <- ifelse(
+            !is.na(scimatch[, 1]),
+            paste0(
                 radix, " ", miscresults$MULTIPLY, " 10^", sign, exponent, "^"
-            )
-        }
+            ),
+            txt
+        )
     } else {
         # https://stackoverflow.com/questions/3245862
         txt <- formatC(
@@ -292,12 +303,16 @@ miscresults$mk_p_text_with_label <- function(
 miscresults$mk_df_text <- function(
     df,
     dp = miscresults$DEFAULT_DP_FOR_DF,
-    big.mark = get_flextable_defaults()$big.mark,
+    big.mark = "",
     decimal.mark = get_flextable_defaults()$decimal.mark
 ) {
     # Format degrees of freedom (df) appropriately -- as an exact integer, or
     # to 1 dp if it is not integer (since knowing the fact of not being an
     # integer is often quite important!).
+    # - By default, big.mark is "", not get_flextable_defaults()$big.mark;
+    #   commas in degrees of freedom would be very confusing for F tests, in
+    #   which we will separate the two df numbers by commas anyway.
+    # - So for consistency, we'll use "" as the default.
     return(ifelse(
         as.integer(df) == df,
         miscresults$fmt_int(df, big.mark = big.mark),  # integer version
@@ -586,6 +601,219 @@ miscresults$mk_median_range <- function(
 }
 
 
+miscresults$fmt_chisq <- function(
+    chisq, df,
+    min_chisq = 1  # minimum value shown exactly
+    # ... critical value is qchisq(0.95, df) at α=0.05 and df=1, increasing
+    #     for higher df. We might want to report things that didn't
+    #     make it, but 1 seems like a reasonable "definitely do not care"
+    #     threshold.
+) {
+    # Format a chi-square statistic (without a p value).
+    # - Note that chi-square can only be positive.
+    df_txt <- miscresults$mk_df_text(df)
+    symbol_df_txt <- sprintf(
+        paste0("*", miscresults$CHI_LOWER, "*^2^~%s~"),
+        df_txt
+    )
+    return(ifelse(
+        chisq < min_chisq,
+        sprintf("%s < %s", symbol_df_txt, min_chisq),
+        sprintf("%s = %s", symbol_df_txt, miscresults$fmt_float(chisq))
+    ))
+}
+
+
+miscresults$fmt_chisq_p <- function(
+    chisq, df, p,
+    min_chisq = 1,  # see miscresults$fmt_chisq()
+    ns_text = miscresults$NOT_SIGNIFICANT,
+    check_alpha = DEFAULT_ALPHA
+) {
+    # Format a chi-square statistic with a p value).
+    chisq_txt <- miscresults$fmt_chisq(chisq, df, min_chisq = min_chisq)
+    p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
+    if (any(chisq < min_chisq & p < check_alpha)) {
+        stop(sprintf(
+            "chisq (%f) < %f but p = %f so disallowing visual shortcut",
+            chisq, min_chisq, p
+        ))
+    }
+    return(ifelse(
+        chisq < min_chisq,
+        sprintf("%s, %s", chisq_txt, ns_text),
+        sprintf("%s, %s", chisq_txt, p_txt)
+    ))
+}
+
+
+miscresults$fmt_t <- function(
+    t, df,
+    min_abs_t = 1
+    # ... critical value for a two-tailed test at α = 0.05 is ±qt(0.975, df),
+    #     decreasing for higher df, and approaching qnorm(0.975) as df → ∞.
+    #     So that's about 1.96. We might want to report things that didn't
+    #     make it, but 1 seems like a reasonable "definitely do not care"
+    #     threshold.
+) {
+    # Format a t statistic (without a p value).
+    # - Note that t can be negative or positive.
+    df_txt <- ifelse(
+        is.na(df),
+        "",
+        sprintf("~%s~", miscresults$mk_df_text(df))
+    )
+    t_txt <- miscresults$fmt_float(t, use_plus = TRUE)
+    return(ifelse(
+        abs(t) < min_abs_t,
+        sprintf("|*t*%s| < %s", df_txt, min_abs_t),
+        sprintf("*t*%s = %s", df_txt, t_txt)
+    ))
+}
+
+
+miscresults$fmt_t_p <- function(
+    t, df, p,
+    min_abs_t = 1,  # see miscresults$fmt_t()
+    ns_text = miscresults$NOT_SIGNIFICANT,
+    check_alpha = DEFAULT_ALPHA
+) {
+    # Format a t statistic with a p value.
+    t_txt <- miscresults$fmt_t(t, df, min_abs_t = min_abs_t)
+    p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
+    if (any(abs(t) < min_abs_t & p < check_alpha)) {
+        stop(sprintf(
+            "|t| (|%f|) < %f but p = %f so disallowing visual shortcut",
+            t, min_abs_t, p
+        ))
+    }
+    return(ifelse(
+        abs(t) < min_abs_t,
+        sprintf("%s, %s", t_txt, ns_text),
+        sprintf("%s, %s", t_txt, p_txt)
+    ))
+}
+
+
+miscresults$fmt_F <- function(F, df1, df2, min_F = 1) {
+    # Format an F statistic (without a p value).
+    # - Note that F will always be positive.
+    # - No commas in degrees of freedom (big.mark = ""), since they are
+    #   separated by commas anyway.
+    df1_txt <- miscresults$mk_df_text(df1, big.mark = "")
+    df2_txt <- miscresults$mk_df_text(df2, big.mark = "")
+    symbol_df_txt <- sprintf("*F*~%s,%s~", df1_txt, df2_txt)
+    return(ifelse(
+        F < min_F,
+        sprintf("%s < %s", symbol_df_txt, min_F),
+        sprintf("%s = %s", symbol_df_txt, miscresults$fmt_float(F))
+    ))
+}
+
+
+miscresults$fmt_F_p <- function(
+    F, df1, df2, p,
+    min_F = 1,
+    ns_text = miscresults$NOT_SIGNIFICANT,
+    check_alpha = DEFAULT_ALPHA
+) {
+    # Format an F statistic with a p value.
+    f_txt <- miscresults$fmt_F(F, df1, df2, min_F = min_F)
+    p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
+    if (any(F < min_F & p < check_alpha)) {
+        stop(sprintf(
+            "F (%f) < %f but p = %f so disallowing visual shortcut",
+            F, min_F, p
+        ))
+    }
+    return(ifelse(
+        F < min_F,
+        sprintf("%s, %s", f_txt, ns_text),  # e.g. "F[df1,df2] < 1, NS"
+        sprintf("%s, %s", f_txt, p_txt)  # e.g. "F[df1,df2] = 5, p = ..."
+    ))
+}
+
+
+miscresults$fmt_Z <- function(Z, use_plus = TRUE) {
+    # Format a Z statistic (without a p value).
+    z_txt <- miscresults$fmt_float(Z, use_plus = use_plus)
+    return(sprintf("*Z* = %s", z_txt))
+}
+
+
+miscresults$fmt_Z_p <- function(
+    Z, p,
+    use_plus = TRUE,
+    ns_text = miscresults$NOT_SIGNIFICANT
+) {
+    # Format a Z statistic with a p value.
+    z_txt <- miscresults$fmt_Z(Z, use_plus = use_plus)
+    p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
+    return(sprintf("%s, %s", z_txt, p_txt))
+}
+
+
+miscresults$fmt_predictor <- function(
+    predictor_txt,
+    replacements = NULL,  # e.g. c("from1" = "to1", "from1" = "to2", ...)
+    interaction_txt = paste0(" ", miscresults$MULTIPLY, " ")
+) {
+    # Format a predictor nicely, e.g. changing "drug:sex" to "Drug x Sex".
+    predictor_txt <- stringr::str_replace_all(
+        predictor_txt,
+        pattern = R_INTERACTION_MARKER,
+        replacement = interaction_txt
+    )
+    if (!is.null(replacements)) {
+        predictor_txt <- stringr::str_replace_all(
+            predictor_txt,
+            pattern = replacements
+        )
+    }
+    return(predictor_txt)
+}
+
+
+miscresults$fmt_single_level <- function(
+    level_txt,
+    anova_term_txt,
+    replacements = NULL,  # e.g. c("from1" = "to1", "from1" = "to2", ...)
+    interaction_txt = paste0(" ", miscresults$MULTIPLY, " ")
+) {
+    # Similar to fmt_predictor(), but for formatting levels; for example,
+    # converting "drugLowDose:sexMale" to "Low dose x Male".
+    if (is.na(level_txt) || level_txt == R_INTERCEPT_LABEL) {
+        return(level_txt)
+    }
+    level_n_parts <- stringr::str_count(level_txt, R_INTERACTION_MARKER) + 1
+    anova_n_parts <- stringr::str_count(anova_term_txt, R_INTERACTION_MARKER) + 1
+    stopifnot(level_n_parts == anova_n_parts)
+    getParts <- function(x) {
+        stringr::str_split_1(x, R_INTERACTION_MARKER)
+    }
+    level_parts <- getParts(level_txt)
+    anova_parts <- getParts(anova_term_txt)
+    result_parts <- str_remove(
+        level_parts,
+        pattern = stringr::fixed(anova_parts)
+    )
+    if (!is.null(replacements)) {
+        result_parts <- stringr::str_replace_all(
+            result_parts,
+            pattern = replacements
+        )
+    }
+    return(stringr::str_c(result_parts, collapse = interaction_txt))
+}
+
+
+miscresults$fmt_level <- Vectorize(
+    miscresults$fmt_single_level,
+    vectorize.args = c("level_txt", "anova_term_txt")
+)
+# See miscresults$fmt_single_level(), but vectorized.
+
+
 # =============================================================================
 # Formatted statistical tests
 # =============================================================================
@@ -594,13 +822,8 @@ miscresults$mk_chisq_contingency <- function(
     x_counts,
     y_counts = NULL,
     p = rep(1 / length(x_counts), length(x_counts)),
-    minimum_chisq_shown = 1,
-    # ... critical value is qchisq(0.95, df) at α=0.05 and df=1, increasing
-    #     for higher df. We might want to report things that didn't
-    #     make it, but 1 seems like a reasonable "definitely do not care"
-    #     threshold.
+    min_chisq = 1,  # see miscresults$fmt_chisq()
     ns_text = miscresults$NOT_SIGNIFICANT,
-    check_alpha = 0.05,
     debug = FALSE,
     ...
 ) {
@@ -611,6 +834,7 @@ miscresults$mk_chisq_contingency <- function(
     # specify p (expected probabilities) instead of y_counts.
     # Any additional parameters are passed to chisq.test().
 
+    # -------------------------------------------------------------------------
     # TESTS:
     #
     # - p75 of RNC's 2004 stats handout:
@@ -622,6 +846,7 @@ miscresults$mk_chisq_contingency <- function(
     # - p84, Q4 (answers p101):
     # mk_chisq_contingency(c(53, 48, 75, 49, 60, 57), correct = FALSE)
     # ... gives chisq = 8.67, df = 5 as expected.
+    # -------------------------------------------------------------------------
 
     # Check parameters
     if (!all(x_counts == floor(x_counts))) {
@@ -640,86 +865,58 @@ miscresults$mk_chisq_contingency <- function(
 
     # Perform chi-square test
     if (!is.null(y_counts)) {
-        d <- matrix(c(x_counts, y_counts), ncol = 2)
-        result <- chisq.test(x = d, ...)
+        # d <- matrix(c(x_counts, y_counts), byrow = FALSE, ncol = 2)
+        d <- as.matrix(data.frame(x = x_counts, y = y_counts))
+        # Using as.matrix() is safer! The plain matrix version shown above is
+        # correct, but the danger is of mapping it wrong (with byrow, ncol,
+        # etc.).
         if (debug) {
             print(d)
-            print(result)
         }
+        result <- chisq.test(x = d, ...)
     } else {
-        result <- chisq.test(x = x_counts, p = p, ...)
         if (debug) {
             print(x_counts)
             print(p)
-            print(result)
         }
+        result <- chisq.test(x = x_counts, p = p, ...)
+    }
+    if (debug) {
+        print(result)
     }
 
-    # Extract results
-    chisq <- result$statistic
-    chisq_txt <- miscresults$fmt_float(chisq)
-    df_txt <- miscresults$mk_df_text(result$parameter)
-    chisq_symbol_df_txt <- sprintf(
-        paste0("*", miscresults$CHI_LOWER, "*^2^~%s~"),
-        df_txt
-    )
-    p <- result$p.value
-    # NB chisq can only be positive.
-    if (chisq < minimum_chisq_shown) {
-        if (p <= check_alpha) {
-            stop(sprintf(
-                "chisq (%f) < %f but p = %f so disallowing shortcut",
-                chisq, minimum_chisq_shown, p
-            ))
-        }
-        min_chisq_txt <- miscresults$fmt_float(minimum_chisq_shown)
-        return(sprintf(
-            "%s < %s, %s", chisq_symbol_df_txt, min_chisq_txt, ns_text
-        ))
-    }
-    p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
-    return(sprintf("%s = %s, %s", chisq_symbol_df_txt, chisq_txt, p_txt))
+    # Extract and format results
+    return(miscresults$fmt_chisq_p(
+        chisq = result$statistic,
+        df = result$parameter,
+        p = result$p.value,
+        min_chisq = min_chisq,
+        ns_text = ns_text
+    ))
 }
 
 
 miscresults$mk_t_test <- function(
     x,
     y = NULL,
-    minimum_abs_t_shown = 1,
-    # ... critical value for a two-tailed test at α = 0.05 is ±qt(0.975, df),
-    #     decreasing for higher df, and approaching qnorm(0.975) as df → ∞.
-    #     So that's about 1.96. We might want to report things that didn't
-    #     make it, but 1 seems like a reasonable "definitely do not care"
-    #     threshold.
+    min_abs_t = 1,  # see miscresults$fmt_t()
     ns_text = miscresults$NOT_SIGNIFICANT,
-    check_alpha = 0.05,
     debug = FALSE,
     ...
 ) {
     # Reports a t test. Any additional parameters are passed to t.test().
-    # The direction of Z is "x - y" (i.e. positive if x > y, negative if x < y).
+    # The direction of t is "x - y" (i.e. positive if x > y, negative if x < y).
     result <- t.test(x = x, y = y, ...)
     if (debug) {
         print(result)
     }
-    t <- result$statistic
-    t_txt <- miscresults$fmt_float(t, use_plus = TRUE)
-    df_txt <- miscresults$mk_df_text(result$parameter)
-    t_symbol_df_txt <- sprintf("*t*~%s~", df_txt)
-    p <- result$p.value
-    if (abs(t) < minimum_abs_t_shown) {
-        if (p <= check_alpha) {
-            stop(sprintf(
-                "t = %f so |t| < %f but p = %f so disallowing shortcut",
-                t, minimum_abs_t_shown, p
-            ))
-        }
-        min_t_txt <- miscresults$fmt_float(minimum_abs_t_shown)
-        # Note the |t| symbol below.
-        return(sprintf("|%s| < %s, %s", t_symbol_df_txt, min_t_txt, ns_text))
-    }
-    p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
-    return(sprintf("%s = %s, %s", t_symbol_df_txt, t_txt, p_txt))
+    return(miscresults$fmt_t_p(
+        t = result$statistic,
+        df = result$parameter,
+        p = result$p.value,
+        min_abs_t = min_abs_t,
+        ns_text = ns_text
+    ))
 }
 
 
@@ -747,15 +944,15 @@ miscresults$mk_wilcoxon_test <- function(
     w_txt <- miscresults$fmt_float(w)
     # There is no df parameter here; result$parameter will be NULL.
     p <- result$p.value
-    p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
-    z_txt <- miscresults$fmt_float(z, use_plus = TRUE)
-    return(sprintf("*W* = %s, *Z* = %s, %s", w_txt, z_txt, p_txt))
+    z_p_txt <- miscresults$fmt_Z_p(z, p, ns_text = ns_text)
+    return(sprintf("*W* = %s, %s", w_txt, z_p_txt))
 }
 
 
 miscresults$mk_oneway_anova <- function(
     depvar,
     factorvar,
+    min_F = 1,
     ns_text = miscresults$NOT_SIGNIFICANT,
     debug = FALSE,
     ...
@@ -783,14 +980,412 @@ miscresults$mk_oneway_anova <- function(
         print(p)
         cat("---\n")
     }
-    # No commas in degrees of freedom (big.mark = ""), since they are separated
-    # by commas anyway.
-    df_num_txt <- miscresults$mk_df_text(df_num, big.mark = "")
-    df_denom_txt <- miscresults$mk_df_text(df_denom, big.mark = "")
-    F_symbol_df_txt <- sprintf("*F*~%s,%s~", df_num_txt, df_denom_txt)
-    F_txt <- miscresults$fmt_float(F)
-    p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
-    return(sprintf("%s = %s, %s", F_symbol_df_txt, F_txt, p_txt))
+    return(miscresults$fmt_F_p(
+        F, df_num, df_denom, p,
+        min_F = min_F, ns_text = ns_text
+    ))
+}
+
+
+# =============================================================================
+# Formatting full models
+# =============================================================================
+
+miscresults$which_anova_term_matches_coeff <- function(
+    anova_terms,
+    coeff_term
+) {
+    # Returns the index of anova_terms for which coeff_term is the best match.
+
+    stopifnot(length(coeff_term) == 1)  # not parallel yet!
+
+    # Exact match preferred
+    if (coeff_term %in% anova_terms) {
+        # Coefficient term exactly matches ANOVA term.
+        # Usually implies a linear predictor, not a factor.
+        return(which(anova_terms == coeff_term))
+    }
+
+    # Otherwise, we are going to match e.g.
+    #       drugLowDose -> drug
+    #       drugLowDose:sexMale -> drug:sex
+    getParts <- function(x) {
+        stringr::str_split_1(x, R_INTERACTION_MARKER)
+    }
+    anova_n_parts <- stringr::str_count(anova_terms, R_INTERACTION_MARKER) + 1
+    coeff_n_parts <- stringr::str_count(coeff_term, R_INTERACTION_MARKER) + 1
+    coeff_parts <- getParts(coeff_term)
+    for (i in 1:length(anova_terms)) {
+        if (anova_n_parts[i] != coeff_n_parts) {
+            # Wrong number of parts
+            next
+        }
+        anova_parts <- getParts(anova_terms[i])
+        ok <- TRUE
+        for (j in 1:coeff_n_parts) {
+            part_ok <- stringr::str_starts(
+                coeff_parts[j],
+                stringr::fixed(anova_parts[j])
+            )
+            if (!part_ok) {
+                ok <- FALSE
+                break
+            }
+        }
+        if (ok) {
+            return(i)
+        }
+    }
+
+    # Failure.
+    return(NA_integer_)
+}
+
+
+miscresults$fmt_lm <- function(
+    m,  # a linear model
+    type = "III",  # type for sums of squares, via car::Anova
+    ns_text = miscresults$NOT_SIGNIFICANT,
+    # reference_label = "(reference)",
+    interaction_txt = paste0(" ", miscresults$MULTIPLY, " "),
+    predictor_replacements = NULL,
+    as_flextable = TRUE,
+    suppress_nonsig_coeffs = TRUE,
+    suppress_nonsig_coeff_tests = TRUE,
+    alpha_show_coeffs = miscresults$DEFAULT_ALPHA,  # or NULL
+    include_intercept = TRUE,
+    print_anova_summary = FALSE,
+    debug = FALSE
+) {
+    # Format a linear model as a results table.
+    # - e.g. per style of Cardinal et al. (2023), PMID 37147600, Table 5.
+    # - Term, Level, F, p_F, coefficient, standard error, Z/t, p_Z/p_t
+    #
+    # Parameters:
+    #
+    #   m:
+    #       A linear model.
+    #   type:
+    #       Type for sums of squares, via car::Anova, e.g. "II", "III"
+    #   ns_text:
+    #       Text to indicate "not significant", e.g. "NS".
+    #   interaction_txt:
+    #       Pretty text to use as interaction symbol.
+    #   predictor_replacements:
+    #       Vector of replacements to apply to all predictor text, e.g.
+    #       c("from1" = "to1", "from2" = "to2", ...), or NULL.
+    #   as_flextable:
+    #       Return a flextable, rather than the underlying table that can make
+    #       one.
+    #   suppress_nonsig_coeffs:
+    #       If the ANOVA F test is not significant, do not show coefficient
+    #       rows for individual levels.
+    #   suppress_nonsig_coeff_tests:
+    #       If the ANOVA F test is not significant, show coefficient rows
+    #       (assuming suppress_nonsig_coeff_tests is not TRUE), but do not show
+    #       statistical tests of those coefficients.
+    #   alpha_show_coeffs:
+    #       The alpha value to use for suppress_nonsig_coeffs and
+    #       suppress_nonsig_coeff_tests.
+    #   print_anova_summary:
+    #       Print the ANOVA and summary in passing.
+    #   debug:
+    #       Be verbose?
+
+    # -------------------------------------------------------------------------
+    # Collate ANOVA and coefficient information
+    # -------------------------------------------------------------------------
+
+    a <- car::Anova(m, type = type, test.statistic = "F")
+    # ... of classes: anova, data.frame
+    s <- summary(m)
+    # ... of class e.g. summary.lm, and of mode list
+    coeffs <- s$coefficients
+    # ... of classes: matrix, array
+    # For some summaries of models from glm(), coefficient headings may be
+    #       Estimate, Std. Error, z value, Pr(>|z|)
+    # For others, e.g. from lm(), may be
+    #       Estimate, Std. Error, t value, Pr(>|t|)
+    using_t_not_Z <- "t value" %in% colnames(coeffs)
+    coeff_rdf_for_t <- s$df[2]
+    # ... see summary.lm:
+    #       ans$coefficients <- cbind(Estimate = est, `Std. Error` = se,
+    #           `t value` = tval, `Pr(>|t|)` = 2 * pt(abs(tval), rdf,
+    #           lower.tail = FALSE))
+    #       ans$df <- c(p, rdf, NCOL(Qr$qr))
+    if (print_anova_summary) {
+        cat("* miscresults$fmt_lm:\n")
+        cat("- ANOVA:\n")
+        print(a)
+        cat("\n- Summary:\n")
+        print(s)
+    }
+
+    # -------------------------------------------------------------------------
+    # Build our version of the ANOVA table
+    # -------------------------------------------------------------------------
+    intermediate_anova <- NULL
+    nrow_anova <- nrow(a)
+    stopifnot(rownames(a)[nrow_anova] == R_RESIDUALS_LABEL)
+    df_resid <- a$Df[nrow_anova]
+    for (i in 1:nrow_anova) {
+        term_name <- rownames(a)[i]
+        if (term_name == R_RESIDUALS_LABEL) {
+            next  # but will be the end; residuals come last
+        }
+        intermediate_anova <- rbind(
+            intermediate_anova,
+            data.frame(
+                term = term_name,
+                is_subterm = FALSE,
+                F = a$`F value`[i],
+                df = a$Df[i],
+                pF = a$`Pr(>F)`[i]
+            )
+        )
+    }
+    n_anova_terms <- nrow(intermediate_anova)
+    intermediate_anova$term_idx <- 1:n_anova_terms
+    intermediate_anova$subterm_idx <- 0
+
+    # -------------------------------------------------------------------------
+    # Build our version of the coefficient table
+    # -------------------------------------------------------------------------
+    intermediate_coeffs <- NULL
+    for (i in 1:nrow(coeffs)) {
+        term_name <- rownames(coeffs)[i]
+        # The tricky part is assigning them correctly to the ANOVA table terms.
+        term_idx <- miscresults$which_anova_term_matches_coeff(
+            intermediate_anova$term, term_name
+        )
+        if (is.na(term_idx)) {
+            if (term_name == R_INTERCEPT_LABEL) {
+                # For example, the output of
+                #   car::Anova(glm(..., family = binomial(link = "logit")))
+                # does not have an intercept term.
+                anova_term_name <- R_INTERCEPT_LABEL
+                term_idx <- 0
+            } else {
+                cat("--- ERROR. intermediate_anova:\n")
+                print(intermediate_anova)
+                stop(paste0("Can't match term: ", term_name))
+            }
+        } else {
+            anova_term_name <- intermediate_anova$term[term_idx]
+        }
+        if (term_name %in% intermediate_anova$term
+                || term_name == R_INTERCEPT_LABEL) {
+            # Exact match
+            subterm_idx <- 0
+        } else if (is.null(intermediate_coeffs)) {
+            subterm_idx <- 1
+        } else {
+            prev_subterm_idxs <- intermediate_coeffs[
+                intermediate_coeffs$term_idx == term_idx,
+            ]$subterm_idx
+            if (length(prev_subterm_idxs) == 0) {
+                subterm_idx <- 1
+            } else {
+                subterm_idx <- max(prev_subterm_idxs, na.rm = TRUE) + 1
+            }
+        }
+        intermediate_coeffs <- rbind(
+            intermediate_coeffs,
+            data.frame(
+                level = term_name,
+                is_subterm = TRUE,
+                term_idx = term_idx,
+                anova_term_name = anova_term_name,
+                subterm_idx = subterm_idx,
+                coeff = coeffs[i, 1],
+                # ... row, column
+                # ... coeffs$`Estimate`[i] fails with
+                #     "$ operator is invalid for atomic vectors"
+                se = coeffs[i, 2],
+                coeff_stat = coeffs[i, 3],
+                p_coeff_stat = coeffs[i, 4]
+            )
+        )
+    }
+
+    # -------------------------------------------------------------------------
+    # Optionally (but by default), suppress statistical coefficient tests for
+    # terms without a significant term in the ANOVA
+    # -------------------------------------------------------------------------
+    if (suppress_nonsig_coeffs || suppress_nonsig_coeff_tests) {
+        if (is.null(alpha_show_coeffs)) {
+            stop(paste0(
+                "alpha_show_coeffs not specified, but you are using ",
+                "suppress_nonsig_coeffs or suppress_nonsig_coeff_tests"
+            ))
+        }
+        for (t_idx in 1:n_anova_terms) {
+            if (intermediate_anova[t_idx, ]$pF >= alpha_show_coeffs) {
+                if (suppress_nonsig_coeffs) {
+                    intermediate_coeffs <- (
+                        intermediate_coeffs %>%
+                        filter(term_idx != t_idx)
+                    )
+                } else if (suppress_nonsig_coeff_tests) {
+                    rownums <- which(intermediate_coeffs$term_idx == t_idx)
+                    intermediate_coeffs[rownums, ]$coeff_stat <- NA
+                    intermediate_coeffs[rownums, ]$p_coeff_stat <- NA
+                }
+            }
+        }
+    }
+
+    # -------------------------------------------------------------------------
+    # Merge the ANOVA and coefficients
+    # -------------------------------------------------------------------------
+    intermediate <- (
+        plyr::join(
+            x = intermediate_anova,
+            y = intermediate_coeffs,
+            by = c("term_idx", "subterm_idx"),
+            type = "full"
+        )
+        %>% mutate(
+            is_intercept = ifelse(
+                is.na(anova_term_name),
+                FALSE,
+                anova_term_name == R_INTERCEPT_LABEL
+            ),
+            is_subterm = ifelse(
+                is_intercept,
+                FALSE,
+                is_subterm
+            )
+        )
+        %>% arrange(term_idx, subterm_idx)
+    )
+    if (!include_intercept) {
+        intermediate <- intermediate %>% filter(!is_intercept)
+    }
+    # ... is_subterm will be taken from the first, where there's a clash, which
+    # is what we want.
+    if (debug) {
+        cat("\n- intermediate_anova:\n")
+        print(intermediate_anova)
+        cat("\n- intermediate_coeffs:\n")
+        print(intermediate_coeffs)
+        cat("\n- intermediate:\n")
+        print(intermediate)
+    }
+
+    # -------------------------------------------------------------------------
+    # Format the table
+    # -------------------------------------------------------------------------
+    resultstable <- (
+        intermediate
+        %>% mutate(
+            # Now format.
+            # Also fix an oddity: glm() output can produce a coefficient but
+            # not an ANOVA term for the intercept, so in that case we move the
+            # label to the "term" column.
+            formatted_term = ifelse(
+                is_intercept,
+                R_INTERCEPT_LABEL,
+                ifelse(
+                    is_subterm,
+                    "",
+                    miscresults$fmt_predictor(
+                        term,
+                        replacements = predictor_replacements,
+                        interaction_txt = interaction_txt
+                    )
+                )
+            ),
+            formatted_level = ifelse(
+                is_intercept,
+                "",
+                ifelse(
+                    is_subterm,
+                    miscresults$fmt_level(
+                        level,
+                        anova_term_name,
+                        replacements = predictor_replacements,
+                        interaction_txt = interaction_txt
+                    ),
+                    ""
+                )
+            ),
+            f_txt = ifelse(
+                is.na(F),
+                "",
+                miscresults$fmt_F(F, df, df_resid)
+            ),
+            pf_txt = ifelse(
+                is.na(pF),
+                "",
+                miscresults$mk_p_text_with_label(pF, ns_text = ns_text)
+            ),
+            coeff_txt = ifelse(
+                is.na(coeff),
+                "",
+                miscresults$fmt_float(coeff, use_plus = TRUE)
+            ),
+            se_txt = ifelse(
+                is.na(se),
+                "",
+                miscresults$fmt_float(se)
+            ),
+            vector_using_t_not_Z = using_t_not_Z,  # see below
+            coeff_stat_txt = ifelse(
+                is.na(coeff_stat),
+                "",
+                ifelse(
+                    vector_using_t_not_Z,  # must be PARALLEL as above
+                    miscresults$fmt_t(coeff_stat, df = coeff_rdf_for_t),
+                    miscresults$fmt_Z(coeff_stat)
+                )
+            ),
+            p_coeff_stat_txt = ifelse(
+                is.na(p_coeff_stat),
+                "",
+                miscresults$mk_p_text_with_label(
+                    p_coeff_stat,
+                    ns_text = ns_text
+                )
+            ),
+        )
+        %>% select(
+            formatted_term,
+            formatted_level,
+            f_txt,
+            pf_txt,
+            coeff_txt,
+            se_txt,
+            coeff_stat_txt,
+            p_coeff_stat_txt
+        )
+    )
+    colnames(resultstable) <- c(
+        # Prettier versions:
+        "Term",
+        "Level",
+        "*F*",
+        "*p~F~*",
+        "Coefficient",
+        "Standard error",
+        ifelse(using_t_not_Z, "*t*", "*Z*"),
+        ifelse(using_t_not_Z, "*p~t~*", "*p~Z~*")
+    )
+
+    # -------------------------------------------------------------------------
+    # Return the result
+    # -------------------------------------------------------------------------
+    if (as_flextable) {
+        ft <- (
+            resultstable
+            %>% flextable()
+            %>% ftExtra::colformat_md(part = "all")
+            # ... need part = "all" to affect headey and body
+        )
+        return(ft)
+    } else {
+        return(resultstable)
+    }
 }
 
 
@@ -807,6 +1402,7 @@ miscresults$detect_significant_in_result_str <- function(x) {
     # See example of usage in test_flextable.R.
     stringr::str_detect(x, "\\s\\*+$")
 }
+
 
 # =============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786

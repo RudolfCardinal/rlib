@@ -19,7 +19,7 @@ source(paste0(RLIB_PREFIX, "miscresults.R"))
 
 flextable::set_flextable_defaults(
     font.family = "Arial",
-    font.size = 12,
+    font.size = 10,
     border.color = "gray",
     digits = 3,  # usually significant figures
     big.mark = ","  # thousands separator
@@ -55,7 +55,7 @@ set.seed(1)
 # -----------------------------------------------------------------------------
 n_placebo <- 2201
 n_drug <- 1258
-fakedata <- data.table(
+fd1 <- data.table(  # fd, fake data
     group = c(
         rep("placebo", n_placebo),
         rep("drug", n_drug)
@@ -91,8 +91,8 @@ fakedata <- data.table(
 # -----------------------------------------------------------------------------
 
 suppression_threshold <- 300  # silly; would normally be e.g. 10
-summary <- (
-    fakedata
+summary1 <- (
+    fd1
     %>% group_by(group)
     %>% summarize(
         # Numerical
@@ -133,8 +133,8 @@ summary <- (
 # Re mutating rows:
 # - https://github.com/tidyverse/dplyr/issues/4050
 
-tsumm <- (
-    summary
+tsumm1 <- (
+    summary1
     %>% select(-c(
         # Columns to remove
         "n",
@@ -147,32 +147,32 @@ tsumm <- (
             # Add comparisons.
             # Use x = drug, y = placebo, giving "drug - placebo" for the tests.
             variable == "explosions" ~ mk_chisq_contingency(
-                c(summary[group == "drug"]$n_explosions,
-                  summary[group == "drug"]$n_not_explosions),
-                c(summary[group == "placebo"]$n_explosions,
-                  summary[group == "placebo"]$n_not_explosions)
+                c(summary1[group == "drug"]$n_explosions,
+                  summary1[group == "drug"]$n_not_explosions),
+                c(summary1[group == "placebo"]$n_explosions,
+                  summary1[group == "placebo"]$n_not_explosions)
             ),
             variable == "implosions" ~ mk_chisq_contingency(
-                c(summary[group == "drug"]$n_implosions,
-                  summary[group == "drug"]$n_not_implosions),
-                c(summary[group == "placebo"]$n_implosions,
-                  summary[group == "placebo"]$n_not_implosions)
+                c(summary1[group == "drug"]$n_implosions,
+                  summary1[group == "drug"]$n_not_implosions),
+                c(summary1[group == "placebo"]$n_implosions,
+                  summary1[group == "placebo"]$n_not_implosions)
             ),
             variable == "weight" ~ mk_t_test(
-                fakedata[group == "drug"   ]$weight,
-                fakedata[group == "placebo"]$weight
+                fd1[group == "drug"   ]$weight,
+                fd1[group == "placebo"]$weight
             ),
             variable == "height" ~ mk_t_test(
-                fakedata[group == "drug"   ]$height,
-                fakedata[group == "placebo"]$height
+                fd1[group == "drug"   ]$height,
+                fd1[group == "placebo"]$height
             ),
             variable == "response_mean" ~ mk_t_test(
-                fakedata[group == "drug"   ]$response,
-                fakedata[group == "placebo"]$response
+                fd1[group == "drug"   ]$response,
+                fd1[group == "placebo"]$response
             ),
             variable == "dullness" ~ mk_wilcoxon_test(
-                fakedata[group == "drug"   ]$dullness,
-                fakedata[group == "placebo"]$dullness
+                fd1[group == "drug"   ]$dullness,
+                fd1[group == "placebo"]$dullness
             ),
             TRUE ~ miscresults$EN_DASH
         ),
@@ -200,9 +200,9 @@ tsumm <- (
     )
 )
 # Get the groups in the right order:
-setcolorder(tsumm, c("variable", "placebo", "drug", "comparison"))
+setcolorder(tsumm1, c("variable", "placebo", "drug", "comparison"))
 # Make it prettier:
-colnames(tsumm) <- c("Variable", "Placebo", "Drug", "Comparison")
+colnames(tsumm1) <- c("Variable", "Placebo", "Drug", "Comparison")
 
 
 # =============================================================================
@@ -289,11 +289,70 @@ colnames(t2) <- c(
 
 
 # =============================================================================
+# A linear model
+# =============================================================================
+
+n_per_group <- 100
+SEX_FEMALE <- "Female"
+SEX_MALE <- "Male"
+DRUG_PLACEBO <- "Placebo"
+DRUG_LOW <- "LowDose"
+DRUG_HIGH <- "HighDose"
+fd3 <- data.table(do.call(
+    "rbind",
+    replicate(
+        n_per_group,
+        expand.grid(
+            sex = c(SEX_FEMALE, SEX_MALE),
+            drug = c(DRUG_PLACEBO, DRUG_LOW, DRUG_HIGH)
+        ),
+    simplify = FALSE)
+))
+fd3[, age := rnorm(n = nrow(fd3), mean = 40, sd = 10)]
+fd3[, y_start := 100.0]
+fd3[, y_age := 0.2 * age]
+# DO NOT USE:
+# as.numeric(plyr::mapvalues(sex, from = c(SEX_FEMALE, SEX_MALE), to = c(3, -3)))
+# ... this uses a factor internally and yields 1, 2 etc.
+fd3[, y_sex := case_when(
+    sex == SEX_FEMALE ~ 3,
+    sex == SEX_MALE ~ -3,
+    TRUE ~ NA_real_
+)]
+fd3[, y_drug := case_when(
+    drug == DRUG_PLACEBO ~ 0,
+    drug == DRUG_LOW ~ 5,
+    drug == DRUG_HIGH ~ -5,
+    TRUE ~ NA_real_
+)]
+fd3[, err := rnorm(n = nrow(fd3), mean = 0, sd = 2.0)]
+fd3[, performance := y_start + y_age + y_sex + y_drug + err]
+fd3[,
+    succeeded := as.integer(performance > mean(performance))
+]
+lm3a <- lm(performance ~ age + drug * sex, data = fd3)
+lm3b <- glm(
+    succeeded ~ age + drug * sex,
+    data = fd3,
+    family = binomial(link = "logit")
+)
+M3_PREDICTOR_REPLACEMENTS <- c(
+    # Factors
+    "age" = "Age",
+    "drug" = "Drug",
+    "sex" = "Sex",
+    # Levels
+    "LowDose" = "Low dose",
+    "HighDose" = "High dose"
+)
+
+
+# =============================================================================
 # Formatting demostrations
 # =============================================================================
 
-ft <- (
-    tsumm
+ft1 <- (
+    tsumm1
     %>% flextable()
     %>% ftExtra::colformat_md(
         .footnote_options = FOOTNOTE_OPTIONS
@@ -333,7 +392,6 @@ ft <- (
         sep = FOOTNOTE_SEP
     )
 )
-print(ft)
 ft2 <- (
     t2
     %>% flextable()
@@ -348,10 +406,21 @@ ft2 <- (
         j = c("Placebo", "Low dose", "High dose")
     )
 )
+ft3a <- fmt_lm(lm3a, predictor_replacements = M3_PREDICTOR_REPLACEMENTS)
+ft3b <- fmt_lm(lm3b, predictor_replacements = M3_PREDICTOR_REPLACEMENTS)
+
+
+# =============================================================================
+# Saving and printing
+# =============================================================================
+
+cat(paste0("Saving to ", OUTPUT_DOCX, "...\n"))
 flextable::save_as_docx(
-    `Table 1` = ft,
-    `Table 1 again` = ft,  # a second copy
+    `Table 1` = ft1,
+    `Table 1 again` = ft1,  # a second copy
     `Table 2` = ft2,
+    `Table 3a` = ft3a,
+    `Table 3b` = ft3b,
     path = OUTPUT_DOCX,  # file will be created or overwritten
     align = "left",  # table (and caption) within page (not text within table)
     pr_section = prop_section(  # from "officer" package
@@ -364,3 +433,9 @@ flextable::save_as_docx(
         # page_margins = page_mar(...),  # default is 1" margins
     )
 )
+
+PROMPT <- "Press [Enter] to see next table..."
+print(ft1); readline(PROMPT)
+print(ft2); readline(PROMPT)
+print(ft3a); readline(PROMPT)
+print(ft3b)
