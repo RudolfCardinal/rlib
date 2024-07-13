@@ -22,7 +22,9 @@ flextable::set_flextable_defaults(
     font.size = 10,
     border.color = "gray",
     digits = 3,  # usually significant figures
-    big.mark = ","  # thousands separator
+    big.mark = ",",  # thousands separator
+    na_str = "NA",
+    nan_str = "NaN"
 )
 
 
@@ -400,19 +402,21 @@ ft2 <- (
         j = c("Placebo", "Low dose", "High dose")
     )
 )
-ft3a <- fmt_model(
+m3a <- mk_model(
     model_fn = lm,
     formula = performance ~ age + drug * sex,
     data = fd3,
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS
 )
-ft3b <- fmt_model(
+ft3a <- m3a$table_flex
+m3b <- mk_model(
     model_fn = glm,
     formula = succeeded ~ age + drug * sex,
     family = binomial(link = "logit"),
     data = fd3,
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS
 )
+ft3b <- m3b$table_flex
 
 
 # =============================================================================

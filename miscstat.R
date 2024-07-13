@@ -78,23 +78,32 @@ miscstat$log_of_mean_of_numbers_in_log_domain <- function(log_v) {
 # =============================================================================
 
 miscstat$sem <- function(x, na.rm = FALSE) {
-    # Calculate the standard error of the mean (SEM).
+    # Calculate the standard error of the mean (SEM) for the sample x.
     # - SEM = SD / sqrt(n) = sqrt(variance / n).
     # - If na.rm is FALSE: won't do anything silly with NA values since var()
     #   will return NA in that case... so it will return NA.
     # - If na.rm is TRUE, all NA values are removed.
     # - But it does fail with NULL == c() as a parameter.
+
     if (na.rm) {
         x <- x[!is.na(x)]
     }
     if (is.null(x)) {
         return(NA)  # as for mean(NULL)
     }
-    sqrt(var(x)/length(x))
+    sqrt(var(x) / length(x))
 }
+# TEST:
+#   # QQ2, p62, of my 2004 handout (answers p97):
+#   q1 <- c(4.32, 5.07, 4.29, 6.02, 5.11, 4.93, 3.98, 4.83, 5.50, 6.10)
+#   sem(q1)  # 0.2249901; correct
+#   q2 <- c(605, 460, 752, 321, 550, 612, 700, 680, 800, 491, 523, 594)
+#   sem(q2)  # 38.57447; correct
 
 
 miscstat$half_confidence_interval_t <- function(x, ci = 0.95, na.rm = FALSE) {
+    # Calculate half the confidence interval associated with a sample x, via a
+    # t test.
     if (na.rm) {
         x <- x[!is.na(x)]
     }
@@ -104,18 +113,61 @@ miscstat$half_confidence_interval_t <- function(x, ci = 0.95, na.rm = FALSE) {
     }
     df <- n - 1
     sem <- miscstat$sem(x)
-    crit_p <- 1 - ((1 - ci) / 2) # e.g. 0.975 for ci == 0.95
+    crit_p <- 1 - ((1 - ci) / 2)  # e.g. 0.975 for ci == 0.95
     crit_t <- qt(crit_p, df = df)
     return(crit_t * sem)
     # confidence interval is mean +/- that
 }
+# See working in my 2004 lecture handout, p54.
+# Tests in confidence_interval_t().
 
 
 miscstat$confidence_interval_t <- function(x, ci = 0.95, na.rm = FALSE) {
+    # Calculate the confidence interval associated with a sample x, via a t
+    # test.
     hci <- half_confidence_interval_t(x, ci, na.rm = na.rm)
     m <- mean(x, na.rm = na.rm)
     return(c("ci_lower" = m - hci, "ci_upper" = m + hci))
 }
+# TEST:
+#   # Q1-Q2, p62, of my 2004 handout (answers p97):
+#   q1 <- c(4.32, 5.07, 4.29, 6.02, 5.11, 4.93, 3.98, 4.83, 5.50, 6.10)
+#   confidence_interval_t(q1, ci = 0.90)  # 4.602568 5.427432; correct
+#   q2 <- c(605, 460, 752, 321, 550, 612, 700, 680, 800, 491, 523, 594)
+#   confidence_interval_t(q2)  # 505.7648 675.5685; correct
+
+
+miscstat$confidence_interval_from_mu_sem_df_via_t <- function(
+    mu, sem, df, ci = 0.95
+) {
+    # From a mean, standard error of the mean, and degrees of freedom,
+    # calculate the confidence interval via a t test.
+    crit_p <- 1 - ((1 - ci) / 2)  # e.g. 0.975 for ci == 0.95
+    crit_t <- qt(crit_p, df = df)
+    half_ci <- crit_t * sem
+    return(data.frame("ci_lower" = mu - half_ci, "ci_upper" = mu + half_ci))
+}
+# TEST:
+#   confidence_interval_from_mu_sem_df_via_t(0, 1, 1e6)
+#   # ... -1.959966, 1.959966
+#   # ... approaches the Z version as df -> infinity.
+
+
+miscstat$confidence_interval_from_mu_sem_via_Z <- function(
+    mu, sem, ci = 0.95
+) {
+    # From a mean and standard error of the mean, calculate the confidence
+    # interval via a Z test.
+    # - CI = mean +/- Z(CI) * SEM = mean +/- Z(CI) * SD/sqrt(n)
+    crit_p <- 1 - ((1 - ci) / 2)  # e.g. 0.975 for 95% CI
+    crit_z <- qnorm(crit_p)  # e.g. +1.96 for 95% CI
+    half_ci <- crit_z * sem
+    return(data.frame("ci_lower" = mu - half_ci, "ci_upper" = mu + half_ci))
+}
+# TEST:
+#   confidence_interval_from_mu_sem_via_Z(0, 1)
+#   # ... -1.959964, 1.959964
+# This is definitional (working in my 2004 lecture handout, p16).
 
 
 miscstat$logistic_regression_odds_ratios <- function(model,

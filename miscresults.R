@@ -76,6 +76,7 @@ miscresults$MINIMUM_P_SHOWN <- 2.2e-16
     # "2.2e-16" or equivalent representations in output from R, not "2.22e-16".
 miscresults$NOT_SIGNIFICANT <- "NS"
 miscresults$DEFAULT_ALPHA <- 0.05  # Per Fisher.
+miscresults$DEFAULT_CI <- 1 - miscresults$DEFAULT_ALPHA
 
 R_INTERACTION_MARKER <- stringr::fixed(":")
 R_RESIDUALS_LABEL <- "Residuals"
@@ -98,6 +99,8 @@ contr.sum.keepnames <- function(...) {
     # https://stackoverflow.com/questions/10808853/why-does-changing-contrast-type-change-row-labels-in-r-lm-summary
     conS <- contr.sum(...)
     colnames(conS) <- rownames(conS)[-length(rownames(conS))]
+    # ... For example, if the row names are A-D, this will assign the column
+    # names to be A-C, dropping the last element.
     conS
 }
 
@@ -446,28 +449,28 @@ miscresults$fmt_n_percent_low_high <- function(
 }
 
 
-miscresults$fmt_mean_sd <- function(
-    mu,
+miscresults$fmt_value_sd <- function(
+    x,
     sigma,
     sf = get_flextable_defaults()$digits,
     allow_sci_notation = TRUE,
-    mean_prefix = "",
+    value_prefix = "",
     # sd_prefix = paste0(" (", miscresults$PLUS_MINUS, " "),
     sd_prefix = " (SD ",
     sd_suffix = ")",
     na_str = get_flextable_defaults()$na_str
 ) {
-    # Given a mean mu and a standard deviation sigma, show this as "μ (± σ)",
+    # Given a value x and a standard deviation sigma, show this as "x (± σ)",
     # or similar.
     # See also flextable::fmt_avg_dev(avg, dev), which is less flexible.
-    m_text <- miscresults$fmt_float(
-        mu, sf = sf, allow_sci_notation = allow_sci_notation
+    x_text <- miscresults$fmt_float(
+        x, sf = sf, allow_sci_notation = allow_sci_notation
     )
     s_text <- miscresults$fmt_float(
         sigma, sf = sf, allow_sci_notation = allow_sci_notation
     )
-    results <- paste0(mean_prefix, m_text, sd_prefix, s_text, sd_suffix)
-    return(ifelse(is.na(mu), na_str, results))
+    results <- paste0(value_prefix, x_text, sd_prefix, s_text, sd_suffix)
+    return(ifelse(is.na(x), na_str, results))
 }
 
 
@@ -478,65 +481,66 @@ miscresults$mk_mean_sd <- function(
 ) {
     # Calculate a mean and standard deviation (SD) from the vector provided, and
     # show this as "μ (± σ)", or similar. Additional parameters are passed to
-    # fmt_mean_sd().
-    return(miscresults$fmt_mean_sd(
-        mu = mean(x, na.rm = na.rm),
+    # fmt_value_sd().
+    return(miscresults$fmt_value_sd(
+        x = mean(x, na.rm = na.rm),
         sigma = sd(x, na.rm = na.rm),
         ...
     ))
 }
 
 
-miscresults$fmt_mean_ci <- function(
-    mu,
+miscresults$fmt_value_ci <- function(
+    x,
     ci_lower,
     ci_upper,
-    mean_prefix = "",
+    value_prefix = "",
     ci_prefix = " (CI ",
     ci_sep = " to ",  # miscresults$EN_DASH also possible
     ci_suffix = ")",
     sf = get_flextable_defaults()$digits,
     allow_sci_notation = TRUE,
-    na_str = get_flextable_defaults()$na_str
+    na_str = get_flextable_defaults()$na_str,
+    ...  # passed to fmt_float
 ) {
-    # Given a mean mu and confidence interval limits ci_lower, ci_upper, show
-    # this as e.g. "μ (a–b)".
+    # Given a value x and confidence interval limits ci_lower, ci_upper, show
+    # this as e.g. "x (a–b)".
     results <- paste0(
-        mean_prefix,
+        value_prefix,
         miscresults$fmt_float(
-            mu,
-            sf = sf, allow_sci_notation = allow_sci_notation
+            x,
+            sf = sf, allow_sci_notation = allow_sci_notation, ...
         ),
         ci_prefix,
         miscresults$fmt_float(
             ci_lower,
-            sf = sf, allow_sci_notation = allow_sci_notation
+            sf = sf, allow_sci_notation = allow_sci_notation, ...
         ),
         ci_sep,
         miscresults$fmt_float(
             ci_upper,
-            sf = sf, allow_sci_notation = allow_sci_notation
+            sf = sf, allow_sci_notation = allow_sci_notation, ...
         ),
         ci_suffix
     )
-    return(ifelse(is.na(mu), na_str, results))
+    return(ifelse(is.na(x), na_str, results))
 }
 
 
 miscresults$mk_mean_ci <- function(
     x,
-    ci = 0.95,
+    ci = miscresults$DEFAULT_CI,
     na.rm = TRUE,
     ...
 ) {
     # From a vector, show a mean and confidence interval (e.g. 95% CI) as e.g.
-    # "μ (a–b)". Additional parameters are passed to fmt_mean_ci().
+    # "μ (a–b)". Additional parameters are passed to fmt_value_ci().
     mu <- mean(x, na.rm = na.rm)
     ci_pair <- miscstat$confidence_interval_t(x, ci = ci, na.rm = na.rm)
     ci_lower <- ci_pair["ci_lower"]
     ci_upper <- ci_pair["ci_upper"]
-    return(miscresults$fmt_mean_ci(
-        mu = mu,
+    return(miscresults$fmt_value_ci(
+        x = mu,
         ci_lower = ci_lower,
         ci_upper = ci_upper,
         ...
@@ -1051,29 +1055,32 @@ miscresults$which_anova_term_matches_coeff <- function(
 }
 
 
-miscresults$fmt_model <- function(
+miscresults$mk_model_anova_coeffs <- function(
     model_fn,
     formula,
     data,
     type = "III",
     contrasts_anova_model = NULL,
-    contrasts_summary_model = NULL,
+    contrasts_coeffs_model = NULL,
     ns_text = miscresults$NOT_SIGNIFICANT,
-    # reference_label = "(reference)",
     interaction_txt = paste0(" ", miscresults$MULTIPLY, " "),
     predictor_replacements = NULL,
-    as_flextable = TRUE,
+    coeff_use_plus = TRUE,
     suppress_nonsig_coeffs = TRUE,
     suppress_nonsig_coeff_tests = TRUE,
     alpha_show_coeffs = miscresults$DEFAULT_ALPHA,
     include_intercept = TRUE,
-    print_anova_summary = FALSE,
+    include_reference_levels = TRUE,
+    reference_suffix = " (reference)",
+    show_ci = TRUE,
+    ci = miscresults$DEFAULT_CI,
     debug = FALSE,
     ...
 ) {
-    # Format a linear model as a results table.
-    # - e.g. per style of Cardinal et al. (2023), PMID 37147600, Table 5.
-    # - Term, Level, F, p_F, coefficient, standard error, Z/t, p_Z/p_t
+    # Format a linear model as a results table (e.g. per style of Cardinal et
+    # al. (2023), PMID 37147600, Table 5.) Headings:
+    #
+    #   Term, Level, F, p_F, coefficient, standard error, Z/t, p_Z/p_t
     #
     # Parameters:
     #
@@ -1087,10 +1094,41 @@ miscresults$fmt_model <- function(
     #       Type for sums of squares, via car::Anova, e.g. "II", "III"
     #   contrasts_anova_model:
     #       Global contrast options to specify for the ANOVA model. If NULL, do
-    #       something sensible.
-    #   contrasts_summary_model:
+    #       something sensible, namely:
+    #           - when using type III sums of squares, sum-to-zero contrasts
+    #             for unordered factors (though using a version that retains
+    #             factor names rather than replacing them with numbers), and
+    #             polynomial contrasts for ordered predictors;
+    #           - default R contrasts otherwise (those being "treatment"
+    #             contrasts for unordered factors, and polynomial contrasts for
+    #             ordered predictors).
+    #
+    #       EXPLANATION:
+    #
+    #       - "Treatment" contrasts are e.g. for a four-level factor,
+    #         contr.treatment(4) or contr.treatment(c("A", "B", "C", "D")). The
+    #         reference category is 0; others have 1 each. This contrasts each
+    #         level with the baseline level, but they are not orthogonal to the
+    #         intercept; see ?contr.treatment. (In the contrast matrix: rows
+    #         represent levels, and columns are the contrasts.)
+    #
+    #       - "Sum-to-zero" contrasts are e.g. for a four-level factor,
+    #         contr.sum(4) or contr.sum(c("A", "B", "C", "D")). Effect sizes
+    #         are not as typically expected. The intercept is at the notional
+    #         'zero' level of all factors (not necessarily at any individual
+    #         factor level). The reference category is the LAST level of a
+    #         factor.
+    #
+    #       - Try also contr.sum.keepnames(c("A", "B", "C", "D")).
+    #
+    #       - Polynomial contrasts: try contr.poly(2), showing a linear column
+    #         and a quadratic column.
+    #
+    #       See type_III_sums_of_squares.R as to why.
+    #
+    #   contrasts_coeffs_model:
     #       Global contrast options to specify for the summary model. If NULL,
-    #       do something sensible.
+    #       do something sensible, namely default R contrasts (as above).
     #   ns_text:
     #       Text to indicate "not significant", e.g. "NS".
     #   interaction_txt:
@@ -1098,9 +1136,9 @@ miscresults$fmt_model <- function(
     #   predictor_replacements:
     #       Vector of replacements to apply to all predictor text, e.g.
     #       c("from1" = "to1", "from2" = "to2", ...), or NULL.
-    #   as_flextable:
-    #       Return a flextable, rather than the underlying table that can make
-    #       one.
+    #   coeff_use_plus:
+    #       Show "+" for positive coefficients (and confidence intervals, if
+    #       shown).
     #   suppress_nonsig_coeffs:
     #       If the ANOVA F test is not significant, do not show coefficient
     #       rows for individual levels.
@@ -1111,12 +1149,40 @@ miscresults$fmt_model <- function(
     #   alpha_show_coeffs:
     #       The alpha value to use for suppress_nonsig_coeffs and
     #       suppress_nonsig_coeff_tests; can be NULL if not used.
-    #   print_anova_summary:
-    #       Print the ANOVA and summary in passing.
+    #   include_intercept:
+    #       Include a row showing the intercept term of the model.
+    #   include_reference_levels:
+    #       Include reference levels.
+    #   reference_suffix:
+    #       If include_reference_levels, append this suffix to the name of the
+    #       reference level.
+    #   show_ci:
+    #       Show confidence intervals for coefficients?
+    #   ci:
+    #       If show_ci is true, which confidence intervals to use? Default is
+    #       0.95, meaning 95% confidence intervals.
     #   debug:
     #       Be verbose?
     #   ...:
     #       Passed to model_fn.
+    #
+    # Returns a list with these elements:
+    #
+    #   anova_model:
+    #       Model used for the ANOVA table.
+    #   contrasts_anova_model:
+    #       Contrasts used for anova_model.
+    #   coeffs_model:
+    #       Model used to extract coefficients. Use summary() to see the
+    #       detail.
+    #   contrasts_coeffs_model:
+    #       Contrasts used for coeffs_model.
+    #   table_markdown:
+    #       Markdown table, designed to be converted to a flextable.
+    #   table_flex:
+    #       Version of table_markdown formatted, in basic style, as a flextable
+    #       table. You may want to start with table_markdown and process it
+    #       yourself, though, for your own table style.
 
     # -------------------------------------------------------------------------
     # Collate ANOVA and coefficient information
@@ -1138,14 +1204,14 @@ miscresults$fmt_model <- function(
             contrasts_anova_model <- r_default_contrasts
         }
     }
-    if (is.null(contrasts_summary_model)) {
-        contrasts_summary_model <- r_default_contrasts
+    if (is.null(contrasts_coeffs_model)) {
+        contrasts_coeffs_model <- r_default_contrasts
     }
 
     saved_options_contrasts <- getOption("contrasts")  # save
     options(contrasts = contrasts_anova_model)  # set
     m1 <- model_fn(formula, data = data, ...)
-    options(contrasts = contrasts_summary_model)  # set
+    options(contrasts = contrasts_coeffs_model)  # set
     m2 <- model_fn(formula, data = data, ...)
     options(contrasts = saved_options_contrasts)  # restore
 
@@ -1169,13 +1235,6 @@ miscresults$fmt_model <- function(
     #           `t value` = tval, `Pr(>|t|)` = 2 * pt(abs(tval), rdf,
     #           lower.tail = FALSE))
     #       ans$df <- c(p, rdf, NCOL(Qr$qr))
-    if (print_anova_summary) {
-        cat("* miscresults$fmt_lm:\n")
-        cat("- ANOVA:\n")
-        print(a)
-        cat("\n- Summary:\n")
-        print(s)
-    }
 
     # -------------------------------------------------------------------------
     # Build our version of the ANOVA table
@@ -1207,6 +1266,7 @@ miscresults$fmt_model <- function(
     # -------------------------------------------------------------------------
     # Build our version of the coefficient table
     # -------------------------------------------------------------------------
+    ci_pct <- ci * 100
     intermediate_coeffs <- NULL
     for (i in 1:nrow(coeffs)) {
         term_name <- rownames(coeffs)[i]
@@ -1263,6 +1323,52 @@ miscresults$fmt_model <- function(
             )
         )
     }
+    intermediate_coeffs$is_reference_level <- FALSE
+    if (include_reference_levels) {
+        for (i in 1:n_anova_terms) {
+            term_name <- intermediate_anova$term[i]
+            term_idx <- intermediate_anova$term_idx[i]
+            if (term_name %in% names(m2$xlevels)) {
+                first_level_name <- m2$xlevels[[term_name]][1]
+                intermediate_coeffs <- rbind(
+                    intermediate_coeffs,
+                    data.frame(
+                        level = first_level_name,
+                        is_subterm = TRUE,
+                        is_reference_level = TRUE,
+                        term_idx = term_idx,
+                        anova_term_name = term_name,
+                        subterm_idx = 0.5,
+                        coeff = NA_real_,
+                        se = NA_real_,
+                        coeff_stat = NA_real_,
+                        p_coeff_stat = NA_real_
+                    )
+                )
+            }
+        }
+    }
+    if (using_t_not_Z) {
+        conf_int <- miscstat$confidence_interval_from_mu_sem_df_via_t(
+            mu = intermediate_coeffs$coeff,
+            sem = intermediate_coeffs$se,
+            df = coeff_rdf_for_t,
+            ci = ci
+        )
+    } else {
+        conf_int <- miscstat$confidence_interval_from_mu_sem_via_Z(
+            mu = intermediate_coeffs$coeff,
+            sem = intermediate_coeffs$se,
+            ci = ci
+        )
+    }
+    intermediate_coeffs <- (
+        intermediate_coeffs
+        %>% mutate(
+            ci_lower = conf_int$ci_lower,
+            ci_upper = conf_int$ci_upper
+        )
+    )
 
     # -------------------------------------------------------------------------
     # Optionally (but by default), suppress statistical coefficient tests for
@@ -1325,7 +1431,16 @@ miscresults$fmt_model <- function(
     }
     # ... is_subterm will be taken from the first, where there's a clash, which
     # is what we want.
+
+    # -------------------------------------------------------------------------
+    # Debugging output?
+    # -------------------------------------------------------------------------
     if (debug) {
+        cat("* miscresults$fmt_lm:\n")
+        cat("- ANOVA:\n")
+        print(a)
+        cat("\n- Summary:\n")
+        print(s)
         cat("\n- intermediate_anova:\n")
         print(intermediate_anova)
         cat("\n- intermediate_coeffs:\n")
@@ -1341,6 +1456,8 @@ miscresults$fmt_model <- function(
         intermediate
         %>% mutate(
             # Now format.
+            vector_using_t_not_Z = using_t_not_Z,  # see below
+            vector_show_ci = ci,
             # Also fix an oddity: glm() output can produce a coefficient but
             # not an ANOVA term for the intercept, so in that case we move the
             # label to the "term" column.
@@ -1362,11 +1479,14 @@ miscresults$fmt_model <- function(
                 "",
                 ifelse(
                     is_subterm,
-                    miscresults$fmt_level(
-                        level,
-                        anova_term_name,
-                        replacements = predictor_replacements,
-                        interaction_txt = interaction_txt
+                    paste0(
+                        miscresults$fmt_level(
+                            level,
+                            anova_term_name,
+                            replacements = predictor_replacements,
+                            interaction_txt = interaction_txt
+                        ),
+                        ifelse(is_reference_level, reference_suffix, "")
                     ),
                     ""
                 )
@@ -1384,14 +1504,22 @@ miscresults$fmt_model <- function(
             coeff_txt = ifelse(
                 is.na(coeff),
                 "",
-                miscresults$fmt_float(coeff, use_plus = TRUE)
+                ifelse(
+                    vector_show_ci,
+                    miscresults$fmt_value_ci(
+                        x = coeff,
+                        ci_lower = ci_lower,
+                        ci_upper = ci_upper,
+                        use_plus = coeff_use_plus
+                    ),
+                    miscresults$fmt_float(coeff, use_plus = coeff_use_plus)
+                )
             ),
             se_txt = ifelse(
                 is.na(se),
                 "",
                 miscresults$fmt_float(se)
             ),
-            vector_using_t_not_Z = using_t_not_Z,  # see below
             coeff_stat_txt = ifelse(
                 is.na(coeff_stat),
                 "",
@@ -1427,26 +1555,40 @@ miscresults$fmt_model <- function(
         "Level",
         "*F*",
         "*p~F~*",
-        "Coefficient",
+        ifelse(
+            show_ci,
+            paste0("Coefficient (", ci_pct, "% CI)"),
+            "Coefficient"
+        ),
         "Standard error",
         ifelse(using_t_not_Z, "*t*", "*Z*"),
         ifelse(using_t_not_Z, "*p~t~*", "*p~Z~*")
     )
 
     # -------------------------------------------------------------------------
-    # Return the result
+    # Basic flextable version. (Though users may want to re-process the
+    # "table_markdown" component of the output.)
     # -------------------------------------------------------------------------
-    if (as_flextable) {
-        ft <- (
-            resultstable
-            %>% flextable()
-            %>% ftExtra::colformat_md(part = "all")
-            # ... need part = "all" to affect headey and body
-        )
-        return(ft)
-    } else {
-        return(resultstable)
-    }
+    ft <- (
+        resultstable
+        %>% flextable()
+        %>% ftExtra::colformat_md(part = "all")
+        # ... need part = "all" to affect headey and body
+        %>% flextable::valign(valign = "top")  # align all cells top
+        %>% autofit()  # size columns
+    )
+
+    # -------------------------------------------------------------------------
+    # Return the results
+    # -------------------------------------------------------------------------
+    return(list(
+        anova_model = m1,
+        contrasts_anova_model = contrasts_anova_model,
+        coeffs_model = m2,
+        contrasts_coeffs_model = contrasts_coeffs_model,
+        table_markdown = resultstable,
+        table_flex = ft
+    ))
 }
 
 
