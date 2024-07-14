@@ -74,6 +74,14 @@ miscresults$DEFAULT_DP_FOR_DF <- 1  # decimal places for non-integer degrees of 
 miscresults$MINIMUM_P_SHOWN <- 2.2e-16
     # .Machine$double.eps is 2.220446e-16; however, readers are used to seeing
     # "2.2e-16" or equivalent representations in output from R, not "2.22e-16".
+miscresults$MINIMUM_F_SHOWN <- 1
+miscresults$MINIMUM_ABS_T_SHOWN <- 1
+    # ... critical value for a two-tailed test at α = 0.05 is ±qt(0.975, df),
+    #     decreasing for higher df, and approaching qnorm(0.975) as df → ∞.
+    #     So that's about 1.96. We might want to report things that didn't
+    #     make it, but 1 seems like a reasonable "definitely do not care"
+    #     threshold.
+miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS <- TRUE
 miscresults$NOT_SIGNIFICANT <- "NS"
 miscresults$DEFAULT_ALPHA <- 0.05  # Per Fisher.
 miscresults$DEFAULT_CI <- 1 - miscresults$DEFAULT_ALPHA
@@ -269,15 +277,15 @@ miscresults$fmt_float <- function(
 miscresults$mk_p_text <- function(
     p,
     sf = get_flextable_defaults()$digits,
-    minimum_shown = miscresults$MINIMUM_P_SHOWN
+    min_p = miscresults$MINIMUM_P_SHOWN
 ) {
     # From a p value, return a string such as "*p* = 0.03" or "*p* < 2.2e-16".
     # Uses fmt_float().
     return(ifelse(
-        p < minimum_shown,
+        p < min_p,
         paste0(
             "*p* < ",
-            miscresults$fmt_float(minimum_shown, sf = sf)
+            miscresults$fmt_float(min_p, sf = sf)
         ),
         paste0(
             "*p* = ",
@@ -291,7 +299,7 @@ miscresults$mk_p_text_with_label <- function(
     p,
     sf = get_flextable_defaults()$digits,
     sidak_correction_n_for_asterisks = 1,
-    minimum_shown = miscresults$MINIMUM_P_SHOWN,
+    min_p = miscresults$MINIMUM_P_SHOWN,
     ns_text = miscresults$NOT_SIGNIFICANT
 ) {
     # From a p value, return an asterisk-labelled string such as "*p* = 0.03 *"
@@ -301,7 +309,7 @@ miscresults$mk_p_text_with_label <- function(
         miscresults$mk_p_text(
             p,
             sf = sf,
-            minimum_shown = minimum_shown
+            min_p = min_p
         ),
         miscresults$mk_sig_label(
             p,
@@ -662,12 +670,8 @@ miscresults$fmt_chisq_p <- function(
 
 miscresults$fmt_t <- function(
     t, df,
-    min_abs_t = 1
-    # ... critical value for a two-tailed test at α = 0.05 is ±qt(0.975, df),
-    #     decreasing for higher df, and approaching qnorm(0.975) as df → ∞.
-    #     So that's about 1.96. We might want to report things that didn't
-    #     make it, but 1 seems like a reasonable "definitely do not care"
-    #     threshold.
+    min_abs_t = miscresults$MINIMUM_ABS_T_SHOWN,
+    omit_df_below_min_t = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS
 ) {
     # Format a t statistic (without a p value).
     # - Note that t can be negative or positive.
@@ -679,7 +683,11 @@ miscresults$fmt_t <- function(
     t_txt <- miscresults$fmt_float(t, use_plus = TRUE)
     return(ifelse(
         abs(t) < min_abs_t,
-        sprintf("|*t*%s| < %s", df_txt, min_abs_t),
+        ifelse(
+            omit_df_below_min_t,
+            sprintf("|*t*| < %s", min_abs_t),
+            sprintf("|*t*%s| < %s", df_txt, min_abs_t)
+        ),
         sprintf("*t*%s = %s", df_txt, t_txt)
     ))
 }
@@ -687,12 +695,17 @@ miscresults$fmt_t <- function(
 
 miscresults$fmt_t_p <- function(
     t, df, p,
-    min_abs_t = 1,  # see miscresults$fmt_t()
+    min_abs_t = miscresults$MINIMUM_ABS_T_SHOWN,
+    omit_df_below_min_t = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS,
     ns_text = miscresults$NOT_SIGNIFICANT,
     check_alpha = DEFAULT_ALPHA
 ) {
     # Format a t statistic with a p value.
-    t_txt <- miscresults$fmt_t(t, df, min_abs_t = min_abs_t)
+    t_txt <- miscresults$fmt_t(
+        t, df,
+        min_abs_t = min_abs_t,
+        omit_df_below_min_t = omit_df_below_min_t
+    )
     p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
     if (any(abs(t) < min_abs_t & p < check_alpha)) {
         stop(sprintf(
@@ -708,30 +721,43 @@ miscresults$fmt_t_p <- function(
 }
 
 
-miscresults$fmt_F <- function(F, df1, df2, min_F = 1) {
+miscresults$fmt_F <- function(
+    F, df1, df2,
+    min_F = miscresults$MINIMUM_F_SHOWN,
+    omit_df_below_min_F = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS
+) {
     # Format an F statistic (without a p value).
     # - Note that F will always be positive.
     # - No commas in degrees of freedom (big.mark = ""), since they are
     #   separated by commas anyway.
     df1_txt <- miscresults$mk_df_text(df1, big.mark = "")
     df2_txt <- miscresults$mk_df_text(df2, big.mark = "")
-    symbol_df_txt <- sprintf("*F*~%s,%s~", df1_txt, df2_txt)
+    df_txt <- sprintf("~%s,%s~", df1_txt, df2_txt)
     return(ifelse(
         F < min_F,
-        sprintf("%s < %s", symbol_df_txt, min_F),
-        sprintf("%s = %s", symbol_df_txt, miscresults$fmt_float(F))
+        ifelse(
+            omit_df_below_min_F,
+            sprintf("*F* < %s", min_F),
+            sprintf("*F*%s < %s", df_txt, min_F)
+        ),
+        sprintf("*F*%s = %s", df_txt, miscresults$fmt_float(F))
     ))
 }
 
 
 miscresults$fmt_F_p <- function(
     F, df1, df2, p,
-    min_F = 1,
+    min_F = miscresults$MINIMUM_F_SHOWN,
+    omit_df_below_min_F = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS,
     ns_text = miscresults$NOT_SIGNIFICANT,
     check_alpha = DEFAULT_ALPHA
 ) {
     # Format an F statistic with a p value.
-    f_txt <- miscresults$fmt_F(F, df1, df2, min_F = min_F)
+    f_txt <- miscresults$fmt_F(
+        F, df1, df2,
+        min_F = min_F,
+        omit_df_below_min_F = omit_df_below_min_F
+    )
     p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
     if (any(F < min_F & p < check_alpha)) {
         stop(sprintf(
@@ -912,8 +938,10 @@ miscresults$mk_chisq_contingency <- function(
 miscresults$mk_t_test <- function(
     x,
     y = NULL,
-    min_abs_t = 1,  # see miscresults$fmt_t()
+    min_abs_t = miscresults$MINIMUM_ABS_T_SHOWN,
+    omit_df_below_min_t = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS,
     ns_text = miscresults$NOT_SIGNIFICANT,
+    check_alpha = DEFAULT_ALPHA,
     debug = FALSE,
     ...
 ) {
@@ -928,7 +956,9 @@ miscresults$mk_t_test <- function(
         df = result$parameter,
         p = result$p.value,
         min_abs_t = min_abs_t,
-        ns_text = ns_text
+        omit_df_below_min_t = omit_df_below_min_t,
+        ns_text = ns_text,
+        check_alpha = check_alpha
     ))
 }
 
@@ -942,7 +972,7 @@ miscresults$mk_wilcoxon_test <- function(
 ) {
     # Reports a Wilcoxon one- or two-sample test; the two-sample test is the
     # Mann-Whitney U test, which is the same as the Wilcoxon rank-sum test.
-    # Follows argument convension for wilcox.test(); any additional parameters
+    # Follows argument convention for wilcox.test(); any additional parameters
     # are passed to that, and likewise to rcompanion::wilcoxonZ().
     # The direction of Z is "x - y" (i.e. positive if x > y, negative if x < y).
     # See also:
@@ -965,14 +995,13 @@ miscresults$mk_wilcoxon_test <- function(
 miscresults$mk_oneway_anova <- function(
     depvar,
     factorvar,
-    min_F = 1,
-    ns_text = miscresults$NOT_SIGNIFICANT,
     debug = FALSE,
     ...
 ) {
     # Reports a one-way ANOVA predicting depvar by factorvar.
     # - Note that for one-way ANOVA, the sum of squares "type" is not
     #   applicable, since there is only one predictor.
+    # - Additional parameters go to fmt_F_p().
     d <- data.frame(dv = depvar, x = factorvar)
     a <- aov(dv ~ x, data = d)
     s <- summary(a)
@@ -993,10 +1022,7 @@ miscresults$mk_oneway_anova <- function(
         print(p)
         cat("---\n")
     }
-    return(miscresults$fmt_F_p(
-        F, df_num, df_denom, p,
-        min_F = min_F, ns_text = ns_text
-    ))
+    return(miscresults$fmt_F_p(F, df_num, df_denom, p, ...))
 }
 
 
@@ -1006,16 +1032,27 @@ miscresults$mk_oneway_anova <- function(
 
 miscresults$which_anova_term_matches_coeff <- function(
     anova_terms,
-    coeff_term
+    coeff_term,
+    debug = FALSE
 ) {
     # Returns the index of anova_terms for which coeff_term is the best match.
 
     stopifnot(length(coeff_term) == 1)  # not parallel yet!
+    if (debug) {
+        cat("which_anova_term_matches_coeff:\n")
+        cat("... anova_terms:\n")
+        print(anova_terms)
+        cat("... coeff_term:\n")
+        print(coeff_term)
+    }
 
     # Exact match preferred
     if (coeff_term %in% anova_terms) {
         # Coefficient term exactly matches ANOVA term.
         # Usually implies a linear predictor, not a factor.
+        if (debug) {
+            cat("... exact match.\n")
+        }
         return(which(anova_terms == coeff_term))
     }
 
@@ -1025,15 +1062,36 @@ miscresults$which_anova_term_matches_coeff <- function(
     getParts <- function(x) {
         stringr::str_split_1(x, R_INTERACTION_MARKER)
     }
-    anova_n_parts <- stringr::str_count(anova_terms, R_INTERACTION_MARKER) + 1
+    termtable <- (
+        tibble(anova_term = anova_terms)
+        %>% mutate(
+            term_idx = row_number(),
+            anova_n_parts = stringr::str_count(
+                anova_term, R_INTERACTION_MARKER
+            ) + 1
+        )
+        %>% arrange(desc(anova_term))
+        # Sort by reverse alphabetical order. This will put e.g. "xx" before
+        # "x", so we match the longest possible string as we proceed in
+        # conventional order through the table.
+    )
     coeff_n_parts <- stringr::str_count(coeff_term, R_INTERACTION_MARKER) + 1
     coeff_parts <- getParts(coeff_term)
-    for (i in 1:length(anova_terms)) {
-        if (anova_n_parts[i] != coeff_n_parts) {
+    if (debug) {
+        cat("... termtable:\n")
+        print(termtable)
+        cat("... coeff_n_parts:\n")
+        print(coeff_n_parts)
+        cat("... coeff_parts:\n")
+        print(coeff_parts)
+    }
+    for (i in 1:nrow(termtable)) {
+        arow <- termtable[i, ]
+        if (arow$anova_n_parts != coeff_n_parts) {
             # Wrong number of parts
             next
         }
-        anova_parts <- getParts(anova_terms[i])
+        anova_parts <- getParts(arow$anova_term)
         ok <- TRUE
         for (j in 1:coeff_n_parts) {
             part_ok <- stringr::str_starts(
@@ -1046,13 +1104,34 @@ miscresults$which_anova_term_matches_coeff <- function(
             }
         }
         if (ok) {
-            return(i)
+            matching_term_idx <- arow$term_idx
+            if (debug) {
+                cat("... returning ", matching_term_idx, "\n", sep = "")
+            }
+            return(matching_term_idx)
         }
     }
 
     # Failure.
     return(NA_integer_)
 }
+
+# if (FALSE) {
+#     # TESTS:
+#     # ... particularly when one factor name starts with another factor's name!
+#     tmp_anova_terms1 <- c("x", "xx", "x:xx")
+#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms1, "x") == 1)
+#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms1, "xx") == 2)
+#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms1, "xB") == 1)
+#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms1, "xxB") == 2)
+#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms1, "xB:xxB") == 3)
+#     tmp_anova_terms2 <- c("xx", "x", "xx:x")
+#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms2, "xx") == 1)
+#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms2, "x") == 2)
+#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms2, "xxB") == 1)
+#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms2, "xB") == 2)
+#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms2, "xxB:xB") == 3)
+# }
 
 
 miscresults$mk_model_anova_coeffs <- function(
@@ -1062,19 +1141,26 @@ miscresults$mk_model_anova_coeffs <- function(
     type = "III",
     contrasts_anova_model = NULL,
     contrasts_coeffs_model = NULL,
-    ns_text = miscresults$NOT_SIGNIFICANT,
-    interaction_txt = paste0(" ", miscresults$MULTIPLY, " "),
-    predictor_replacements = NULL,
-    coeff_use_plus = TRUE,
-    suppress_nonsig_coeffs = TRUE,
-    suppress_nonsig_coeff_tests = TRUE,
-    alpha_show_coeffs = miscresults$DEFAULT_ALPHA,
+    # Cosmetic:
     include_intercept = TRUE,
     include_reference_levels = TRUE,
-    reference_suffix = " (reference)",
+    predictor_replacements = NULL,
+    coeff_use_plus = TRUE,
     show_ci = TRUE,
+    suppress_nonsig_coeffs = TRUE,
+    suppress_nonsig_coeff_tests = TRUE,
+    # Tweaking:
+    min_abs_t = miscresults$MINIMUM_ABS_T_SHOWN,
+    omit_df_below_min_t = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS,
+    min_F = miscresults$MINIMUM_F_SHOWN,
+    omit_df_below_min_F = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS,
+    ns_text = miscresults$NOT_SIGNIFICANT,
+    interaction_txt = paste0(" ", miscresults$MULTIPLY, " "),
+    alpha_show_coeffs = miscresults$DEFAULT_ALPHA,
+    reference_suffix = " (reference)",
     ci = miscresults$DEFAULT_CI,
     debug = FALSE,
+    # Extras for model_fn:
     ...
 ) {
     # Format a linear model as a results table (e.g. per style of Cardinal et
@@ -1129,16 +1215,19 @@ miscresults$mk_model_anova_coeffs <- function(
     #   contrasts_coeffs_model:
     #       Global contrast options to specify for the summary model. If NULL,
     #       do something sensible, namely default R contrasts (as above).
-    #   ns_text:
-    #       Text to indicate "not significant", e.g. "NS".
-    #   interaction_txt:
-    #       Pretty text to use as interaction symbol.
+    #
+    #   include_intercept:
+    #       Include a row showing the intercept term of the model.
+    #   include_reference_levels:
+    #       Include reference levels.
     #   predictor_replacements:
     #       Vector of replacements to apply to all predictor text, e.g.
     #       c("from1" = "to1", "from2" = "to2", ...), or NULL.
     #   coeff_use_plus:
     #       Show "+" for positive coefficients (and confidence intervals, if
     #       shown).
+    #   show_ci:
+    #       Show confidence intervals for coefficients?
     #   suppress_nonsig_coeffs:
     #       If the ANOVA F test is not significant, do not show coefficient
     #       rows for individual levels.
@@ -1146,23 +1235,31 @@ miscresults$mk_model_anova_coeffs <- function(
     #       If the ANOVA F test is not significant, show coefficient rows
     #       (assuming suppress_nonsig_coeff_tests is not TRUE), but do not show
     #       statistical tests of those coefficients.
+    #
+    #   min_abs_t:
+    #       See fmt_t_p().
+    #   omit_df_below_min_t:
+    #       See fmt_t_p().
+    #   min_F:
+    #       See fmt_F_p().
+    #   omit_df_below_min_F:
+    #       See fmt_F_p().
+    #   ns_text:
+    #       Text to indicate "not significant", e.g. "NS".
+    #   interaction_txt:
+    #       Pretty text to use as interaction symbol.
     #   alpha_show_coeffs:
     #       The alpha value to use for suppress_nonsig_coeffs and
-    #       suppress_nonsig_coeff_tests; can be NULL if not used.
-    #   include_intercept:
-    #       Include a row showing the intercept term of the model.
-    #   include_reference_levels:
-    #       Include reference levels.
+    #       suppress_nonsig_coeff_tests.
     #   reference_suffix:
     #       If include_reference_levels, append this suffix to the name of the
     #       reference level.
-    #   show_ci:
-    #       Show confidence intervals for coefficients?
     #   ci:
     #       If show_ci is true, which confidence intervals to use? Default is
     #       0.95, meaning 95% confidence intervals.
     #   debug:
     #       Be verbose?
+    #
     #   ...:
     #       Passed to model_fn.
     #
@@ -1494,12 +1591,20 @@ miscresults$mk_model_anova_coeffs <- function(
             f_txt = ifelse(
                 is.na(F),
                 "",
-                miscresults$fmt_F(F, df, df_resid)
+                miscresults$fmt_F(
+                    F, df, df_resid,
+                    min_F = min_F,
+                    omit_df_below_min_F = omit_df_below_min_F
+                )
             ),
             pf_txt = ifelse(
                 is.na(pF),
                 "",
-                miscresults$mk_p_text_with_label(pF, ns_text = ns_text)
+                ifelse(
+                    F < min_F,
+                    ns_text,
+                    miscresults$mk_p_text_with_label(pF, ns_text = ns_text)
+                )
             ),
             coeff_txt = ifelse(
                 is.na(coeff),
@@ -1525,16 +1630,25 @@ miscresults$mk_model_anova_coeffs <- function(
                 "",
                 ifelse(
                     vector_using_t_not_Z,  # must be PARALLEL as above
-                    miscresults$fmt_t(coeff_stat, df = coeff_rdf_for_t),
+                    miscresults$fmt_t(
+                        t = coeff_stat,
+                        df = coeff_rdf_for_t,
+                        min_abs_t = min_abs_t,
+                        omit_df_below_min_t = omit_df_below_min_t
+                    ),
                     miscresults$fmt_Z(coeff_stat)
                 )
             ),
             p_coeff_stat_txt = ifelse(
                 is.na(p_coeff_stat),
                 "",
-                miscresults$mk_p_text_with_label(
-                    p_coeff_stat,
-                    ns_text = ns_text
+                ifelse(
+                    vector_using_t_not_Z & abs(coeff_stat) < min_abs_t,
+                    ns_text,
+                    miscresults$mk_p_text_with_label(
+                        p_coeff_stat,
+                        ns_text = ns_text
+                    )
                 )
             ),
         )

@@ -402,14 +402,14 @@ ft2 <- (
         j = c("Placebo", "Low dose", "High dose")
     )
 )
-m3a <- mk_model(
+m3a <- mk_model_anova_coeffs(
     model_fn = lm,
     formula = performance ~ age + drug * sex,
     data = fd3,
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS
 )
 ft3a <- m3a$table_flex
-m3b <- mk_model(
+m3b <- mk_model_anova_coeffs(
     model_fn = glm,
     formula = succeeded ~ age + drug * sex,
     family = binomial(link = "logit"),
