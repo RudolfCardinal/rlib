@@ -1769,31 +1769,50 @@ miscresults$detect_significant_in_result_str <- function(x) {
 
 
 miscresults$insert_caption_row <- function(
-    markdown_table,
+    .data,
     caption,
-    rownum_to_precede = 1,
-    colnum = 1
+    .before = NULL,
+    .after = NULL,
+    .colnum = 1
 ) {
-    # Insert a caption row into a markdown table, before the row specified by
-    # rownum_to_precede, with text in the column specified by colnum.
+    # Insert a caption row into a data frame or similar, before the row
+    # specified by .before or after that specified by .after, with text in the
+    # column specified by .colnum.
+    #
+    # NOTE ALTERNATIVES:
+    # - tibble::add_row(), but this supplies NA to all other columns.
 
-    nr <- nrow(markdown_table)
-    stopifnot(rownum_to_precede >= 1 && rownum_to_precede <= nr + 1)
+    # Check parameters
+    if (!xor(is.null(.before), is.null(.after))) {
+        stop("Must specify .before or .after (and not both)")
+    }
     # Build new row
-    nc <- ncol(markdown_table)
+    nc <- ncol(.data)
     m <- data.frame(matrix("", nrow = 1, ncol = nc))
-    colnames(m) <- colnames(markdown_table)
-    m[1, colnum] <- caption
-    # Reassemble
-    result <- NULL
-    if (rownum_to_precede > 1) {
-        result <- rbind(result, markdown_table[1:rownum_to_precede, ])
+    colnames(m) <- colnames(.data)
+    m[1, .colnum] <- caption
+    # Assemble
+    nr <- nrow(.data)
+    data_before <- NULL
+    data_after <- NULL
+    if (!is.null(.before)) {
+        stopifnot(.before >= 1 && .before <= nr + 1)
+        if (.before > 1) {
+            data_before <- .data %>% filter(row_number() < .before)
+        }
+        if (.before <= nr) {
+            data_after <- .data %>% filter(row_number() >= .before)
+        }
+    } else {
+        stopifnot(.after >= 0 && .after <= nr)
+        if (.after >= 1) {
+            data_before <- .data %>% filter(row_number() <= .after)
+        }
+        if (.after < nr) {
+            data_after <- .data %>% filter(row_number() > .after)
+        }
     }
-    result <- rbind(result, m)
-    if (rownum_to_precede <= nr) {
-        result <- rbind(result, markdown_table[rownum_to_precede:nr, ])
-    }
-    return(result)
+    return(rbind(data_before, m, data_after))
 }
 
 
