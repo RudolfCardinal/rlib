@@ -1311,6 +1311,7 @@ miscresults$mk_model_anova_coeffs <- function(
     # Collate ANOVA and coefficient information
     # -------------------------------------------------------------------------
 
+    using_type_III_ss <- type == "III" || type == 3
     r_default_contrasts <- c(
         unordered = "contr.treatment",
         ordered = "contr.poly"
@@ -1320,7 +1321,7 @@ miscresults$mk_model_anova_coeffs <- function(
         ordered = "contr.poly"
     )
     if (is.null(contrasts_anova_model)) {
-        if (type == "III" || type == 3) {
+        if (using_type_III_ss) {
             # Should override contrasts for car::Anova using type III SS.
             contrasts_anova_model <- type_III_contrasts
         } else {
@@ -1384,10 +1385,12 @@ miscresults$mk_model_anova_coeffs <- function(
         )
     }
 
-    # The intercept from the ANOVA model is *not* the same as the intercept
-    # from the coefficients model. Do not consider the ANOVA F test for the
-    # intercept.
-    intermediate_anova <- filter(intermediate_anova, !is_intercept)
+    # If we are using Type II SS, the intercept from the ANOVA model is *not*
+    # the same as the intercept from the coefficients model. Do not consider
+    # the ANOVA F test for the intercept.
+    if (using_type_III_ss) {
+        intermediate_anova <- filter(intermediate_anova, !is_intercept)
+    }
 
     n_anova_terms <- nrow(intermediate_anova)
     intermediate_anova$term_idx <- 1:n_anova_terms
