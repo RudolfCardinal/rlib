@@ -1,5 +1,8 @@
 # miscresults.R
 #
+# -----------------------------------------------------------------------------
+# Reporting standards
+# -----------------------------------------------------------------------------
 # Some guidelines on reporting statistics include:
 # - https://support.jmir.org/hc/en-us/articles/360019690851-Guidelines-for-Reporting-Statistics
 # - https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2959222/
@@ -15,6 +18,27 @@
 #   negative numbers.
 # - But generally it's good to be explicit! So we'll be explicit for the
 #   defaults.
+#
+# -----------------------------------------------------------------------------
+# Markdown for flextable
+# -----------------------------------------------------------------------------
+# ftExtra uses Pandoc markdown;
+# - https://www.uv.es/wikibase/doc/cas/pandoc_manual_2.7.3.wiki?53
+# - https://ftextra.atusy.net/articles/format_columns
+#
+# Notably:
+#
+# - italics: *x*
+# - bold: **x**
+# - subscript: ~x~
+# - superscript: ^x^
+# - newline: backslash then newline immediately (see miscresults$NEWLINE below)
+#
+# Less often:
+#
+# - code: `x`
+# - underline: [x]{.underline}
+
 
 tmp_require_package_namespace <- function(...) {
     packages <- as.character(match.call(expand.dots = FALSE)[[2]])
@@ -66,9 +90,6 @@ miscresults$DOUBLE_VERTICAL_LINE <- "\u2016"
 miscresults$PILCROW <- "\u00B6"
 
 miscresults$NEWLINE <- "\\\n"  # two characters: backslash, newline
-# ... ftExtra uses Pandoc markdown;
-# - https://www.uv.es/wikibase/doc/cas/pandoc_manual_2.7.3.wiki?53
-# - https://ftextra.atusy.net/articles/format_columns
 
 miscresults$DEFAULT_DP_FOR_DF <- 1  # decimal places for non-integer degrees of freedom
 miscresults$MINIMUM_P_SHOWN <- 2.2e-16
@@ -1149,6 +1170,7 @@ miscresults$mk_model_anova_coeffs <- function(
     show_ci = TRUE,
     suppress_nonsig_coeffs = TRUE,
     suppress_nonsig_coeff_tests = TRUE,
+    keep_intercept_if_suppressing = TRUE,
     # Tweaking:
     min_abs_t = miscresults$MINIMUM_ABS_T_SHOWN,
     omit_df_below_min_t = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS,
@@ -1219,7 +1241,8 @@ miscresults$mk_model_anova_coeffs <- function(
     #   include_intercept:
     #       Include a row showing the intercept term of the model.
     #   include_reference_levels:
-    #       Include reference levels.
+    #       Include reference levels of factors (though without coefficient
+    #       detail, of course).
     #   predictor_replacements:
     #       Vector of replacements to apply to all predictor text, e.g.
     #       c("from1" = "to1", "from2" = "to2", ...), or NULL.
@@ -1235,6 +1258,9 @@ miscresults$mk_model_anova_coeffs <- function(
     #       If the ANOVA F test is not significant, show coefficient rows
     #       (assuming suppress_nonsig_coeff_tests is not TRUE), but do not show
     #       statistical tests of those coefficients.
+    #   keep_intercept_if_suppressing:
+    #       Retains the intercept coefficient (assuming include_intercept is
+    #       TRUE) even if suppress_nonsig_coeffs is TRUE.
     #
     #   min_abs_t:
     #       See fmt_t_p().
@@ -1481,9 +1507,14 @@ miscresults$mk_model_anova_coeffs <- function(
         for (t_idx in 1:n_anova_terms) {
             if (intermediate_anova[t_idx, ]$pF >= alpha_show_coeffs) {
                 if (suppress_nonsig_coeffs) {
+                    # Remove this set of coefficients, i.e. keep all others.
+                    # We might keep the intercept for this term also.
                     intermediate_coeffs <- (
                         intermediate_coeffs %>%
-                        filter(term_idx != t_idx)
+                        filter(
+                            term_idx != t_idx
+                            | (is_intercept & keep_intercept_if_suppressing)
+                        )
                     )
                 } else if (suppress_nonsig_coeff_tests) {
                     rownums <- which(intermediate_coeffs$term_idx == t_idx)
