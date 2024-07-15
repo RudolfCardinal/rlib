@@ -1446,6 +1446,8 @@ miscresults$mk_model_anova_coeffs <- function(
             )
         )
     }
+
+    # Add reference levels?
     intermediate_coeffs$is_reference_level <- FALSE
     if (include_reference_levels) {
         for (i in 1:n_anova_terms) {
@@ -1471,6 +1473,8 @@ miscresults$mk_model_anova_coeffs <- function(
             }
         }
     }
+
+    # Add confidendence intervals. Also mark intercepts.
     if (using_t_not_Z) {
         conf_int <- miscstat$confidence_interval_from_mu_sem_df_via_t(
             mu = intermediate_coeffs$coeff,
@@ -1489,7 +1493,12 @@ miscresults$mk_model_anova_coeffs <- function(
         intermediate_coeffs
         %>% mutate(
             ci_lower = conf_int$ci_lower,
-            ci_upper = conf_int$ci_upper
+            ci_upper = conf_int$ci_upper,
+            is_intercept = ifelse(
+                is.na(anova_term_name),
+                FALSE,
+                anova_term_name == R_INTERCEPT_LABEL
+            )
         )
     )
 
@@ -1536,19 +1545,13 @@ miscresults$mk_model_anova_coeffs <- function(
         )
         %>% mutate(
             is_subterm = ifelse(
-                !is.na(is_subterm.x),
-                is_subterm.x,
-                is_subterm.y
-            ),
-            is_intercept = ifelse(
-                is.na(anova_term_name),
-                FALSE,
-                anova_term_name == R_INTERCEPT_LABEL
-            ),
-            is_subterm = ifelse(
                 is_intercept,
                 FALSE,
-                is_subterm
+                ifelse(
+                    !is.na(is_subterm.x),
+                    is_subterm.x,
+                    is_subterm.y
+                )
             )
         )
         %>% dplyr::select(-is_subterm.x, -is_subterm.y)
@@ -1557,8 +1560,6 @@ miscresults$mk_model_anova_coeffs <- function(
     if (!include_intercept) {
         intermediate <- intermediate %>% filter(!is_intercept)
     }
-    # ... is_subterm will be taken from the first, where there's a clash, which
-    # is what we want.
 
     # -------------------------------------------------------------------------
     # Debugging output?
