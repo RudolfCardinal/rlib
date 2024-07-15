@@ -1494,11 +1494,7 @@ miscresults$mk_model_anova_coeffs <- function(
         %>% mutate(
             ci_lower = conf_int$ci_lower,
             ci_upper = conf_int$ci_upper,
-            is_intercept = ifelse(
-                is.na(anova_term_name),
-                FALSE,
-                anova_term_name == R_INTERCEPT_LABEL
-            )
+            is_intercept = anova_term_name == R_INTERCEPT_LABEL
         )
     )
 
@@ -1544,6 +1540,15 @@ miscresults$mk_model_anova_coeffs <- function(
             by = c("term_idx", "subterm_idx")
         )
         %>% mutate(
+            is_intercept = ifelse(
+                is.na(is_intercept),
+                ifelse(  # from the ANOVA table
+                    is.na(anova_term_name),
+                    FALSE,
+                    anova_term_name == R_INTERCEPT_LABEL
+                ),
+                is_intercept  # from the coefficients table
+            ),
             is_subterm = ifelse(
                 is_intercept,
                 FALSE,
@@ -1750,6 +1755,35 @@ miscresults$detect_significant_in_result_str <- function(x) {
     # asterisks (\*+), end of string ($). Then additional backslashes for R.
     # See example of usage in test_flextable.R.
     stringr::str_detect(x, "\\s\\*+$")
+}
+
+
+miscresults$insert_caption_row <- function(
+    markdown_table,
+    caption,
+    rownum_to_precede = 1,
+    colnum = 1
+) {
+    # Insert a caption row into a markdown table, before the row specified by
+    # rownum_to_precede, with text in the column specified by colnum.
+
+    nr <- nrow(markdown_table)
+    stopifnot(rownum_to_precede >= 1 && rownum_to_precede <= nr + 1)
+    # Build new row
+    nc <- ncol(markdown_table)
+    m <- data.frame(matrix("", nrow = 1, ncol = nc))
+    colnames(m) <- colnames(markdown_table)
+    m[1, colnum] <- caption
+    # Reassemble
+    result <- NULL
+    if (rownum_to_precede > 1) {
+        result <- rbind(result, markdown_table[1:rownum_to_precede, ])
+    }
+    result <- rbind(result, m)
+    if (rownum_to_precede <= nr) {
+        result <- rbind(result, markdown_table[(rownum_to_precede + 1):nr, ])
+    }
+    return(result)
 }
 
 
