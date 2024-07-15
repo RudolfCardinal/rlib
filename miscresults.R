@@ -1378,13 +1378,19 @@ miscresults$mk_model_anova_coeffs <- function(
                 is_subterm = FALSE,
                 F = a$`F value`[i],
                 df = a$Df[i],
-                pF = a$`Pr(>F)`[i]
+                pF = a$`Pr(>F)`[i],
+                is_intercept = term_name == R_INTERCEPT_LABEL
             )
         )
     }
     n_anova_terms <- nrow(intermediate_anova)
     intermediate_anova$term_idx <- 1:n_anova_terms
     intermediate_anova$subterm_idx <- 0
+
+    # The intercept from the ANOVA model is *not* the same as the intercept
+    # from the coefficients model. Do not consider the ANOVA F test for the
+    # intercept.
+    intermediate_anova <- filter(intermediate_anova, !is_intercept)
 
     # -------------------------------------------------------------------------
     # Build our version of the coefficient table
@@ -1540,15 +1546,6 @@ miscresults$mk_model_anova_coeffs <- function(
             by = c("term_idx", "subterm_idx")
         )
         %>% mutate(
-            is_intercept = ifelse(
-                is.na(is_intercept),
-                ifelse(  # from the ANOVA table
-                    is.na(anova_term_name),
-                    FALSE,
-                    anova_term_name == R_INTERCEPT_LABEL
-                ),
-                is_intercept  # from the coefficients table
-            ),
             is_subterm = ifelse(
                 is_intercept,
                 FALSE,
