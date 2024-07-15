@@ -1383,14 +1383,15 @@ miscresults$mk_model_anova_coeffs <- function(
             )
         )
     }
-    n_anova_terms <- nrow(intermediate_anova)
-    intermediate_anova$term_idx <- 1:n_anova_terms
-    intermediate_anova$subterm_idx <- 0
 
     # The intercept from the ANOVA model is *not* the same as the intercept
     # from the coefficients model. Do not consider the ANOVA F test for the
     # intercept.
     intermediate_anova <- filter(intermediate_anova, !is_intercept)
+
+    n_anova_terms <- nrow(intermediate_anova)
+    intermediate_anova$term_idx <- 1:n_anova_terms
+    intermediate_anova$subterm_idx <- 0
 
     # -------------------------------------------------------------------------
     # Build our version of the coefficient table
