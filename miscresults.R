@@ -1547,6 +1547,12 @@ miscresults$mk_model_anova_coeffs <- function(
             by = c("term_idx", "subterm_idx")
         )
         %>% mutate(
+            # Fix columns present in both:
+            is_intercept = ifelse(
+                !is.na(is_intercept.x),
+                is_intercept.x,
+                is_intercept.y
+            ),
             is_subterm = ifelse(
                 is_intercept,
                 FALSE,
@@ -1557,7 +1563,10 @@ miscresults$mk_model_anova_coeffs <- function(
                 )
             )
         )
-        %>% dplyr::select(-is_subterm.x, -is_subterm.y)
+        %>% dplyr::select(
+            -is_intercept.x, -is_intercept.y,
+            -is_subterm.x, -is_subterm.y,
+        )
         %>% dplyr::arrange(term_idx, subterm_idx)
     )
     if (!include_intercept) {
