@@ -1781,7 +1781,7 @@ miscresults$insert_caption_row <- function(
     }
     result <- rbind(result, m)
     if (rownum_to_precede <= nr) {
-        result <- rbind(result, markdown_table[(rownum_to_precede + 1):nr, ])
+        result <- rbind(result, markdown_table[rownum_to_precede:nr, ])
     }
     return(result)
 }
