@@ -49,6 +49,7 @@ tmp_require_package_namespace(
     flextable,
     ftExtra,  # for markup within flextable tables
     rcompanion,  # for wilcoxonZ
+    rlang,  # for dots_n
     tidyverse
 )
 rm(tmp_require_package_namespace)
@@ -1768,51 +1769,102 @@ miscresults$detect_significant_in_result_str <- function(x) {
 }
 
 
-miscresults$insert_caption_row <- function(
+miscresults$insert_row <- function(
     .data,
-    caption,
+    ...,
     .before = NULL,
     .after = NULL,
+    .default = NA,
     .colnum = 1
 ) {
-    # Insert a caption row into a data frame or similar, before the row
-    # specified by .before or after that specified by .after, with text in the
-    # column specified by .colnum.
+    # Insert a row into a data frame or similar, before the row specified by
+    # .before (range 1 to the number of rows in .data plus 1) or after that
+    # specified by .after (range 0 to the number of rows in .data). Default is
+    # at the top (equivalent to .before = 1 or .after = 0).
     #
-    # NOTE ALTERNATIVES:
-    # - tibble::add_row(), but this supplies NA to all other columns.
+    # This closely resembles tibble::add_row(). However, (a) you can pass a
+    # single unnamed variable, and that will then be inserted in column
+    # .colnum; (b) you can specify a default that is not NA.
 
     # Check parameters
-    if (!xor(is.null(.before), is.null(.after))) {
-        stop("Must specify .before or .after (and not both)")
+    if (!is.data.frame(.data)) {
+        stop("miscresults$insert_row: .data must be a data frame")
     }
+    if (!is.null(.before) && !is.null(.after)) {
+        # Both specified.
+        stop("miscresults$insert_row: Can't specify both .before and .after")
+    }
+    if (is.null(.before) && is.null(.after)) {
+        # Neither specified. Insert at top.
+        .before <- 1
+    }
+
     # Build new row
     nc <- ncol(.data)
-    m <- data.frame(matrix("", nrow = 1, ncol = nc))
-    colnames(m) <- colnames(.data)
-    m[1, .colnum] <- caption
+    cn <- colnames(.data)
+    if (rlang::dots_n(...) == 0) {
+        # No new data. Insert a blank row.
+        newrow <- data.frame(matrix(.default, nrow = 1, ncol = nc))
+        colnames(newrow) <- cn
+    } else {
+        dl <- list(...)
+        if (length(dl) == 1 && is.null(names(dl))) {
+            # Single unnamed new data item.
+            if (.colnum < 1 || .colnum > nc) {
+                stop("miscresults$insert_row: .colnum out of range of .data")
+            }
+            newrow <- data.frame(matrix(.default, nrow = 1, ncol = nc))
+            newrow[1, .colnum] <- dl[[1]]
+            colnames(newrow) <- cn
+        } else {
+            # Named or multiple new items.
+            newrow <- as.data.frame(dl)
+            newnames <- colnames(newrow)
+            missing_vars <- setdiff(cn, newnames)
+            # ... those present in .data but not in the arguments
+            if (length(missing_vars) > 0) {
+                for (i in 1:length(missing_vars)) {
+                    newrow[missing_vars[i]] <- .default
+                }
+            }
+            extra_vars <- setdiff(newnames, cn)
+            # ... those present in the arguments but not in .data
+            if (length(extra_vars) > 0) {
+                stop(paste0(
+                    "miscresults$insert_row: columns specified that were not ",
+                    "in .data: ",
+                    paste(extra_vars, collapse = ", ")
+                ))
+            }
+        }
+    }
+
     # Assemble
     nr <- nrow(.data)
     data_before <- NULL
     data_after <- NULL
     if (!is.null(.before)) {
-        stopifnot(.before >= 1 && .before <= nr + 1)
+        if (.before < 1 | .before > nr + 1) {
+            stop("miscresults$insert_row: .before out of range of .data")
+        }
         if (.before > 1) {
-            data_before <- .data %>% filter(row_number() < .before)
+            data_before <- .data[1:(.before - 1), ]
         }
         if (.before <= nr) {
-            data_after <- .data %>% filter(row_number() >= .before)
+            data_after <- .data[.before:nr, ]
         }
     } else {
-        stopifnot(.after >= 0 && .after <= nr)
+        if (.after < 0 || .after > nr) {
+            stop("miscresults$insert_row: .after out of range of .data")
+        }
         if (.after >= 1) {
-            data_before <- .data %>% filter(row_number() <= .after)
+            data_before <- .data[1:.after, ]
         }
         if (.after < nr) {
-            data_after <- .data %>% filter(row_number() > .after)
+            data_after <- .data[(.after + 1):nr, ]
         }
     }
-    return(rbind(data_before, m, data_after))
+    return(rbind(data_before, newrow, data_after, make.row.names = FALSE))
 }
 
 
