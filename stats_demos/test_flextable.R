@@ -311,20 +311,28 @@ fd3 <- data.table(do.call(
     simplify = FALSE)
 ))
 fd3[, age := rnorm(n = nrow(fd3), mean = 40, sd = 10)]
-fd3[, y_start := 100.0]
-fd3[, y_age := 0.2 * age]
-# DO NOT USE:
-# as.numeric(plyr::mapvalues(sex, from = c(SEX_FEMALE, SEX_MALE), to = c(3, -3)))
-# ... this uses a factor internally and yields 1, 2 etc.
+# These should be recovered in the table, ft3a:
+COEFF_INTERCEPT <- 100.0
+COEFF_AGE <- 0.2  # per year
+COEFF_MALE <- -3  # versus female (reference)
+COEFF_DRUG_LOW <- 5  # versus placebo (reference)
+COEFF_DRUG_HIGH <- -5  # versus placebo (reference)
+fd3[, y_start := COEFF_INTERCEPT]
+fd3[, y_age := COEFF_AGE * age]
 fd3[, y_sex := case_when(
-    sex == SEX_FEMALE ~ 3,
-    sex == SEX_MALE ~ -3,
+    sex == SEX_FEMALE ~ 0,  # must be zero for recovered intercept to be right
+    sex == SEX_MALE ~ COEFF_MALE,
     TRUE ~ NA_real_
 )]
+# ... DO NOT USE:
+# as.numeric(plyr::mapvalues(
+#   sex, from = c(SEX_FEMALE, SEX_MALE), to = c(0, COEFF_MALE)
+# ))
+# ... this uses a factor internally and yields 1, 2 etc.
 fd3[, y_drug := case_when(
-    drug == DRUG_PLACEBO ~ 0,
-    drug == DRUG_LOW ~ 5,
-    drug == DRUG_HIGH ~ -5,
+    drug == DRUG_PLACEBO ~ 0,  # must be zero as above
+    drug == DRUG_LOW ~ COEFF_DRUG_LOW,
+    drug == DRUG_HIGH ~ COEFF_DRUG_HIGH,
     TRUE ~ NA_real_
 )]
 fd3[, err := rnorm(n = nrow(fd3), mean = 0, sd = 2.0)]

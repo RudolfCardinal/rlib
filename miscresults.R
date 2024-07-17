@@ -204,14 +204,10 @@ miscresults$fmt_int <- function(
         stringr::str_replace_all(txt, miscresults$HYPHEN, miscresults$MINUS)
     )
     # Deal with NaN and NA (in parallel):
-    return(ifelse(
-        is.nan(x),
-        nan_str,
-        ifelse(
-            is.na(x),
-            na_str,
-            txt
-        )
+    return(case_when(
+        is.nan(x) ~ nan_str,
+        is.na(x) ~ na_str,
+        .default = txt
     ))
 }
 
@@ -284,14 +280,10 @@ miscresults$fmt_float <- function(
         stringr::str_replace_all(txt, miscresults$HYPHEN, miscresults$MINUS)
     )
     # Deal with NaN and NA (in parallel):
-    return(ifelse(
-        is.nan(x),
-        nan_str,
-        ifelse(
-            is.na(x),
-            na_str,
-            txt
-        )
+    return(case_when(
+        is.nan(x) ~ nan_str,
+        is.na(x) ~ na_str,
+        .default = txt
     ))
 }
 
@@ -372,7 +364,8 @@ miscresults$mk_df_text <- function(
 miscresults$fmt_pct <- function(
     proportion,
     include_trailing_zero = FALSE,
-    ...
+    na_str = get_flextable_defaults()$na_str,
+    nan_str = get_flextable_defaults()$nan_str
 ) {
     # Format a proportion (e.g. 0.5) as a percentage (e.g. "50%").
     pct <- 100 * proportion
@@ -384,14 +377,10 @@ miscresults$fmt_pct <- function(
         ),
         "%"
     )
-    return(ifelse(
-        is.nan(proportion),
-        nan_str,
-        ifelse(
-            is.na(proportion),
-            na_str,
-            txt
-        )
+    return(case_when(
+        is.nan(proportion) ~ nan_str,
+        is.na(proportion) ~ na_str,
+        .default = txt
     ))
 }
 
@@ -404,6 +393,7 @@ miscresults$fmt_n_percent <- function(
     # Format a number and a proportion as "n (x%)", where x is the percentage
     # form of the proportion. As for flextable::fmt_n_percent, but emphasizes
     # significant figures rather than decimal places for the percentage.
+    #
     # Additional parameters are passed to fmt_pct().
     ifelse(
         is.na(n) | is.na(proportion),
@@ -1180,8 +1170,10 @@ miscresults$mk_model_anova_coeffs <- function(
     ns_text = miscresults$NOT_SIGNIFICANT,
     interaction_txt = paste0(" ", miscresults$MULTIPLY, " "),
     alpha_show_coeffs = miscresults$DEFAULT_ALPHA,
-    reference_suffix = " (reference)",
+    reference_label = "Reference",
+    level_not_applicable = miscresults$EN_DASH,
     ci = miscresults$DEFAULT_CI,
+    show_ss_type = FALSE,
     debug = FALSE,
     # Extras for model_fn:
     ...
@@ -1200,7 +1192,9 @@ miscresults$mk_model_anova_coeffs <- function(
     #   data:
     #       Data, passed to model_fn.
     #   type:
-    #       Type for sums of squares, via car::Anova, e.g. "II", "III"
+    #       Type for sums of squares, e.g. "I", "II", "III".
+    #       Uses car::Anova for type II/III, or stats::anova for type I [with
+    #       limited support, e.g. not for stats::anova(glm(...)) yet].
     #   contrasts_anova_model:
     #       Global contrast options to specify for the ANOVA model. If NULL, do
     #       something sensible, namely:
@@ -1278,12 +1272,17 @@ miscresults$mk_model_anova_coeffs <- function(
     #   alpha_show_coeffs:
     #       The alpha value to use for suppress_nonsig_coeffs and
     #       suppress_nonsig_coeff_tests.
-    #   reference_suffix:
-    #       If include_reference_levels, append this suffix to the name of the
-    #       reference level.
+    #   reference_label:
+    #       If include_reference_levels, use this text for the coefficient
+    #       column of the reference level.
+    #   level_not_applicable:
+    #       Text to show in the "Level" column when it's not applicable, i.e.
+    #       for continuous predictors.
     #   ci:
     #       If show_ci is true, which confidence intervals to use? Default is
     #       0.95, meaning 95% confidence intervals.
+    #   show_ss_type:
+    #       Show the type of sum-of-squares calculation used, in the table.
     #   debug:
     #       Be verbose?
     #
@@ -1312,7 +1311,23 @@ miscresults$mk_model_anova_coeffs <- function(
     # Collate ANOVA and coefficient information
     # -------------------------------------------------------------------------
 
+    using_type_I_ss <- type == "I" || type == 1
+    using_type_II_ss <- type == "II" || type == 2
     using_type_III_ss <- type == "III" || type == 3
+    if (!using_type_I_ss && !using_type_II_ss && !using_type_III_ss) {
+        stop("Bad sum-of-squares type argument")
+    }
+    formatted_ss_type <- paste0(
+        " (Type ",
+        case_when(
+            using_type_I_ss ~ "I",
+            using_type_II_ss ~ "II",
+            using_type_III_ss ~ "III",
+            .default = "?"  # impossible as above
+        ),
+        " SS)"
+    )
+
     r_default_contrasts <- c(
         unordered = "contr.treatment",
         ordered = "contr.poly"
@@ -1340,8 +1355,12 @@ miscresults$mk_model_anova_coeffs <- function(
     m2 <- model_fn(formula, data = data, ...)
     options(contrasts = saved_options_contrasts)  # restore
 
-    a <- car::Anova(m1, type = type, test.statistic = "F")
-    # ... of classes: anova, data.frame
+    if (using_type_I_ss) {
+        a <- stats::anova(m1)
+    } else {
+        a <- car::Anova(m1, type = type, test.statistic = "F")
+        # ... of classes: anova, data.frame
+    }
     s <- summary(m2)
     # ... of class e.g. summary.lm, and of mode list
     coeffs <- s$coefficients
@@ -1366,7 +1385,14 @@ miscresults$mk_model_anova_coeffs <- function(
     # -------------------------------------------------------------------------
     intermediate_anova <- NULL
     nrow_anova <- nrow(a)
-    stopifnot(rownames(a)[nrow_anova] == R_RESIDUALS_LABEL)
+    if(rownames(a)[nrow_anova] != R_RESIDUALS_LABEL) {
+        stop(paste0(
+            "This function can't yet extract residuals from this type of ",
+            "object. If you are using a glm() object with Type I sums of ",
+            "squares, that might be why; anova(glm()) produces an analysis ",
+            "of deviance (rather than variance) table."
+        ))
+    }
     df_resid <- a$Df[nrow_anova]
     for (i in 1:nrow_anova) {
         term_name <- rownames(a)[i]
@@ -1557,14 +1583,16 @@ miscresults$mk_model_anova_coeffs <- function(
                 is_intercept.x,
                 is_intercept.y
             ),
-            is_subterm = ifelse(
-                is_intercept,
+            is_subterm = case_when(
+                is_intercept ~ FALSE,
+                !is.na(is_subterm.x) ~ is_subterm.x,
+                .default = is_subterm.y
+            ),
+            # Or not present in both:
+            is_reference_level = ifelse(
+                is.na(is_reference_level),
                 FALSE,
-                ifelse(
-                    !is.na(is_subterm.x),
-                    is_subterm.x,
-                    is_subterm.y
-                )
+                is_reference_level
             )
         )
         %>% dplyr::select(
@@ -1601,110 +1629,87 @@ miscresults$mk_model_anova_coeffs <- function(
         intermediate
         %>% mutate(
             # Now format.
-            vector_using_t_not_Z = using_t_not_Z,  # see below
-            vector_show_ci = ci,
             # Also fix an oddity: glm() output can produce a coefficient but
             # not an ANOVA term for the intercept, so in that case we move the
             # label to the "term" column.
-            formatted_term = ifelse(
-                is_intercept,
-                R_INTERCEPT_LABEL,
-                ifelse(
-                    is_subterm,
-                    "",
-                    miscresults$fmt_predictor(
-                        term,
-                        replacements = predictor_replacements,
-                        interaction_txt = interaction_txt
-                    )
+            formatted_term = case_when(
+                is_intercept ~ R_INTERCEPT_LABEL,
+                is_subterm ~ "",
+                .default = miscresults$fmt_predictor(
+                    term,
+                    replacements = predictor_replacements,
+                    interaction_txt = interaction_txt
                 )
             ),
-            formatted_level = ifelse(
-                is_intercept,
-                "",
-                ifelse(
-                    is_subterm,
-                    paste0(
-                        miscresults$fmt_level(
-                            level,
-                            anova_term_name,
-                            replacements = predictor_replacements,
-                            interaction_txt = interaction_txt
-                        ),
-                        ifelse(is_reference_level, reference_suffix, "")
-                    ),
-                    ""
-                )
-            ),
-            f_txt = ifelse(
-                is.na(F),
-                "",
-                miscresults$fmt_F(
+            f_txt = case_when(
+                is.na(F) ~ "",
+                .default = miscresults$fmt_F(
                     F, df, df_resid,
                     min_F = min_F,
                     omit_df_below_min_F = omit_df_below_min_F
                 )
             ),
-            pf_txt = ifelse(
-                is.na(pF),
-                "",
-                ifelse(
-                    F < min_F,
-                    ns_text,
-                    miscresults$mk_p_text_with_label(pF, ns_text = ns_text)
+            pf_txt = case_when(
+                is.na(pF) ~ "",
+                F < min_F ~ ns_text,
+                .default = miscresults$mk_p_text_with_label(
+                    pF,
+                    ns_text = ns_text
                 )
             ),
-            coeff_txt = ifelse(
-                is.na(coeff),
-                "",
-                ifelse(
-                    vector_show_ci,
-                    miscresults$fmt_value_ci(
-                        x = coeff,
-                        ci_lower = ci_lower,
-                        ci_upper = ci_upper,
-                        use_plus = coeff_use_plus
-                    ),
-                    miscresults$fmt_float(coeff, use_plus = coeff_use_plus)
+            formatted_level = case_when(
+                is_intercept ~ level_not_applicable,
+                is_subterm ~ miscresults$fmt_level(
+                    level,
+                    anova_term_name,
+                    replacements = predictor_replacements,
+                    interaction_txt = interaction_txt
+                ),
+                !is.na(coeff) ~ level_not_applicable,
+                .default = ""
+            ),
+            coeff_txt = case_when(
+                is_reference_level ~ reference_label,
+                is.na(coeff) ~ "",
+                show_ci ~ miscresults$fmt_value_ci(
+                    x = coeff,
+                    ci_lower = ci_lower,
+                    ci_upper = ci_upper,
+                    use_plus = coeff_use_plus
+                ),
+                .default = miscresults$fmt_float(
+                    coeff,
+                    use_plus = coeff_use_plus
                 )
             ),
-            se_txt = ifelse(
-                is.na(se),
-                "",
-                miscresults$fmt_float(se)
+            se_txt = case_when(
+                is.na(se) ~ "",
+                .default = miscresults$fmt_float(se)
             ),
-            coeff_stat_txt = ifelse(
-                is.na(coeff_stat),
-                "",
-                ifelse(
-                    vector_using_t_not_Z,  # must be PARALLEL as above
-                    miscresults$fmt_t(
-                        t = coeff_stat,
-                        df = coeff_rdf_for_t,
-                        min_abs_t = min_abs_t,
-                        omit_df_below_min_t = omit_df_below_min_t
-                    ),
-                    miscresults$fmt_Z(coeff_stat)
-                )
+            coeff_stat_txt = case_when(
+                is.na(coeff_stat) ~ "",
+                using_t_not_Z ~ miscresults$fmt_t(
+                    t = coeff_stat,
+                    df = coeff_rdf_for_t,
+                    min_abs_t = min_abs_t,
+                    omit_df_below_min_t = omit_df_below_min_t
+                ),
+                .default = miscresults$fmt_Z(coeff_stat)
             ),
-            p_coeff_stat_txt = ifelse(
-                is.na(p_coeff_stat),
-                "",
-                ifelse(
-                    vector_using_t_not_Z & abs(coeff_stat) < min_abs_t,
-                    ns_text,
-                    miscresults$mk_p_text_with_label(
-                        p_coeff_stat,
-                        ns_text = ns_text
-                    )
+            p_coeff_stat_txt = case_when(
+                is.na(p_coeff_stat) ~ "",
+                using_t_not_Z & abs(coeff_stat) < min_abs_t ~ ns_text,
+                .default = miscresults$mk_p_text_with_label(
+                    p_coeff_stat,
+                    ns_text = ns_text
                 )
             ),
         )
         %>% select(
             formatted_term,
-            formatted_level,
             f_txt,
             pf_txt,
+            formatted_level,
             coeff_txt,
             se_txt,
             coeff_stat_txt,
@@ -1714,9 +1719,12 @@ miscresults$mk_model_anova_coeffs <- function(
     colnames(resultstable) <- c(
         # Prettier versions:
         "Term",
-        "Level",
-        "*F*",
+        paste0(
+            "*F*",
+            ifelse(show_ss_type, formatted_ss_type, "")
+        ),
         "*p~F~*",
+        "Level",
         ifelse(
             show_ci,
             paste0("Coefficient (", ci_pct, "% CI)"),
