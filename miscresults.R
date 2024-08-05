@@ -1173,7 +1173,7 @@ miscresults$mk_model_anova_coeffs <- function(
     reference_label = "Reference",
     level_not_applicable = miscresults$EN_DASH,
     ci = miscresults$DEFAULT_CI,
-    show_ss_type = FALSE,
+    show_ss_type = TRUE,
     debug = FALSE,
     # Extras for model_fn:
     ...
@@ -1318,14 +1318,14 @@ miscresults$mk_model_anova_coeffs <- function(
         stop("Bad sum-of-squares type argument")
     }
     formatted_ss_type <- paste0(
-        " (Type ",
+        " (via Type ",
         case_when(
             using_type_I_ss ~ "I",
             using_type_II_ss ~ "II",
             using_type_III_ss ~ "III",
             .default = "?"  # impossible as above
         ),
-        " SS)"
+        " sums of squares)"
     )
 
     r_default_contrasts <- c(
