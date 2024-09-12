@@ -83,7 +83,7 @@ miscresults$PLUS_MINUS <- "\u00B1"  # case-insensitive
 
 # Traditional order for footnotes:
 # - https://en.wikipedia.org/wiki/Note_(typography)
-# - asterisk (*), then:
+miscresults$ASTERISK <- "*"
 miscresults$DAGGER <- "\u2020"
 miscresults$DOUBLE_DAGGER <- "\u2021"
 miscresults$SECTION <- "\u00A7"
@@ -1162,6 +1162,7 @@ miscresults$mk_model_anova_coeffs <- function(
     suppress_nonsig_coeffs = TRUE,
     suppress_nonsig_coeff_tests = TRUE,
     keep_intercept_if_suppressing = TRUE,
+    squish_up_level_rows = FALSE,
     # Tweaking:
     min_abs_t = miscresults$MINIMUM_ABS_T_SHOWN,
     omit_df_below_min_t = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS,
@@ -1256,6 +1257,10 @@ miscresults$mk_model_anova_coeffs <- function(
     #   keep_intercept_if_suppressing:
     #       Retains the intercept coefficient (assuming include_intercept is
     #       TRUE) even if suppress_nonsig_coeffs is TRUE.
+    #   squish_up_level_rows:
+    #       Ordinarily, we report linear coefficients on the same row as the
+    #       ANOVA F test, and levels starting on the row below. If this is set
+    #       to TRUE, shift levels up, to save space.
     #
     #   min_abs_t:
     #       See fmt_t_p().
@@ -1421,6 +1426,7 @@ miscresults$mk_model_anova_coeffs <- function(
 
     n_anova_terms <- nrow(intermediate_anova)
     intermediate_anova$term_idx <- 1:n_anova_terms
+    intermediate_anova$is_term <- TRUE
     intermediate_anova$subterm_idx <- 0
 
     # -------------------------------------------------------------------------
@@ -1449,11 +1455,15 @@ miscresults$mk_model_anova_coeffs <- function(
         } else {
             anova_term_name <- intermediate_anova$term[term_idx]
         }
+        is_linear <- FALSE
         if (term_name %in% intermediate_anova$term
                 || term_name == R_INTERCEPT_LABEL) {
-            # Exact match
+            # Exact match, e.g. linear coefficient.
+            # Assign at subterm_idx = 0, i.e. level with the term.
             subterm_idx <- 0
+            is_linear <- TRUE
         } else if (is.null(intermediate_coeffs)) {
+            # Otherwise (e.g. levels of a factor): start from 1
             subterm_idx <- 1
         } else {
             prev_subterm_idxs <- intermediate_coeffs[
@@ -1470,6 +1480,7 @@ miscresults$mk_model_anova_coeffs <- function(
             data.frame(
                 level = term_name,
                 is_subterm = TRUE,
+                is_linear = is_linear,
                 term_idx = term_idx,
                 anova_term_name = anova_term_name,
                 subterm_idx = subterm_idx,
@@ -1485,6 +1496,7 @@ miscresults$mk_model_anova_coeffs <- function(
     }
 
     # Add reference levels?
+    # Insertet at subterm_idx = 0.5, i.e. before the first extracted level.
     intermediate_coeffs$is_reference_level <- FALSE
     if (include_reference_levels) {
         for (i in 1:n_anova_terms) {
@@ -1497,6 +1509,7 @@ miscresults$mk_model_anova_coeffs <- function(
                     data.frame(
                         level = first_level_name,
                         is_subterm = TRUE,
+                        is_linear = FALSE,
                         is_reference_level = TRUE,
                         term_idx = term_idx,
                         anova_term_name = term_name,
@@ -1511,7 +1524,8 @@ miscresults$mk_model_anova_coeffs <- function(
         }
     }
 
-    # Add confidendence intervals. Also mark intercepts.
+    # Add confidence intervals. Also mark intercepts, and set is_term == FALSE
+    # for later merging.
     if (using_t_not_Z) {
         conf_int <- miscstat$confidence_interval_from_mu_sem_df_via_t(
             mu = intermediate_coeffs$coeff,
@@ -1531,7 +1545,8 @@ miscresults$mk_model_anova_coeffs <- function(
         %>% mutate(
             ci_lower = conf_int$ci_lower,
             ci_upper = conf_int$ci_upper,
-            is_intercept = anova_term_name == R_INTERCEPT_LABEL
+            is_intercept = anova_term_name == R_INTERCEPT_LABEL,
+            is_term = FALSE
         )
     )
 
@@ -1559,12 +1574,39 @@ miscresults$mk_model_anova_coeffs <- function(
                         )
                     )
                 } else if (suppress_nonsig_coeff_tests) {
+                    # Keep the rows, but suppress the significant tests for
+                    # these coefficients.
                     rownums <- which(intermediate_coeffs$term_idx == t_idx)
                     intermediate_coeffs[rownums, ]$coeff_stat <- NA
                     intermediate_coeffs[rownums, ]$p_coeff_stat <- NA
                 }
             }
         }
+    }
+
+    # -------------------------------------------------------------------------
+    # Squish things up to save space?
+    # -------------------------------------------------------------------------
+    if (squish_up_level_rows) {
+        intermediate_coeffs <- (
+            intermediate_coeffs
+            %>% group_by(term_idx)
+            %>% arrange(subterm_idx)
+            %>% mutate(
+                # has_reference_level = any(is_reference_level),
+                # n_nonreference_levels = sum(!is_reference_level),
+                new_subterm_idx = row_number() - 1
+            )
+            %>% ungroup()
+            %>% mutate(
+                subterm_idx = new_subterm_idx
+                # subterm_idx = if_else(
+                #     has_reference_level | n_nonreference_levels == 1,
+                #     new_subterm_idx,
+                #     subterm_idx
+                # )
+            )
+        )
     }
 
     # -------------------------------------------------------------------------
@@ -1583,10 +1625,16 @@ miscresults$mk_model_anova_coeffs <- function(
                 is_intercept.x,
                 is_intercept.y
             ),
+            is_term = case_when(
+                # It's a term if intermediate_anova says so.
+                !is.na(is_term.x) ~ is_term.x,
+                .default = is_term.y
+            ),
             is_subterm = case_when(
+                # It's a subterm if intermediate_coeffs says so.
                 is_intercept ~ FALSE,
-                !is.na(is_subterm.x) ~ is_subterm.x,
-                .default = is_subterm.y
+                !is.na(is_subterm.y) ~ is_subterm.y,
+                .default = is_subterm.x
             ),
             # Or not present in both:
             is_reference_level = ifelse(
@@ -1634,12 +1682,12 @@ miscresults$mk_model_anova_coeffs <- function(
             # label to the "term" column.
             formatted_term = case_when(
                 is_intercept ~ R_INTERCEPT_LABEL,
-                is_subterm ~ "",
-                .default = miscresults$fmt_predictor(
+                is_term ~ miscresults$fmt_predictor(
                     term,
                     replacements = predictor_replacements,
                     interaction_txt = interaction_txt
-                )
+                ),
+                .default ="",
             ),
             f_txt = case_when(
                 is.na(F) ~ "",
@@ -1658,6 +1706,7 @@ miscresults$mk_model_anova_coeffs <- function(
                 )
             ),
             formatted_level = case_when(
+                is_reference_level ~ level,
                 is_intercept ~ level_not_applicable,
                 is_subterm ~ miscresults$fmt_level(
                     level,

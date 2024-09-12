@@ -10,7 +10,7 @@ pacman::p_load(
 )
 
 # RLIB_PREFIX <- "/srv/cardinal_rlib/"
-RLIB_PREFIX <- ""
+RLIB_PREFIX <- ""  # use when editing miscresults.R
 source(paste0(RLIB_PREFIX, "miscfile.R"))
 source(paste0(RLIB_PREFIX, "miscstat.R"))
 source(paste0(RLIB_PREFIX, "miscresults.R"))
@@ -425,6 +425,25 @@ m3b <- mk_model_anova_coeffs(
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS
 )
 ft3b <- m3b$table_flex
+m3c <- mk_model_anova_coeffs(
+    model_fn = glm,
+    formula = succeeded ~ age + drug * sex,
+    family = binomial(link = "logit"),
+    data = fd3,
+    predictor_replacements = M3_PREDICTOR_REPLACEMENTS,
+    squish_up_level_rows = TRUE  # new here
+)
+ft3c <- m3c$table_flex
+m3d <- mk_model_anova_coeffs(
+    model_fn = glm,
+    formula = succeeded ~ age + drug * sex,
+    family = binomial(link = "logit"),
+    data = fd3,
+    predictor_replacements = M3_PREDICTOR_REPLACEMENTS,
+    squish_up_level_rows = TRUE,
+    include_reference_levels = FALSE  # new here
+)
+ft3d <- m3d$table_flex
 
 
 # =============================================================================
@@ -436,8 +455,10 @@ flextable::save_as_docx(
     `Table 1` = ft1,
     `Table 1 again` = ft1,  # a second copy
     `Table 2` = ft2,
-    `Table 3a` = ft3a,
-    `Table 3b` = ft3b,
+    `Table 3a (linear)` = ft3a,
+    `Table 3b (logistic)` = ft3b,
+    `Table 3c (as 3b but squished up)` = ft3c,
+    `Table 3c (as 3c but no reference levels)` = ft3d,
     path = OUTPUT_DOCX,  # file will be created or overwritten
     align = "left",  # table (and caption) within page (not text within table)
     pr_section = prop_section(  # from "officer" package
@@ -451,8 +472,10 @@ flextable::save_as_docx(
     )
 )
 
-PROMPT <- "Press [Enter] to see next table..."
-print(ft1); readline(PROMPT)
-print(ft2); readline(PROMPT)
-print(ft3a); readline(PROMPT)
-print(ft3b)
+# PROMPT <- "Press [Enter] to see next table..."
+# print(ft1); readline(PROMPT)
+# print(ft2); readline(PROMPT)
+# print(ft3a); readline(PROMPT)
+# print(ft3b); readline(PROMPT)
+# print(ft3c); readline(PROMPT)
+# print(ft3d)

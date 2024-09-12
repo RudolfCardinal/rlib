@@ -41,9 +41,11 @@ library(rms)  # for vif
 library(survival)
 library(survminer)
 library(tidyverse)  # for ggplot
-source("/srv/cardinal_rlib/debugfunc.R")
-source("/srv/cardinal_rlib/miscmath.R")
-source("/srv/cardinal_rlib/miscstat.R")
+
+RLIB_PREFIX <- "/srv/cardinal_rlib/"
+source(paste0(RLIB_PREFIX, "debugfunc.R"))
+source(paste0(RLIB_PREFIX, "miscmath.R"))
+source(paste0(RLIB_PREFIX, "miscstat.R"))
 
 
 # =============================================================================
