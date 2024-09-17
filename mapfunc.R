@@ -44,16 +44,16 @@ mapfunc$CRS_LAT_LON_WGS84 <- sp::CRS("+proj=longlat +datum=WGS84")
 #==============================================================================
 
 mapfunc$get_lsoa_map_shapes <- function(
-        cache_filename,
-        geography_shape_file_dir,
-        geography_shape_file_stem,
-        edge_west_bng,  # British National Grid (BNG) coordinates
-        edge_east_bng,
-        edge_south_bng,
-        edge_north_bng,
-        wipe_cache = FALSE,
-        verbose = TRUE)
-{
+    cache_filename,
+    geography_shape_file_dir,
+    geography_shape_file_stem,
+    edge_west_bng,  # British National Grid (BNG) coordinates
+    edge_east_bng,
+    edge_south_bng,
+    edge_north_bng,
+    wipe_cache = FALSE,
+    verbose = TRUE
+) {
     # - https://data.gov.uk/dataset/lower_layer_super_output_area_lsoa_boundaries
     #   -> 2011 Full_Extent
     #   -> Download SHP
@@ -127,15 +127,15 @@ mapfunc$get_lsoa_map_shapes <- function(
 
 
 mapfunc$get_cambs_lsoa_map_shapes <- function(
-        cache_filename = paste(path.expand("~"), "tmp",
-                               "cambridgeshire_geography_lsoa.rds",
-                               sep = .Platform$file.sep),
-        # geography_shape_file_dir = "/srv/ons_postcode_database/shapes",
-        geography_shape_file_dir = "/home/rudolf/dev/onspd",
-        geography_shape_file_stem = "Lower_Layer_Super_Output_Areas_December_2011_Full_Extent__Boundaries_in_England_and_Wales",
-        wipe_cache = FALSE,
-        verbose = TRUE)
-{
+    cache_filename = paste(path.expand("~"), "tmp",
+                           "cambridgeshire_geography_lsoa.rds",
+                           sep = .Platform$file.sep),
+    # geography_shape_file_dir = "/srv/ons_postcode_database/shapes",
+    geography_shape_file_dir = "/home/rudolf/dev/onspd",
+    geography_shape_file_stem = "Lower_Layer_Super_Output_Areas_December_2011_Full_Extent__Boundaries_in_England_and_Wales",
+    wipe_cache = FALSE,
+    verbose = TRUE
+) {
     return(mapfunc$get_lsoa_map_shapes(
         cache_filename = cache_filename,
         geography_shape_file_dir = geography_shape_file_dir,
@@ -209,8 +209,8 @@ mapfunc$geography_heatmap <- function(
     fill_high = 'red',
     fill_missing = 'white',
     place_colour = 'yellow',
-    place_size = 1)
-{
+    place_size = 1
+) {
     data_with_geography <- merge(x = data,
                                  y = map_shapes,
                                  by.x = shape_colname_in_data,
