@@ -21,7 +21,6 @@ infotheoryfunc$f_nij <- function(v1, v2, l1, l2)  # contingency table n(i,j)=t(i
     m
 }
 
-
 infotheoryfunc$f_emi <- function(s1, s2, l1, l2, n)  # expected mutual information
 {
     s_emi <- 0
@@ -55,7 +54,7 @@ infotheoryfunc$f_nmi_ami <- function(v1, v2)
     l1 <- length(s1)
     l2 <- length(s2)
     N <- length(v1)
-    tij <- infotheoryfunc$f_nij(v1, v2, l1, l2)  # contingency table n(i,j)=t(i,j). this would be equivalent with table(v1,v2)
+    # tij <- infotheoryfunc$f_nij(v1, v2, l1, l2)  # contingency table n(i,j)=t(i,j). this would be equivalent with table(v1,v2)
     mi <- infotheo::mutinformation(v1, v2) # function for Mutual Information from package infotheo
     h1 <- -sum(s1 * log(s1/N)) / N
     h2 <- -sum(s2 * log(s2/N)) / N

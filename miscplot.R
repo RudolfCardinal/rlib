@@ -1,18 +1,19 @@
 # miscplot.R
 
-tmp_require_package_namespace <- function(...) {
-    packages <- as.character(match.call(expand.dots = FALSE)[[2]])
-    for (p in packages) if (!requireNamespace(p)) install.packages(p)
-}
-tmp_require_package_namespace(
-    grid,  # for gpar, etc.
-    ggplot2,
-    gridExtra,
-    # extrafont,  # install with sudo. Then (with sudo R) run font_import() then loadfonts(). Then view with fonts() or fonttable(). See https://github.com/wch/extrafont
-    Cairo,
-    ggplot2
-)
-rm(tmp_require_package_namespace)
+local({
+    tmp_require_package_namespace <- function(...) {
+        packages <- as.character(match.call(expand.dots = FALSE)[[2]])
+        for (p in packages) if (!requireNamespace(p)) install.packages(p)
+    }
+    tmp_require_package_namespace(
+        grid,  # for gpar, etc.
+        ggplot2,
+        gridExtra,
+        # extrafont,  # install with sudo. Then (with sudo R) run font_import() then loadfonts(). Then view with fonts() or fonttable(). See https://github.com/wch/extrafont
+        Cairo,
+        ggplot2
+    )
+})
 
 
 #==============================================================================

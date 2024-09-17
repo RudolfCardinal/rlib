@@ -1,17 +1,18 @@
 # http://rpsychologist.com/an-r-script-to-automatically-look-at-pubmed-citation-counts-by-year-of-publication/
 
-tmp_require_package_namespace <- function(...) {
-    packages <- as.character(match.call(expand.dots = FALSE)[[2]])
-    for (p in packages) if (!requireNamespace(p)) install.packages(p)
-}
-tmp_require_package_namespace(
-    RCurl,  # before RCurl installation: sudo apt-get install libcurl3-dev
-    XML,
-    plyr,  # THIS FILE MAY BE BROKEN: REMOVED PLYR BUT NOT UPDATED
-    ggplot2,
-    directlabels
-)
-rm(tmp_require_package_namespace)
+local({
+    tmp_require_package_namespace <- function(...) {
+        packages <- as.character(match.call(expand.dots = FALSE)[[2]])
+        for (p in packages) if (!requireNamespace(p)) install.packages(p)
+    }
+    tmp_require_package_namespace(
+        RCurl,  # before RCurl installation: sudo apt-get install libcurl3-dev
+        XML,
+        plyr,  # THIS FILE MAY BE BROKEN: REMOVED PLYR BUT NOT UPDATED
+        ggplot2,
+        directlabels
+    )
+})
 
 
 #==============================================================================

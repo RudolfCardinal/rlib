@@ -5,24 +5,24 @@
 # https://stackoverflow.com/questions/32988099/data-table-objects-not-printed-after-returned-from-function
 # https://github.com/Rdatatable/data.table/blob/master/NEWS.md#bug-fixes-5
 
-
-tmp_require_package_namespace <- function(...) {
-    packages <- as.character(match.call(expand.dots = FALSE)[[2]])
-    for (p in packages) if (!requireNamespace(p)) install.packages(p)
-}
-tmp_require_package_namespace(
-    bridgesampling,
-    coda,
-    data.table,
-    ggplot2,
-    HDInterval,
-    matrixStats,
-    parallel,
-    reshape,
-    rstan,
-    stringr
-)
-rm(tmp_require_package_namespace)
+local({
+    tmp_require_package_namespace <- function(...) {
+        packages <- as.character(match.call(expand.dots = FALSE)[[2]])
+        for (p in packages) if (!requireNamespace(p)) install.packages(p)
+    }
+    tmp_require_package_namespace(
+        bridgesampling,
+        coda,
+        data.table,
+        ggplot2,
+        HDInterval,
+        matrixStats,
+        parallel,
+        reshape,
+        rstan,
+        stringr
+    )
+})
 
 
 #==============================================================================

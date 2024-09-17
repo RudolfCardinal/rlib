@@ -39,20 +39,20 @@
 # - code: `x`
 # - underline: [x]{.underline}
 
-
-tmp_require_package_namespace <- function(...) {
-    packages <- as.character(match.call(expand.dots = FALSE)[[2]])
-    for (p in packages) if (!requireNamespace(p)) install.packages(p)
-}
-tmp_require_package_namespace(
-    car,  # for car::Anova
-    flextable,
-    ftExtra,  # for markup within flextable tables
-    rcompanion,  # for wilcoxonZ
-    rlang,  # for dots_n
-    tidyverse
-)
-rm(tmp_require_package_namespace)
+local({
+    tmp_require_package_namespace <- function(...) {
+        packages <- as.character(match.call(expand.dots = FALSE)[[2]])
+        for (p in packages) if (!requireNamespace(p)) install.packages(p)
+    }
+    tmp_require_package_namespace(
+        car,  # for car::Anova
+        flextable,
+        ftExtra,  # for markup within flextable tables
+        rcompanion,  # for wilcoxonZ
+        rlang,  # for dots_n
+        tidyverse
+    )
+})
 
 
 # =============================================================================

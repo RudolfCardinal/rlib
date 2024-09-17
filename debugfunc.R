@@ -1,15 +1,5 @@
 # debugfunc.R
 
-# tmp_require_package_namespace <- function(...) {
-#     packages <- as.character(match.call(expand.dots = FALSE)[[2]])
-#     for (p in packages) if (!requireNamespace(p)) install.packages(p)
-# }
-# tmp_require_package_namespace(
-#     xtermStyle
-# )
-# rm(tmp_require_package_namespace)
-
-
 # =============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
 # =============================================================================
