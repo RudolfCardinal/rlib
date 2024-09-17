@@ -462,6 +462,7 @@ flextable::save_as_docx(
     path = OUTPUT_DOCX,  # file will be created or overwritten
     align = "left",  # table (and caption) within page (not text within table)
     pr_section = prop_section(  # from "officer" package
+        type = "nextPage",  # begin tables on new pages? Not working.
         # These do not use all the width appropriately, despite correct margin
         # settings (with flextable 0.9.4 and officer 0.6.3):
         page_size = page_size(orient = "landscape")  # default is A4 portrait
