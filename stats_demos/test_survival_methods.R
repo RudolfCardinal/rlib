@@ -42,10 +42,23 @@ library(survival)
 library(survminer)
 library(tidyverse)  # for ggplot
 
-RLIB_PREFIX <- "/srv/cardinal_rlib/"
+# RLIB_PREFIX <- "/srv/cardinal_rlib/"
+RLIB_PREFIX <- ""  # for internal testing
 source(paste0(RLIB_PREFIX, "debugfunc.R"))
 source(paste0(RLIB_PREFIX, "miscmath.R"))
+source(paste0(RLIB_PREFIX, "miscresults.R"))
 source(paste0(RLIB_PREFIX, "miscstat.R"))
+
+# Set up flextable defaults before ANY functions using flextable formatting.
+flextable::set_flextable_defaults(
+    font.family = "Arial",
+    font.size = 10,
+    border.color = "gray",
+    digits = 3,  # usually significant figures
+    big.mark = ",",  # thousands separator
+    na_str = "NA",
+    nan_str = "NaN"
+)
 
 
 # =============================================================================
@@ -695,3 +708,59 @@ if (TRUE) {
     # - Discussion of interpretation of variance inflation factors (VIFs):
     #   https://en.wikipedia.org/wiki/Variance_inflation_factor
 }
+
+
+# =============================================================================
+# Complex models, for formatting tests
+# =============================================================================
+
+complex_n_per_group <- 50
+complex_n <- complex_n_per_group * 6
+data_complex <- data.table(
+    xlinear = rnorm(n = complex_n, mean = 0.3, sd = 1),
+    abcfactor = rep(c("A", "B", "C"), each = complex_n_per_group * 2),
+    pqfactor = rep(c("P", "Q"), each = complex_n_per_group, times = 2)
+)
+data_complex[, hazard := (
+    0.3
+    + 0.2 * xlinear
+    + case_when(
+        abcfactor == "A" ~ 0.2,
+        abcfactor == "B" ~ -0.2,
+        abcfactor == "C" ~ 0,
+        .default = NA
+    )
+    + case_when(
+        pqfactor == "P" ~ 0,
+        pqfactor == "Q" ~ -0.7,
+        .default = NA
+    )
+)]
+add_time_and_event_vars(data_complex)
+surv_complex <- survival::Surv(
+    time = data_complex$observation_time,  # for right-censored data, the follow-up time
+    event = data_complex$died,
+    type = "right"  # right-censored data; this is the default
+)
+cph_complex <- survival::coxph(
+    surv_complex ~ xlinear + abcfactor + pqfactor,
+    data = data_complex
+)
+cph_complex2 <- survival::coxph(
+    surv_complex ~ xlinear * abcfactor * pqfactor,
+    data = data_complex
+)
+
+# =============================================================================
+# Flextable output
+# =============================================================================
+
+cat("- Onto flextables...\n")
+cph_correl_pred_4_formatted <- miscresults$mk_cph_table(cph_correl_pred_4)
+cph_complex_formatted <- miscresults$mk_cph_table(cph_complex)
+cph_complex2_formatted <- miscresults$mk_cph_table(cph_complex2)
+
+PROMPT <- "Press [Enter] to see next table..."
+readline(PROMPT); print(cph_correl_pred_4_formatted)
+readline(PROMPT); print(cph_complex_formatted$table_flex)
+readline(PROMPT); print(cph_complex2_formatted$table_flex)

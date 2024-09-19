@@ -828,11 +828,27 @@ miscresults$fmt_predictor <- function(
 miscresults$fmt_single_level <- function(
     level_txt,
     anova_term_txt,
-    replacements = NULL,  # e.g. c("from1" = "to1", "from1" = "to2", ...)
+    replacements = NULL,
     interaction_txt = paste0(" ", miscresults$MULTIPLY, " ")
 ) {
     # Similar to fmt_predictor(), but for formatting levels; for example,
     # converting "drugLowDose:sexMale" to "Low dose x Male".
+    #
+    # Arguments:
+    #   level_txt
+    #       Name of the level, e.g. "drugLowDose:sexMale".
+    #   anova_term_txt
+    #       Name of the ANOVA term, e.g. "drug:sex".
+    #   replacements
+    #       Optional vector of the form c("from1" = "to1", "from1" = "to2",
+    #       ...), with which to replace text.
+    #   interaction_txt
+    #       Text to use to join components of the level, e.g. " x " or ", ".
+    # Returns:
+    #   The name of the level, with components joined by interaction_txt.
+    #
+    # See fmt_level() for a vectorized version.
+
     if (is.na(level_txt) || level_txt == R_INTERCEPT_LABEL) {
         return(level_txt)
     }
@@ -1039,14 +1055,33 @@ miscresults$mk_oneway_anova <- function(
 
 
 # =============================================================================
-# Formatting full models
+# Formatting full GLM/ANOVA models
 # =============================================================================
+
+miscresults$mk_default_flextable_from_markdown <- function(markdown_table) {
+    return(
+        markdown_table
+        %>% flextable()
+        %>% ftExtra::colformat_md(part = "all")
+        # ... need part = "all" to affect header and body
+        %>% flextable::valign(valign = "top")  # align all cells top
+        %>% flextable::autofit()  # size columns
+    )
+}
 
 miscresults$which_anova_term_matches_coeff <- function(
     anova_terms,
     coeff_term,
-    debug = FALSE
+    debug = TRUE
 ) {
+    # Arguments:
+    #
+    #   anova_terms
+    #       Vector of ANOVA terms, using R's standard interaction marker (":");
+    #       e.g. c("x", "xx", "x:xx").
+    #   coeff_term
+    #       Text, e.g. "xxB" or "xB:xxB".
+    #
     # Returns the index of anova_terms for which coeff_term is the best match.
 
     stopifnot(length(coeff_term) == 1)  # not parallel yet!
@@ -1794,14 +1829,7 @@ miscresults$mk_model_anova_coeffs <- function(
     # Basic flextable version. (Though users may want to re-process the
     # "table_markdown" component of the output.)
     # -------------------------------------------------------------------------
-    ft <- (
-        resultstable
-        %>% flextable()
-        %>% ftExtra::colformat_md(part = "all")
-        # ... need part = "all" to affect headey and body
-        %>% flextable::valign(valign = "top")  # align all cells top
-        %>% autofit()  # size columns
-    )
+    ft <- miscresults$mk_default_flextable_from_markdown(resultstable)
 
     # -------------------------------------------------------------------------
     # Return the results
@@ -1816,6 +1844,327 @@ miscresults$mk_model_anova_coeffs <- function(
     ))
 }
 
+
+# =============================================================================
+# Formatting Cox proportional hazards models
+# =============================================================================
+
+miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
+    # Internal function. Takes a Cox proportional hazards model (of type
+    # coxph.object), and returns a tibble that will be used by
+    # miscresults$mk_cph_table().
+
+    # 1. Factors.
+    factor_terms_pretty <- NULL
+    all_term_names <- attr(cph_model$terms, "term.labels")
+    factor_level_list <- cph_model$xlevels
+    # ... a list; names are factors; each element is a vector of level names;
+    # the first is the reference level. Will be NULL if there are no factors.
+    if (!is.null(factor_level_list)) {
+        # There are factors present.
+        factor_names <- names(factor_level_list)  # e.g. "x", "y", "z"
+        n_terms <- length(all_term_names)
+        for (t in 1:n_terms) {
+            term_plain <- all_term_names[t]  # may be e.g. "x" or "x:y:z"
+            components <- str_split_1(term_plain, R_INTERACTION_MARKER)
+            n_components <- length(components)
+            term_list <- vector("list", n_components)
+            term_plain_list <- vector("list", n_components)
+            level_list <- vector("list", n_components)
+            for (cp in 1:n_components) {
+                component <- components[cp]
+                factor_idx <- match(component, factor_names)
+                term_plain_list[[cp]] <- component
+                if (is.na(factor_idx)) {
+                    term_list[[cp]] <- component
+                    level_list[[cp]] <- NA
+                } else {
+                    term_list[[cp]] <- paste0(
+                        component,
+                        factor_level_list[[factor_idx]]
+                    )
+                    level_list[[cp]] <- factor_level_list[[factor_idx]]
+                }
+            }
+            term_grid <- (
+                expand.grid(term_list)
+                %>% unite("term", everything(), sep = R_INTERACTION_MARKER)
+            )
+            term_plain_grid <- (
+                expand.grid(term_plain_list)
+                %>% unite(
+                    "term_plain",
+                    everything(),
+                    sep = R_INTERACTION_MARKER
+                )
+            )
+            level_grid <- (
+                expand.grid(level_list)
+                %>% unite(
+                    "level",
+                    everything(),
+                    sep = R_INTERACTION_MARKER,
+                    na.rm = TRUE
+                )
+            )
+            factor_terms_pretty <- rbind(
+                factor_terms_pretty,
+                (
+                    tibble(
+                        original_term_num = t,
+                        term = term_grid$term,
+                        term_plain = term_plain_grid$term_plain,
+                        level = level_grid$level
+                    ) %>% mutate(
+                        level_num = 1:n(),
+                    )
+                )
+            )
+        }
+    } else {
+        # Only linear predictors.
+        # Empty tibble, for joining.
+        factor_terms_pretty <- tibble(
+            original_term_num = numeric(),
+            term = character(),
+            term_plain = character(),
+            level = character(),
+            level_num = numeric()
+        )
+    }
+
+    # 2. Add in others
+    coefficient_names <- (
+        tibble(term = names(cph_model$coefficients))
+        %>% mutate(coefficient_num = 1:n())
+    )
+    terms_pretty <- (
+        coefficient_names
+        %>% full_join(factor_terms_pretty, by = "term")
+        %>% mutate(
+            level_num = if_else(is.na(level_num), 0, level_num),
+            term_plain = if_else(is.na(term_plain), term, term_plain),
+            involves_interaction = str_detect(term, R_INTERACTION_MARKER)
+        )
+        %>% group_by(term_plain)
+        %>% mutate(term_sort = min(coefficient_num, na.rm = TRUE))
+        %>% ungroup()
+    )
+    terms_pretty <- (
+        terms_pretty
+        %>% arrange(term_sort, level_num)
+        %>% mutate(term_num = 1:n())
+    )
+    if (debug) {
+        print(terms_pretty)
+    }
+    return(
+        terms_pretty
+        %>% select(term_num, term, term_plain, level, involves_interaction)
+    )
+}
+
+
+miscresults$mk_cph_table <- function(
+    cph_model,
+    # Cosmetic:
+    include_reference_levels = TRUE,
+    predictor_replacements = NULL,
+    coeff_use_plus = TRUE,
+    z_use_plus = TRUE,
+    show_ci = TRUE,
+    # Tweaking:
+    ns_text = miscresults$NOT_SIGNIFICANT,
+    interaction_txt = paste0(" ", miscresults$MULTIPLY, " "),
+    level_combination_text = ", ",
+    reference_label = "Reference",
+    ci = miscresults$DEFAULT_CI,
+    debug = FALSE
+) {
+    # Format a Cox proportional hazards model as a flextable.
+    #
+    # Parameters:
+    #
+    #   cph_model:
+    #       The Cox proportional hazards model (of type coxph.object).
+    #
+    #   include_reference_levels:
+    #       Include reference levels of factors (though without coefficient
+    #       detail, of course).
+    #   predictor_replacements:
+    #       Vector of replacements to apply to all predictor text, e.g.
+    #       c("from1" = "to1", "from2" = "to2", ...), or NULL.
+    #   coeff_use_plus:
+    #       Show "+" for positive coefficients.
+    #   z_use_plus:
+    #       Show "+" for positive Z scores.
+    #   show_ci:
+    #       Show confidence intervals for coefficients?
+    #
+    #   ns_text:
+    #       Text to indicate "not significant", e.g. "NS".
+    #   interaction_txt:
+    #       Pretty text to use as interaction symbol.
+    #   level_combination_text:
+    #       Text to use for indicating combinations of levels.
+    #   reference_label:
+    #       If include_reference_levels, use this text for the coefficient
+    #       column of the reference level.
+    #   ci:
+    #       If show_ci is true, which confidence intervals to use? Default is
+    #       0.95, meaning 95% confidence intervals.
+    #   debug:
+    #       Be verbose?
+
+    s <- summary(cph_model, conf.int = ci)
+
+    # 1. Coefficients
+    coeffs <- s$coefficients
+    coeffs_intermediate <- (
+        coeffs
+        %>% as_tibble()
+        %>% rename(
+            # Just for convenience; remove brackets and other awkwardness.
+            # coef -- unchanged
+            "coeff" = "coef",
+            "exp_coeff" = "exp(coef)",
+            "se_coeff" = "se(coef)",
+            "z" = "z",
+            "p" = "Pr(>|z|)"
+        )
+        %>% mutate(
+            term = rownames(coeffs),
+            has_coeff = TRUE
+        )
+    )
+    confint <- s$conf.int
+    confint_intermediate <- confint %>% as_tibble()
+    colnames(confint_intermediate) <- c(
+        "exp_coeff", "exp_neg_coeff", "ci_lower", "ci_upper"
+    )
+
+    # 2. Confidence intervals.
+    # The confidence intervals are on exp(coef). See ?summary.coxph.
+    confint_intermediate <- (
+        confint_intermediate
+        %>% mutate(term = rownames(confint))
+        %>% select(-exp_coeff)  # duplication otherwise
+    )
+
+    # 3. Prettier term labelling.
+    term_pretty <- miscresults$get_pretty_cph_terms(cph_model)
+
+    # Assemble and format.
+    intermediate <- (
+        term_pretty
+        %>% left_join(coeffs_intermediate, by = "term")
+        %>% left_join(confint_intermediate, by = "term")
+        %>% mutate(
+            has_coeff = if_else(is.na(has_coeff), FALSE, has_coeff),
+        )
+        %>% filter(
+            has_coeff | !involves_interaction
+            # Terms that are interactions AND have no coefficient are not
+            # interesting (the reference levels will become obvious from the
+            # non-interaction terms, i.e. the plain factors).
+        )
+    )
+    if (!include_reference_levels) {
+        intermediate <- intermediate %>% filter(!is_reference_level)
+    }
+    intermediate <- (
+        intermediate
+        %>% group_by(term_plain)
+        %>% mutate(pos_within_term = 1:n())
+        %>% ungroup
+        %>% mutate(
+            txt_term = case_when(
+                pos_within_term > 1 ~ "",
+                .default = miscresults$fmt_predictor(
+                    term_plain,
+                    replacements = predictor_replacements,
+                    interaction_txt = interaction_txt
+                )
+            ),
+            txt_level = case_when(
+                is.na(level) ~ "",
+                .default = miscresults$fmt_predictor(
+                    level,
+                    replacements = predictor_replacements,
+                    interaction_txt = level_combination_text
+                )
+            ),
+            txt_coeff = case_when(
+                !has_coeff ~ reference_label,
+                .default = miscresults$fmt_float(
+                    coeff,
+                    use_plus = coeff_use_plus
+                )
+            ),
+            txt_exp_coeff = case_when(
+                !has_coeff ~ "",
+                show_ci ~ miscresults$fmt_value_ci(
+                    x = exp_coeff,
+                    ci_lower = ci_lower,
+                    ci_upper = ci_upper
+                ),
+                .default = miscresults$fmt_float(exp_coeff)
+            ),
+            txt_se_coeff = case_when(
+                !has_coeff ~ "",
+                .default = miscresults$fmt_float(se_coeff)
+            ),
+            txt_z = case_when(
+                !has_coeff ~ "",
+                .default = miscresults$fmt_float(z, use_plus = z_use_plus)
+            ),
+            txt_p = case_when(
+                !has_coeff ~ "",
+                .default = miscresults$mk_p_text_with_label(
+                    p,
+                    ns_text = ns_text
+                )
+            )
+        )
+    )
+    if (!include_reference_levels) {
+        intermediate <- intermediate %>% filter(has_coeff)
+    }
+    if (debug) {
+        print(intermediate)
+    }
+    resultstable <- (
+        intermediate
+        %>% select(
+            txt_term,
+            txt_level,
+            txt_coeff,
+            txt_exp_coeff,
+            txt_se_coeff,
+            txt_z,
+            txt_p
+        )
+        %>% rename(
+            # OK to have absent columns here (if CI not being shown).
+            "Term" = "txt_term",
+            "Level" = "txt_level",
+            "Coefficient" = "txt_coeff",
+            "*e*^coeff^" = "txt_exp_coeff",
+            "SE(coeff)" = "txt_se_coeff",
+            "*Z*" = "txt_z",
+            "*p*~|*Z*|~" = "txt_p"
+        )
+    )
+    if (all(is.na(resultstable$Level))) {
+        resultstable <- resultstable %>% select(-Level)
+    }
+    ft <- miscresults$mk_default_flextable_from_markdown(resultstable)
+    return(list(
+        cph_model = cph_model,
+        table_markdown = resultstable,
+        table_flex = ft
+    ))
+}
 
 # =============================================================================
 # Manipulating display

@@ -16,7 +16,6 @@ source(paste0(RLIB_PREFIX, "miscstat.R"))
 source(paste0(RLIB_PREFIX, "miscresults.R"))
 
 # Set up flextable defaults before ANY functions using flextable formatting.
-
 flextable::set_flextable_defaults(
     font.family = "Arial",
     font.size = 10,
@@ -444,6 +443,12 @@ m3d <- mk_model_anova_coeffs(
     include_reference_levels = FALSE  # new here
 )
 ft3d <- m3d$table_flex
+
+
+# =============================================================================
+# Survival analysis
+# =============================================================================
+# ... see test_survival_methods.R
 
 
 # =============================================================================
