@@ -33,14 +33,18 @@
 # Libraries
 # =============================================================================
 
-library(data.table)
-library(Epi)  # for poisreg, glm.Lexis
-library(mgcv)  # includes s() for splines
-library(patchwork)
-library(rms)  # for vif
-library(survival)
-library(survminer)
-library(tidyverse)  # for ggplot
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+    conflicted,
+    data.table,
+    Epi,  # for poisreg, glm.Lexis
+    mgcv,  # includes s(, for splines
+    patchwork,
+    rms,  # for vif
+    survival,
+    survminer,
+    tidyverse  # for ggplot
+)
 
 # RLIB_PREFIX <- "/srv/cardinal_rlib/"
 RLIB_PREFIX <- ""  # for internal testing
@@ -669,7 +673,7 @@ print(combinedplot)
 # Correlated predictors
 # =============================================================================
 
-if (TRUE) {
+if (FALSE) {
     # surv1 created above
 
     cph_correl_pred_1 <- survival::coxph(surv1 ~ x, data = d1)

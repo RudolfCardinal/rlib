@@ -2,6 +2,7 @@
 
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(
+    conflicted,
     data.table,
     flextable,  # for creating tabular publication output
     ftExtra,  # for markdown in flextable tables
@@ -14,6 +15,9 @@ RLIB_PREFIX <- ""  # use when editing miscresults.R
 source(paste0(RLIB_PREFIX, "miscfile.R"))
 source(paste0(RLIB_PREFIX, "miscstat.R"))
 source(paste0(RLIB_PREFIX, "miscresults.R"))
+
+conflicts_prefer(dplyr::summarize)
+conflicts_prefer(dplyr::filter)
 
 # Set up flextable defaults before ANY functions using flextable formatting.
 flextable::set_flextable_defaults(
@@ -409,6 +413,7 @@ ft2 <- (
         j = c("Placebo", "Low dose", "High dose")
     )
 )
+
 m3a <- mk_model_anova_coeffs(
     model_fn = lm,
     formula = performance ~ age + drug * sex,
@@ -416,6 +421,7 @@ m3a <- mk_model_anova_coeffs(
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS
 )
 ft3a <- m3a$table_flex
+
 m3b <- mk_model_anova_coeffs(
     model_fn = glm,
     formula = succeeded ~ age + drug * sex,
@@ -424,6 +430,7 @@ m3b <- mk_model_anova_coeffs(
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS
 )
 ft3b <- m3b$table_flex
+
 m3c <- mk_model_anova_coeffs(
     model_fn = glm,
     formula = succeeded ~ age + drug * sex,
@@ -433,6 +440,7 @@ m3c <- mk_model_anova_coeffs(
     squish_up_level_rows = TRUE  # new here
 )
 ft3c <- m3c$table_flex
+
 m3d <- mk_model_anova_coeffs(
     model_fn = glm,
     formula = succeeded ~ age + drug * sex,
@@ -443,6 +451,19 @@ m3d <- mk_model_anova_coeffs(
     include_reference_levels = FALSE  # new here
 )
 ft3d <- m3d$table_flex
+
+m3e <- mk_model_anova_coeffs(
+    # With continuous predictor * factor interaction:
+    model_fn = lm,
+    formula = performance ~ age * drug * sex,
+    data = fd3,
+    predictor_replacements = M3_PREDICTOR_REPLACEMENTS,
+    squish_up_level_rows = TRUE,
+    suppress_nonsig_coeffs = FALSE,
+    suppress_nonsig_coeff_tests = FALSE,
+    debug = FALSE
+)
+ft3e <- m3e$table_flex
 
 
 # =============================================================================
@@ -479,9 +500,10 @@ flextable::save_as_docx(
 )
 
 # PROMPT <- "Press [Enter] to see next table..."
-# print(ft1); readline(PROMPT)
-# print(ft2); readline(PROMPT)
-# print(ft3a); readline(PROMPT)
-# print(ft3b); readline(PROMPT)
-# print(ft3c); readline(PROMPT)
-# print(ft3d)
+print(ft1)
+readline(PROMPT); print(ft2)
+readline(PROMPT); print(ft3a)
+readline(PROMPT); print(ft3b)
+readline(PROMPT); print(ft3c)
+readline(PROMPT); print(ft3d)
+readline(PROMPT); print(ft3e)

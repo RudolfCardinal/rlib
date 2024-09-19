@@ -40,7 +40,7 @@ dbfunc$connectCpft <- function(
 }
 
 
-dbfunc$sqlQuery <- function(dbhandle, sql, debug = TRUE, errors = TRUE) {
+dbfunc$sqlQuery <- function(dbhandle, sql, debug = FALSE, errors = TRUE) {
     if (debug) {
         cat("Executing: ", sql, "\n", sep = "")
     }

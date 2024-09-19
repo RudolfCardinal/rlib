@@ -318,7 +318,7 @@ rpm$prob.winner <- function(post)
 }
 
 
-rpm$compute.win.prob <- function(y, n, ndraws, debug = TRUE)
+rpm$compute.win.prob <- function(y, n, ndraws, debug = FALSE)
 {
     # As per Scott (2010) p649.
     sp <- sim.post(y, n, ndraws)

@@ -829,7 +829,8 @@ miscresults$fmt_single_level <- function(
     level_txt,
     anova_term_txt,
     replacements = NULL,
-    interaction_txt = paste0(" ", miscresults$MULTIPLY, " ")
+    interaction_txt = paste0(" ", miscresults$MULTIPLY, " "),
+    remove_blanks = TRUE
 ) {
     # Similar to fmt_predictor(), but for formatting levels; for example,
     # converting "drugLowDose:sexMale" to "Low dose x Male".
@@ -844,6 +845,10 @@ miscresults$fmt_single_level <- function(
     #       ...), with which to replace text.
     #   interaction_txt
     #       Text to use to join components of the level, e.g. " x " or ", ".
+    #   remove_blanks
+    #       Blank components may be generated from continuous predictors.
+    #       If remove_blanks == TRUE, these will be removed.
+    #
     # Returns:
     #   The name of the level, with components joined by interaction_txt.
     #
@@ -869,6 +874,9 @@ miscresults$fmt_single_level <- function(
             result_parts,
             pattern = replacements
         )
+    }
+    if (remove_blanks) {
+        result_parts <- result_parts[!is.na(result_parts) & result_parts != ""]
     }
     return(stringr::str_c(result_parts, collapse = interaction_txt))
 }
@@ -1072,7 +1080,7 @@ miscresults$mk_default_flextable_from_markdown <- function(markdown_table) {
 miscresults$which_anova_term_matches_coeff <- function(
     anova_terms,
     coeff_term,
-    debug = TRUE
+    debug = FALSE
 ) {
     # Arguments:
     #
@@ -1205,6 +1213,7 @@ miscresults$mk_model_anova_coeffs <- function(
     omit_df_below_min_F = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS,
     ns_text = miscresults$NOT_SIGNIFICANT,
     interaction_txt = paste0(" ", miscresults$MULTIPLY, " "),
+    level_combination_text = ", ",
     alpha_show_coeffs = miscresults$DEFAULT_ALPHA,
     reference_label = "Reference",
     level_not_applicable = miscresults$EN_DASH,
@@ -1309,6 +1318,8 @@ miscresults$mk_model_anova_coeffs <- function(
     #       Text to indicate "not significant", e.g. "NS".
     #   interaction_txt:
     #       Pretty text to use as interaction symbol.
+    #   level_combination_text:
+    #       Text to use for indicating combinations of levels.
     #   alpha_show_coeffs:
     #       The alpha value to use for suppress_nonsig_coeffs and
     #       suppress_nonsig_coeff_tests.
@@ -1753,7 +1764,7 @@ miscresults$mk_model_anova_coeffs <- function(
                     level,
                     anova_term_name,
                     replacements = predictor_replacements,
-                    interaction_txt = interaction_txt
+                    interaction_txt = level_combination_text
                 ),
                 !is.na(coeff) ~ level_not_applicable,
                 .default = ""
