@@ -1978,6 +1978,7 @@ miscresults$mk_cph_table <- function(
     interaction_txt = paste0(" ", miscresults$MULTIPLY, " "),
     level_combination_text = ", ",
     reference_label = "Reference",
+    level_not_applicable = miscresults$EN_DASH,
     ci = miscresults$DEFAULT_CI,
     debug = FALSE
 ) {
@@ -2010,6 +2011,9 @@ miscresults$mk_cph_table <- function(
     #   reference_label:
     #       If include_reference_levels, use this text for the coefficient
     #       column of the reference level.
+    #   level_not_applicable:
+    #       Text to show in the "Level" column when it's not applicable, i.e.
+    #       for continuous predictors.
     #   ci:
     #       If show_ci is true, which confidence intervals to use? Default is
     #       0.95, meaning 95% confidence intervals.
@@ -2087,7 +2091,7 @@ miscresults$mk_cph_table <- function(
                 )
             ),
             txt_level = case_when(
-                is.na(level) ~ "",
+                (is.na(level) | level == "") ~ level_not_applicable,
                 .default = miscresults$fmt_predictor(
                     level,
                     replacements = predictor_replacements,

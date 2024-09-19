@@ -761,6 +761,6 @@ cph_complex_formatted <- miscresults$mk_cph_table(cph_complex)
 cph_complex2_formatted <- miscresults$mk_cph_table(cph_complex2)
 
 PROMPT <- "Press [Enter] to see next table..."
-readline(PROMPT); print(cph_correl_pred_4_formatted)
+readline(PROMPT); print(cph_correl_pred_4_formatted$table_flex)
 readline(PROMPT); print(cph_complex_formatted$table_flex)
 readline(PROMPT); print(cph_complex2_formatted$table_flex)
