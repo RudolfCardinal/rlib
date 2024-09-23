@@ -135,6 +135,8 @@ miscresults$DEFAULT_CI <- 1 - miscresults$DEFAULT_ALPHA
 R_INTERACTION_MARKER <- stringr::fixed(":")
 R_RESIDUALS_LABEL <- "Residuals"
 R_INTERCEPT_LABEL <- "(Intercept)"
+R_FALSE_TEXT <- "FALSE"
+R_TRUE_TEXT <- "TRUE"
 
 
 # =============================================================================
@@ -1575,7 +1577,7 @@ miscresults$mk_model_anova_coeffs <- function(
     }
 
     # Add reference levels?
-    # Insertet at subterm_idx = 0.5, i.e. before the first extracted level.
+    # Inserted at subterm_idx = 0.5, i.e. before the first extracted level.
     intermediate_coeffs$is_reference_level <- FALSE
     if (include_reference_levels) {
         for (i in 1:n_anova_terms) {
@@ -1898,16 +1900,57 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
     # coxph.object), and returns a tibble that will be used by
     # miscresults$mk_cph_table().
 
-    # 1. Factors.
-    factor_terms_pretty <- NULL
+    # Core information about the predictors
     all_term_names <- attr(cph_model$terms, "term.labels")
+    n_terms <- length(all_term_names)
     factor_level_list <- cph_model$xlevels
     # ... a list; names are factors; each element is a vector of level names;
     # the first is the reference level. Will be NULL if there are no factors.
+    coefficient_names <- names(cph_model$coefficients)
+    n_coefficients <- length(coefficient_names)
+
+    # Sanity checks
+    if (n_coefficients < 1) {
+        stop("don't understand Cox PH model passed to get_pretty_cph_terms")
+    }
+
+    # 1. Logical (Boolean) predictors.
+    #    For a predictor "x",
+    #    - In attr(cph_model$terms, "term.labels") = all_term_names, it appears
+    #      as "x".
+    #    - In names(cph_model$coefficients) = coefficient_names, it appears as
+    #      "xTRUE".
+    #    - But the simplest thing is to treat these as factors. They are just
+    #      absent from cph_model$xlevels = factor_level_list. But they are
+    #      two-level factors, and treating them as such (with reference level
+    #      FALSE). So we coerce them into the factor list.
+    for (i in 1:n_terms) {
+        # There are some potentials for error here if someone uses a variable
+        # like xTRUE as a predictor...
+        without_true_suffix <- all_term_names[i]
+        with_true_suffix <- paste0(without_true_suffix, R_TRUE_TEXT)
+        if (with_true_suffix %in% coefficient_names) {
+            # We've found one.
+            new_logical_predictor <- list(c(R_FALSE_TEXT, R_TRUE_TEXT))
+            names(new_logical_predictor) <- without_true_suffix
+            factor_level_list <- c(factor_level_list, new_logical_predictor)
+        }
+    }
+
+    # 2. Factors.
+    #
+    # Empty tibble, for joining.
+    # We can use one of these with full_join(), where we can't use NULL.
+    factor_names <- names(factor_level_list)  # e.g. "x", "y", "z"; or NULL
+    factor_terms_pretty <- tibble(
+        term = character(),
+        term_plain = character(),
+        level = character(),
+        level_num = numeric(),
+        is_reference_level = logical()
+    )
     if (!is.null(factor_level_list)) {
         # There are factors present.
-        factor_names <- names(factor_level_list)  # e.g. "x", "y", "z"
-        n_terms <- length(all_term_names)
         for (t in 1:n_terms) {
             term_plain <- all_term_names[t]  # may be e.g. "x" or "x:y:z"
             components <- str_split_1(term_plain, R_INTERACTION_MARKER)
@@ -1915,6 +1958,7 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
             term_list <- vector("list", n_components)
             term_plain_list <- vector("list", n_components)
             level_list <- vector("list", n_components)
+            ref_level_name <- NA_character_
             for (cp in 1:n_components) {
                 component <- components[cp]
                 factor_idx <- match(component, factor_names)
@@ -1928,6 +1972,9 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
                         factor_level_list[[factor_idx]]
                     )
                     level_list[[cp]] <- factor_level_list[[factor_idx]]
+                    if (n_components == 1) {
+                        ref_level_name <- factor_level_list[[factor_idx]][1]
+                    }
                 }
             }
             term_grid <- (
@@ -1951,40 +1998,42 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
                     na.rm = TRUE
                 )
             )
-            factor_terms_pretty <- rbind(
-                factor_terms_pretty,
-                (
-                    tibble(
-                        original_term_num = t,
-                        term = term_grid$term,
-                        term_plain = term_plain_grid$term_plain,
-                        level = level_grid$level
-                    ) %>% mutate(
-                        level_num = 1:n(),
+            new_rows <- (
+                tibble(
+                    term = term_grid$term,
+                    term_plain = term_plain_grid$term_plain,
+                    level = level_grid$level,
+                    is_reference_level = (
+                        !is.na(ref_level_name)
+                        & level_grid$level == ref_level_name
                     )
                 )
+                %>% mutate(level_num = 1:n())
             )
-        }
-    } else {
-        # Only linear predictors.
-        # Empty tibble, for joining.
-        factor_terms_pretty <- tibble(
-            original_term_num = numeric(),
-            term = character(),
-            term_plain = character(),
-            level = character(),
-            level_num = numeric()
-        )
+            if (debug) {
+                cat("... processing term: ", term_plain, "\n", sep = "")
+                cat("    ... new_rows:\n")
+                print(new_rows)
+            }
+            factor_terms_pretty <- rbind(
+                factor_terms_pretty,  # accumulated results from previous terms
+                new_rows
+            )
+        }  # loop for terms
     }
 
-    # 2. Add in others
-    coefficient_names <- (
-        tibble(term = names(cph_model$coefficients))
+    # 3. Add in others, i.e. linear predictors
+    coefficient_name_tibble <- (
+        tibble(term = coefficient_names)
         %>% mutate(coefficient_num = 1:n())
+        # This tibble represents the broad term order of the output.
+    )
+    joined_terms <- (
+        coefficient_name_tibble
+        %>% full_join(factor_terms_pretty, by = c("term") )
     )
     terms_pretty <- (
-        coefficient_names
-        %>% full_join(factor_terms_pretty, by = "term")
+        joined_terms
         %>% mutate(
             level_num = if_else(is.na(level_num), 0, level_num),
             term_plain = if_else(is.na(term_plain), term, term_plain),
@@ -1993,18 +2042,37 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
         %>% group_by(term_plain)
         %>% mutate(term_sort = min(coefficient_num, na.rm = TRUE))
         %>% ungroup()
-    )
-    terms_pretty <- (
-        terms_pretty
         %>% arrange(term_sort, level_num)
         %>% mutate(term_num = 1:n())
     )
     if (debug) {
+        cat("- all_term_names:\n")
+        print(all_term_names)
+        cat("- cph_model$xlevels:\n")
+        print(cph_model$xlevels)
+        cat("- factor_level_list [modified]:\n")
+        print(factor_level_list)
+        cat("- coefficient_names:\n")
+        print(coefficient_names)
+        cat("- coefficient_name_tibble:\n")
+        print(coefficient_name_tibble)
+        cat("- factor_terms_pretty:\n")
+        print(factor_terms_pretty)
+        cat("- joined_terms:\n")
+        print(joined_terms)
+        cat("- terms_pretty:\n")
         print(terms_pretty)
     }
     return(
         terms_pretty
-        %>% select(term_num, term, term_plain, level, involves_interaction)
+        %>% select(
+            term_num,
+            term,
+            term_plain,
+            level,
+            is_reference_level,
+            involves_interaction
+        )
     )
 }
 

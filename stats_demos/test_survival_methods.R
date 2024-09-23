@@ -725,12 +725,14 @@ complex_n_per_group <- 50
 complex_n <- complex_n_per_group * 6
 data_complex <- data.table(
     xlinear = rnorm(n = complex_n, mean = 0.3, sd = 1),
+    yboolean = as.logical(rbinom(n = complex_n, size = 1, prob = 0.5)),
     abcfactor = rep(c("A", "B", "C"), each = complex_n_per_group * 2),
     pqfactor = rep(c("P", "Q"), each = complex_n_per_group, times = 2)
 )
 data_complex[, hazard := (
     0.3
     + 0.2 * xlinear
+    - 0.1 * as.numeric(yboolean)
     + case_when(
         abcfactor == "A" ~ 0.2,
         abcfactor == "B" ~ -0.2,
@@ -749,12 +751,16 @@ surv_complex <- survival::Surv(
     event = data_complex$died,
     type = "right"  # right-censored data; this is the default
 )
+cph_testbool  <- survival::coxph(
+    surv_complex ~ yboolean,
+    data = data_complex
+)
 cph_complex <- survival::coxph(
-    surv_complex ~ xlinear + abcfactor + pqfactor,
+    surv_complex ~ xlinear + yboolean + abcfactor + pqfactor,
     data = data_complex
 )
 cph_complex2 <- survival::coxph(
-    surv_complex ~ xlinear * abcfactor * pqfactor,
+    surv_complex ~ xlinear * yboolean * abcfactor * pqfactor,
     data = data_complex
 )
 
@@ -763,9 +769,13 @@ cph_complex2 <- survival::coxph(
 # =============================================================================
 
 cat("- Onto flextables...\n")
+cph_testbool_formatted <- miscresults$mk_cph_table(cph_testbool)
 cph_correl_pred_4_formatted <- miscresults$mk_cph_table(cph_correl_pred_4)
 cph_complex_formatted <- miscresults$mk_cph_table(cph_complex)
-cph_complex2_formatted <- miscresults$mk_cph_table(cph_complex2)
+cph_complex2_formatted <- miscresults$mk_cph_table(
+    cph_complex2,
+    include_reference_levels = FALSE
+)
 multicph_summary <- miscresults$summarize_multiple_cph(
     list(
         "CPH one" = cph_complex2_formatted,
@@ -778,6 +788,7 @@ multicph_summary <- miscresults$summarize_multiple_cph(
 
 PROMPT <- "Press [Enter] to see next table..."
 readline(PROMPT); print(cph_correl_pred_4_formatted$table_flex)
+readline(PROMPT); print(cph_testbool_formatted$table_flex)
 readline(PROMPT); print(cph_complex_formatted$table_flex)
 readline(PROMPT); print(cph_complex2_formatted$table_flex)
 readline(PROMPT); print(multicph_summary$table_flex)
