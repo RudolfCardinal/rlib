@@ -1350,8 +1350,8 @@ miscresults$mk_model_anova_coeffs <- function(
     #       The alpha value to use for suppress_nonsig_coeffs and
     #       suppress_nonsig_coeff_tests.
     #   reference_label:
-    #       If include_reference_levels, use this text for the coefficient
-    #       column of the reference level.
+    #       If include_reference_levels is TRUE, use this text for the
+    #       coefficient column of the reference level.
     #   level_not_applicable:
     #       Text to show in the "Level" column when it's not applicable, i.e.
     #       for continuous predictors.
@@ -1904,6 +1904,7 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
     all_term_names <- attr(cph_model$terms, "term.labels")
     n_terms <- length(all_term_names)
     factor_level_list <- cph_model$xlevels
+    is_factor_logical <- rep(FALSE, length(factor_level_list))
     # ... a list; names are factors; each element is a vector of level names;
     # the first is the reference level. Will be NULL if there are no factors.
     coefficient_names <- names(cph_model$coefficients)
@@ -1934,6 +1935,7 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
             new_logical_predictor <- list(c(R_FALSE_TEXT, R_TRUE_TEXT))
             names(new_logical_predictor) <- without_true_suffix
             factor_level_list <- c(factor_level_list, new_logical_predictor)
+            is_factor_logical <- c(is_factor_logical, TRUE)
         }
     }
 
@@ -1947,7 +1949,9 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
         term_plain = character(),
         level = character(),
         level_num = numeric(),
-        is_reference_level = logical()
+        is_reference_level = logical(),
+        is_logical_reflevel = logical(),
+        is_factor_reflevel = logical()
     )
     if (!is.null(factor_level_list)) {
         # There are factors present.
@@ -1959,6 +1963,7 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
             term_plain_list <- vector("list", n_components)
             level_list <- vector("list", n_components)
             ref_level_name <- NA_character_
+            is_simple_logical <- FALSE
             for (cp in 1:n_components) {
                 component <- components[cp]
                 factor_idx <- match(component, factor_names)
@@ -1974,6 +1979,7 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
                     level_list[[cp]] <- factor_level_list[[factor_idx]]
                     if (n_components == 1) {
                         ref_level_name <- factor_level_list[[factor_idx]][1]
+                        is_simple_logical <- is_factor_logical[factor_idx]
                     }
                 }
             }
@@ -2003,12 +2009,21 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
                     term = term_grid$term,
                     term_plain = term_plain_grid$term_plain,
                     level = level_grid$level,
+                    is_simple_logical = is_simple_logical,
                     is_reference_level = (
                         !is.na(ref_level_name)
                         & level_grid$level == ref_level_name
                     )
                 )
-                %>% mutate(level_num = 1:n())
+                %>% mutate(
+                    is_logical_reflevel = (
+                        is_reference_level & is_simple_logical
+                    ),
+                    is_factor_reflevel = (
+                        is_reference_level & !is_logical_reflevel
+                    ),
+                    level_num = 1:n()
+                )
             )
             if (debug) {
                 cat("... processing term: ", term_plain, "\n", sep = "")
@@ -2035,8 +2050,11 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
     terms_pretty <- (
         joined_terms
         %>% mutate(
-            level_num = if_else(is.na(level_num), 0, level_num),
+            level_num = replace_na(level_num, 0),
             term_plain = if_else(is.na(term_plain), term, term_plain),
+            is_reference_level = replace_na(is_reference_level, FALSE),
+            is_factor_reflevel = replace_na(is_factor_reflevel, FALSE),
+            is_logical_reflevel = replace_na(is_logical_reflevel, FALSE),
             involves_interaction = str_detect(term, R_INTERACTION_MARKER)
         )
         %>% group_by(term_plain)
@@ -2071,6 +2089,8 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
             term_plain,
             level,
             is_reference_level,
+            is_factor_reflevel,
+            is_logical_reflevel,
             involves_interaction
         )
     )
@@ -2080,7 +2100,8 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
 miscresults$mk_cph_table <- function(
     cph_model,
     # Cosmetic:
-    include_reference_levels = TRUE,
+    include_factor_reference_levels = TRUE,
+    include_logical_reference_levels = FALSE,
     predictor_replacements = NULL,
     coeff_use_plus = TRUE,
     z_use_plus = TRUE,
@@ -2100,9 +2121,12 @@ miscresults$mk_cph_table <- function(
     #
     #   cph_model:
     #       The Cox proportional hazards model (of type coxph.object).
-    #   include_reference_levels:
+    #   include_factor_reference_levels:
     #       Include reference levels of factors (though without coefficient
     #       detail, of course).
+    #   include_logical_reference_levels:
+    #       Include reference levels of logical (Boolean) predictors, i.e. the
+    #       "FALSE" level (though without coefficient detail, of course).
     #   predictor_replacements:
     #       Vector of replacements to apply to all predictor text, e.g.
     #       c("from1" = "to1", "from2" = "to2", ...), or NULL.
@@ -2119,8 +2143,9 @@ miscresults$mk_cph_table <- function(
     #   level_combination_text:
     #       Text to use for indicating combinations of levels.
     #   reference_label:
-    #       If include_reference_levels, use this text for the coefficient
-    #       column of the reference level.
+    #       If include_factor_reference_levels or
+    #       include_logical_reference_levels are TRUE, use this text for the
+    #       coefficient column of the reference level.
     #   level_not_applicable:
     #       Text to show in the "Level" column when it's not applicable, i.e.
     #       for continuous predictors.
@@ -2199,8 +2224,11 @@ miscresults$mk_cph_table <- function(
             # non-interaction terms, i.e. the plain factors).
         )
     )
-    if (!include_reference_levels) {
-        working <- working %>% dplyr::filter(!is_reference_level)
+    if (!include_factor_reference_levels) {
+        working <- working %>% dplyr::filter(!is_factor_reflevel)
+    }
+    if (!include_logical_reference_levels) {
+        working <- working %>% dplyr::filter(!is_logical_reflevel)
     }
     working <- (
         working
@@ -2257,9 +2285,6 @@ miscresults$mk_cph_table <- function(
             )
         )
     )
-    if (!include_reference_levels) {
-        working <- working %>% dplyr::filter(has_coeff)
-    }
     if (debug) {
         print(working)
     }
@@ -2316,6 +2341,7 @@ miscresults$summarize_multiple_cph <- function(
     # variable.
     #
     # Arguments:
+    #
     #   cph_list
     #       A list whose elements are each results of
     #       miscresults$mk_cph_table(), and whose names should be used as

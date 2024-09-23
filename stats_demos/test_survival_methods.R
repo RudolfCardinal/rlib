@@ -771,10 +771,15 @@ cph_complex2 <- survival::coxph(
 cat("- Onto flextables...\n")
 cph_testbool_formatted <- miscresults$mk_cph_table(cph_testbool)
 cph_correl_pred_4_formatted <- miscresults$mk_cph_table(cph_correl_pred_4)
-cph_complex_formatted <- miscresults$mk_cph_table(cph_complex)
+cph_complex_formatted <- miscresults$mk_cph_table(
+    cph_complex,
+    include_factor_reference_levels = TRUE,
+    include_logical_reference_levels = TRUE
+)
 cph_complex2_formatted <- miscresults$mk_cph_table(
     cph_complex2,
-    include_reference_levels = FALSE
+    include_factor_reference_levels = TRUE,
+    include_logical_reference_levels = FALSE
 )
 multicph_summary <- miscresults$summarize_multiple_cph(
     list(
