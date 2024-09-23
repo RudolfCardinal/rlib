@@ -732,6 +732,8 @@ miscstat$sidak_p <- function(uncorrected_p, n_comparisons) {
 
 
 miscstat$sidak_familywise_alpha <- function(alpha_per_test, n_comparisons) {
+    # If you apply "alpha_per_test" to each test, "n_comparisons" times, what
+    # is the effective overall (familywise) alpha?
     1 - (1 - alpha_per_test) ^ (n_comparisons)
 }
 

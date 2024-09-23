@@ -66,6 +66,9 @@ miscresults <- new.env()
 # Constants
 # =============================================================================
 
+# -----------------------------------------------------------------------------
+# Unicode
+# -----------------------------------------------------------------------------
 # NOTE RE UNICODE: This can be challenging under Windows. The problem isn't
 # usually in handling Unicode, it's in representing it in the file encoding,
 # since Windows does not use UTF-8 file encoding by default. It's therefore
@@ -74,8 +77,9 @@ miscresults <- new.env()
 
 miscresults$CHI_LOWER <- "\u03C7"
 
-miscresults$EN_DASH <- "\u2013"
 miscresults$HYPHEN <- "-"  # plain ASCII
+
+miscresults$EN_DASH <- "\u2013"
 miscresults$MINUS <- "\u2212"
 miscresults$MULTIPLY <- "\u00D7"
 miscresults$MULTIPLICATION_DOT <- "\u22C5"
@@ -91,6 +95,26 @@ miscresults$DOUBLE_VERTICAL_LINE <- "\u2016"
 miscresults$PILCROW <- "\u00B6"
 
 miscresults$NEWLINE <- "\\\n"  # two characters: backslash, newline
+
+# https://www.compart.com/en/unicode/block/U+2190
+miscresults$UP_ARROW <- "\u2191"
+miscresults$DOWN_ARROW <- "\u2193"
+miscresults$LEFT_RIGHT_ARROW <- "\u2194"
+miscresults$UP_ARROW_FROM_BAR <- "\u21A5"
+miscresults$DOWN_ARROW_FROM_BAR <- "\u21A7"
+
+# https://www.compart.com/en/unicode/block/U+25A0
+miscresults$BLACK_UP_TRIANGLE <- "\u25B2"
+miscresults$BLACK_DOWN_TRIANGLE <- "\u25BC"
+miscresults$WHITE_UP_TRIANGLE <- "\u25B3"
+miscresults$BLACK_DOWN_TRIANGLE <- "\u25BD"
+
+# https://www.compart.com/en/unicode/block/U+0080
+miscresults$MIDDLE_DOT <- "\u00B7"
+
+# -----------------------------------------------------------------------------
+# Other
+# -----------------------------------------------------------------------------
 
 miscresults$DEFAULT_DP_FOR_DF <- 1  # decimal places for non-integer degrees of freedom
 miscresults$MINIMUM_P_SHOWN <- 2.2e-16
@@ -1357,6 +1381,9 @@ miscresults$mk_model_anova_coeffs <- function(
     #       detail.
     #   contrasts_coeffs_model:
     #       Contrasts used for coeffs_model.
+    #   working:
+    #       Full-working internal table. (Also used by the
+    #       miscresults$summarize_multiple_cph() function.)
     #   table_markdown:
     #       Markdown table, designed to be converted to a flextable.
     #   table_flex:
@@ -1473,7 +1500,7 @@ miscresults$mk_model_anova_coeffs <- function(
     # the same as the intercept from the coefficients model. Do not consider
     # the ANOVA F test for the intercept.
     if (using_type_III_ss) {
-        intermediate_anova <- filter(intermediate_anova, !is_intercept)
+        intermediate_anova <- dplyr::filter(intermediate_anova, !is_intercept)
     }
 
     n_anova_terms <- nrow(intermediate_anova)
@@ -1620,7 +1647,7 @@ miscresults$mk_model_anova_coeffs <- function(
                     # We might keep the intercept for this term also.
                     intermediate_coeffs <- (
                         intermediate_coeffs %>%
-                        filter(
+                        dplyr::filter(
                             term_idx != t_idx
                             | (is_intercept & keep_intercept_if_suppressing)
                         )
@@ -1702,7 +1729,7 @@ miscresults$mk_model_anova_coeffs <- function(
         %>% dplyr::arrange(term_idx, subterm_idx)
     )
     if (!include_intercept) {
-        intermediate <- intermediate %>% filter(!is_intercept)
+        intermediate <- intermediate %>% dplyr::filter(!is_intercept)
     }
 
     # -------------------------------------------------------------------------
@@ -1725,7 +1752,7 @@ miscresults$mk_model_anova_coeffs <- function(
     # -------------------------------------------------------------------------
     # Format the table
     # -------------------------------------------------------------------------
-    resultstable <- (
+    working <- (
         intermediate
         %>% mutate(
             # Now format.
@@ -1806,6 +1833,9 @@ miscresults$mk_model_anova_coeffs <- function(
                 )
             ),
         )
+    )
+    table_markdown <- (
+        working
         %>% select(
             formatted_term,
             f_txt,
@@ -1817,7 +1847,7 @@ miscresults$mk_model_anova_coeffs <- function(
             p_coeff_stat_txt
         )
     )
-    colnames(resultstable) <- c(
+    colnames(table_markdown) <- c(
         # Prettier versions:
         "Term",
         paste0(
@@ -1840,7 +1870,9 @@ miscresults$mk_model_anova_coeffs <- function(
     # Basic flextable version. (Though users may want to re-process the
     # "table_markdown" component of the output.)
     # -------------------------------------------------------------------------
-    ft <- miscresults$mk_default_flextable_from_markdown(resultstable)
+    table_flex <- miscresults$mk_default_flextable_from_markdown(
+        table_markdown
+    )
 
     # -------------------------------------------------------------------------
     # Return the results
@@ -1850,8 +1882,9 @@ miscresults$mk_model_anova_coeffs <- function(
         contrasts_anova_model = contrasts_anova_model,
         coeffs_model = m2,
         contrasts_coeffs_model = contrasts_coeffs_model,
-        table_markdown = resultstable,
-        table_flex = ft
+        working = working,
+        table_markdown = table_markdown,
+        table_flex = table_flex
     ))
 }
 
@@ -1861,7 +1894,7 @@ miscresults$mk_model_anova_coeffs <- function(
 # =============================================================================
 
 miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
-    # Internal function. Takes a Cox proportional hazards model (of type
+    # INTERNAL FUNCTION. Takes a Cox proportional hazards model (of type
     # coxph.object), and returns a tibble that will be used by
     # miscresults$mk_cph_table().
 
@@ -1999,7 +2032,6 @@ miscresults$mk_cph_table <- function(
     #
     #   cph_model:
     #       The Cox proportional hazards model (of type coxph.object).
-    #
     #   include_reference_levels:
     #       Include reference levels of factors (though without coefficient
     #       detail, of course).
@@ -2012,7 +2044,6 @@ miscresults$mk_cph_table <- function(
     #       Show "+" for positive Z scores.
     #   show_ci:
     #       Show confidence intervals for coefficients?
-    #
     #   ns_text:
     #       Text to indicate "not significant", e.g. "NS".
     #   interaction_txt:
@@ -2030,6 +2061,22 @@ miscresults$mk_cph_table <- function(
     #       0.95, meaning 95% confidence intervals.
     #   debug:
     #       Be verbose?
+    #
+    # The return value is a list with these elements:
+    #
+    #   cph_model:
+    #       Copied from the input.
+    #   working:
+    #       Full-working internal table. (Also used by the
+    #       miscresults$summarize_multiple_cph() function.)
+    #   table_markdown:
+    #       Markdown version of the formatted table. Use this one if you want
+    #       to create your own custom-formatted flextable, which you probably
+    #       do.
+    #   table_flex:
+    #       A flextable version of the output; it assumes some formatting
+    #       parameters, so you probably don't want it for publication, but it
+    #       provides a quick look at a "pretty" version of the table.
 
     s <- summary(cph_model, conf.int = ci)
 
@@ -2070,14 +2117,14 @@ miscresults$mk_cph_table <- function(
     term_pretty <- miscresults$get_pretty_cph_terms(cph_model)
 
     # Assemble and format.
-    intermediate <- (
+    working <- (
         term_pretty
         %>% left_join(coeffs_intermediate, by = "term")
         %>% left_join(confint_intermediate, by = "term")
         %>% mutate(
             has_coeff = if_else(is.na(has_coeff), FALSE, has_coeff),
         )
-        %>% filter(
+        %>% dplyr::filter(
             has_coeff | !involves_interaction
             # Terms that are interactions AND have no coefficient are not
             # interesting (the reference levels will become obvious from the
@@ -2085,10 +2132,10 @@ miscresults$mk_cph_table <- function(
         )
     )
     if (!include_reference_levels) {
-        intermediate <- intermediate %>% filter(!is_reference_level)
+        working <- working %>% dplyr::filter(!is_reference_level)
     }
-    intermediate <- (
-        intermediate
+    working <- (
+        working
         %>% group_by(term_plain)
         %>% mutate(pos_within_term = 1:n())
         %>% ungroup
@@ -2143,13 +2190,13 @@ miscresults$mk_cph_table <- function(
         )
     )
     if (!include_reference_levels) {
-        intermediate <- intermediate %>% filter(has_coeff)
+        working <- working %>% dplyr::filter(has_coeff)
     }
     if (debug) {
-        print(intermediate)
+        print(working)
     }
-    resultstable <- (
-        intermediate
+    table_markdown <- (
+        working
         %>% select(
             txt_term,
             txt_level,
@@ -2170,16 +2217,151 @@ miscresults$mk_cph_table <- function(
             "*p*~|*Z*|~" = "txt_p"
         )
     )
-    if (all(is.na(resultstable$Level))) {
-        resultstable <- resultstable %>% select(-Level)
+    if (all(is.na(table_markdown$Level))) {
+        table_markdown <- table_markdown %>% select(-Level)
     }
-    ft <- miscresults$mk_default_flextable_from_markdown(resultstable)
+    table_flex <- miscresults$mk_default_flextable_from_markdown(
+        table_markdown
+    )
     return(list(
         cph_model = cph_model,
-        table_markdown = resultstable,
-        table_flex = ft
+        working = working,
+        table_markdown = table_markdown,
+        table_flex = table_flex
     ))
 }
+
+
+miscresults$summarize_multiple_cph <- function(
+    cph_list,
+    up_label = miscresults$UP_ARROW,
+    down_label = miscresults$DOWN_ARROW,
+    ns_label = miscresults$LEFT_RIGHT_ARROW,
+    absent_label = "",
+    target_alpha = miscresults$DEFAULT_ALPHA,
+    correct_alpha_for = c("none", "models", "tests"),
+    alpha_correction_method = c("sidak", "bonferroni")
+) {
+    # Summarize multiple Cox proportional hazards models, each themselves the
+    # output of miscresults$mk_cph_table(). The assumption is that all models
+    # have (approximately) the same predictors, but a different dependent
+    # variable.
+    #
+    # Arguments:
+    #   cph_list
+    #       A list whose elements are each results of
+    #       miscresults$mk_cph_table(), and whose names should be used as
+    #       column headings. Thus e.g. list("SSRI" = cph_ssri, "Mirtazapine" =
+    #       cph_mirtaz). The predictors for each model should correspond
+    #       exactly (i.e. they will be matched on exact correspondence).
+    #   up_label
+    #       Text to label coefficients significantly above zero.
+    #   down_label
+    #       Text to label coefficients significantly below zero.
+    #   ns_label
+    #       Text to label coefficients not significantly different from zero.
+    #   absent_label
+    #       Text to label cells that did not have a test associated with them.
+    #   target_alpha
+    #       Target familywise alpha; see the next two options.
+    #   correct_alpha_for
+    #       If "none", do not correct; instead, use target_alpha as the alpha
+    #       to consider things "significant" (using the standard method of
+    #       declaring a test "significant" if p < alpha). If "models", correct
+    #       for the number of models provided (the length of cph_list). If
+    #       "tests", which is VERY CONSERVATIVE, correct for the number of
+    #       tests performed.
+    #   alpha_correction_method
+    #       Method for correcting alpha, as above. Use "sidak" for the Sidak
+    #       method, which is mathematically correct, or "bonferroni" for the
+    #       Bonferroni method, which is incorrect but close.
+
+    n_elements <- length(cph_list)
+    if (n_elements < 1) {
+        stop("empty input to summarize_multiple_cph")
+    }
+
+    correct_alpha_for <- match.arg(correct_alpha_for)
+    alpha_correction_method <- match.arg(alpha_correction_method)
+    if (correct_alpha_for == "none") {
+        n_comparisons <- 1
+    } else if (correct_alpha_for == "models") {
+        n_comparisons <- length(cph_list)
+    } else if (correct_alpha_for == "tests") {
+        n_comparisons <- 0
+        for (i in 1:n_elements) {
+            n_comparisons <- n_comparisons + sum(
+                !is.na(cph_list[[i]]$working$p)
+            )
+        }
+    } else {
+        stop("bug in summarize_multiple_cph/correct_for")
+    }
+    if (n_comparisons == 1) {
+        corrected_alpha <- target_alpha
+    } else if (alpha_correction_method == "sidak") {
+        corrected_alpha <- miscstat$sidak_alpha(target_alpha, n_comparisons)
+    } else if (alpha_correction_method == "bonferroni") {
+        corrected_alpha <- target_alpha / n_comparisons
+    } else {
+        stop("bug in summarize_multiple_cph/corrected_alpha")
+    }
+
+    element_to_tibble <- function(element, name) {
+        w <- element$working
+        if (is.null(w)) {
+            stop("Bad arguments to summarize_multiple_cph")
+        }
+        w2 <- (
+            w
+            %>% select(term, txt_term, txt_level, coeff, p)
+            %>% mutate(
+                label = case_when(
+                    p >= corrected_alpha ~ ns_label,
+                    coeff > 0 ~ up_label,
+                    coeff < 0 ~ down_label,
+                    .default = absent_label
+                )
+            )
+            %>% select(term, txt_term, txt_level, label)
+            %>% rename(!!name := label)
+        )
+        return(w2)
+    }
+    # Create a list with the same names as cph_list, but with the elements
+    # now being the result of element_to_tibble(original_element):
+    list_of_tables <- imap(cph_list, element_to_tibble)
+    # Join them all:
+    summary_table <- list_of_tables %>% reduce(
+        full_join,
+        by = c("term", "txt_term", "txt_level")
+    )
+    table_markdown <- (
+        summary_table
+        %>% select(-term)
+        %>% rename(
+            "Term" = "txt_term",
+            "Level" = "txt_level"
+        )
+    )
+    if (all(is.na(table_markdown$Level))) {
+        table_markdown <- table_markdown %>% select(-Level)
+    }
+    table_flex <- miscresults$mk_default_flextable_from_markdown(
+        table_markdown
+    )
+    return(list(
+        target_alpha = target_alpha,
+        correct_alpha_for = correct_alpha_for,
+        alpha_correction_method = alpha_correction_method,
+        n_comparisons = n_comparisons,
+        corrected_alpha = corrected_alpha,
+        summary_table = summary_table,
+        table_markdown = table_markdown,
+        table_flex = table_flex
+    ))
+}
+
 
 # =============================================================================
 # Manipulating display

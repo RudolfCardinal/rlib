@@ -37,6 +37,7 @@ if (!require("pacman")) install.packages("pacman")
 pacman::p_load(
     conflicted,
     data.table,
+    flextable,
     Epi,  # for poisreg, glm.Lexis
     mgcv,  # includes s(, for splines
     patchwork,
@@ -673,6 +674,9 @@ print(combinedplot)
 # Correlated predictors
 # =============================================================================
 
+cph_correl_pred_4 <- survival::coxph(surv1 ~ correl_with_x + x, data = d1)
+# ... separate as we use it in another demo below.
+
 if (FALSE) {
     # surv1 created above
 
@@ -688,7 +692,6 @@ if (FALSE) {
     print(cph_correl_pred_3)
     # x: coef=0.71321, p=9.86e-5; correl_with_x: coef=-0.02925, p=0.873
 
-    cph_correl_pred_4 <- survival::coxph(surv1 ~ correl_with_x + x, data = d1)
     print(cph_correl_pred_4)
     # correl_with_x: coef=-0.02925, p=0.873; x: coef=0.71321, p=9.86e-5
 
@@ -763,8 +766,18 @@ cat("- Onto flextables...\n")
 cph_correl_pred_4_formatted <- miscresults$mk_cph_table(cph_correl_pred_4)
 cph_complex_formatted <- miscresults$mk_cph_table(cph_complex)
 cph_complex2_formatted <- miscresults$mk_cph_table(cph_complex2)
+multicph_summary <- miscresults$summarize_multiple_cph(
+    list(
+        "CPH one" = cph_complex2_formatted,
+        "Cox #2" = cph_complex2_formatted,
+        "Cox #3" = cph_complex2_formatted
+    ),
+    correct_alpha_for = "tests",
+    alpha_correction_method = "sidak"
+)
 
 PROMPT <- "Press [Enter] to see next table..."
 readline(PROMPT); print(cph_correl_pred_4_formatted$table_flex)
 readline(PROMPT); print(cph_complex_formatted$table_flex)
 readline(PROMPT); print(cph_complex2_formatted$table_flex)
+readline(PROMPT); print(multicph_summary$table_flex)
