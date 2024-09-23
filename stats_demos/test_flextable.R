@@ -314,6 +314,7 @@ fd3 <- data.table(do.call(
     simplify = FALSE)
 ))
 fd3[, age := rnorm(n = nrow(fd3), mean = 40, sd = 10)]
+fd3[, boolpred := as.logical(rbinom(n = nrow(fd3), size = 1, prob = 0.5))]
 # These should be recovered in the table, ft3a:
 COEFF_INTERCEPT <- 100.0
 COEFF_AGE <- 0.2  # per year
@@ -338,8 +339,9 @@ fd3[, y_drug := case_when(
     drug == DRUG_HIGH ~ COEFF_DRUG_HIGH,
     TRUE ~ NA_real_
 )]
+fd3[, y_boolpred := (as.numeric(boolpred) - 0.5) * 0.2]
 fd3[, err := rnorm(n = nrow(fd3), mean = 0, sd = 2.0)]
-fd3[, performance := y_start + y_age + y_sex + y_drug + err]
+fd3[, performance := y_start + y_age + y_sex + y_drug + y_boolpred + err]
 fd3[,
     succeeded := as.integer(performance > mean(performance))
 ]
@@ -350,7 +352,10 @@ M3_PREDICTOR_REPLACEMENTS <- c(
     "sex" = "Sex",
     # Levels
     "LowDose" = "Low dose",
-    "HighDose" = "High dose"
+    "HighDose" = "High dose",
+    # Logical/boolean levels:
+    "TRUE" = "True",
+    "FALSE" = "False"
 )
 
 
@@ -465,6 +470,19 @@ m3e <- mk_model_anova_coeffs(
 )
 ft3e <- m3e$table_flex
 
+m3f <- mk_model_anova_coeffs(
+    # Also with boolean predictor:
+    model_fn = lm,
+    formula = performance ~ age * drug * sex * boolpred,
+    data = fd3,
+    predictor_replacements = M3_PREDICTOR_REPLACEMENTS,
+    squish_up_level_rows = TRUE,
+    suppress_nonsig_coeffs = FALSE,
+    suppress_nonsig_coeff_tests = FALSE,
+    debug = FALSE
+)
+ft3f <- m3f$table_flex
+
 
 # =============================================================================
 # Survival analysis
@@ -499,7 +517,7 @@ flextable::save_as_docx(
     )
 )
 
-# PROMPT <- "Press [Enter] to see next table..."
+PROMPT <- "Press [Enter] to see next table..."
 print(ft1)
 readline(PROMPT); print(ft2)
 readline(PROMPT); print(ft3a)
@@ -507,3 +525,4 @@ readline(PROMPT); print(ft3b)
 readline(PROMPT); print(ft3c)
 readline(PROMPT); print(ft3d)
 readline(PROMPT); print(ft3e)
+readline(PROMPT); print(ft3f)
