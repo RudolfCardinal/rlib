@@ -772,7 +772,7 @@ multicph_summary <- miscresults$summarize_multiple_cph(
         "Cox #2" = cph_complex2_formatted,
         "Cox #3" = cph_complex2_formatted
     ),
-    correct_alpha_for = "tests",
+    correct_alpha_for = "none",
     alpha_correction_method = "sidak"
 )
 
