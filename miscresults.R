@@ -107,7 +107,7 @@ miscresults$DOWN_ARROW_FROM_BAR <- "\u21A7"
 miscresults$BLACK_UP_TRIANGLE <- "\u25B2"
 miscresults$BLACK_DOWN_TRIANGLE <- "\u25BC"
 miscresults$WHITE_UP_TRIANGLE <- "\u25B3"
-miscresults$BLACK_DOWN_TRIANGLE <- "\u25BD"
+miscresults$WHITE_DOWN_TRIANGLE <- "\u25BD"
 
 # https://www.compart.com/en/unicode/block/U+0080
 miscresults$MIDDLE_DOT <- "\u00B7"
