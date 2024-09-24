@@ -484,9 +484,10 @@ m3f <- mk_model_anova_coeffs(
 )
 ft3f <- (
     m3f$table_flex
-    %>% set_caption(
-        "This is a caption. You can't apply footnotes to captions."
-    )
+    %>% set_caption(as_paragraph_md(paste0(
+        "This is a caption. You can't apply footnotes to captions. ",
+        "Use *ftExtra::as_paragraph_md()* for markdown."
+    )))
     %>% footnote(
         part = "header",
         ref_symbols = miscresults$ASTERISK,
