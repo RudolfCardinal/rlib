@@ -75,17 +75,13 @@ miscresults <- new.env()
 # preferable to use "\u<hexcode">, e.g. "\u2013" for an en dash. This is an
 # ASCII file representation of a Unicode character, which works fine.
 
-miscresults$CHI_LOWER <- "\u03C7"
+# Basic ASCII
+miscresults$NEWLINE <- "\\\n"  # two characters: backslash, newline
 
+# Common punctuation
 miscresults$HYPHEN <- "-"  # plain ASCII
 
-miscresults$EN_DASH <- "\u2013"
-miscresults$MINUS <- "\u2212"
-miscresults$MULTIPLY <- "\u00D7"
-miscresults$MULTIPLICATION_DOT <- "\u22C5"
-miscresults$PLUS_MINUS <- "\u00B1"  # case-insensitive
-
-# Traditional order for footnotes:
+# Marks in the traditional order for footnotes:
 # - https://en.wikipedia.org/wiki/Note_(typography)
 miscresults$ASTERISK <- "*"
 miscresults$DAGGER <- "\u2020"
@@ -94,23 +90,43 @@ miscresults$SECTION <- "\u00A7"
 miscresults$DOUBLE_VERTICAL_LINE <- "\u2016"
 miscresults$PILCROW <- "\u00B6"
 
-miscresults$NEWLINE <- "\\\n"  # two characters: backslash, newline
+# Dashes and mathematical symbols
+miscresults$EN_DASH <- "\u2013"
+miscresults$MINUS <- "\u2212"
+miscresults$MULTIPLY <- "\u00D7"
+miscresults$MULTIPLICATION_DOT <- "\u22C5"
+miscresults$PLUS_MINUS <- "\u00B1"  # case-insensitive
 
+# Greek letters
+miscresults$ALPHA <- "\u03B1"
+miscresults$CHI_LOWER <- "\u03C7"
+
+# Accented Latin characters
+miscresults$LOWER_CASE_A_ACUTE <- "\u00E1"
+miscresults$UPPER_CASE_S_CARON <- "\u0160"
+
+# Arrows and arrow-like symbols
 # https://www.compart.com/en/unicode/block/U+2190
 miscresults$UP_ARROW <- "\u2191"
 miscresults$DOWN_ARROW <- "\u2193"
 miscresults$LEFT_RIGHT_ARROW <- "\u2194"
 miscresults$UP_ARROW_FROM_BAR <- "\u21A5"
 miscresults$DOWN_ARROW_FROM_BAR <- "\u21A7"
-
 # https://www.compart.com/en/unicode/block/U+25A0
 miscresults$BLACK_UP_TRIANGLE <- "\u25B2"
 miscresults$BLACK_DOWN_TRIANGLE <- "\u25BC"
 miscresults$WHITE_UP_TRIANGLE <- "\u25B3"
 miscresults$WHITE_DOWN_TRIANGLE <- "\u25BD"
 
+# Other symbols
 # https://www.compart.com/en/unicode/block/U+0080
 miscresults$MIDDLE_DOT <- "\u00B7"
+
+# Names with accents
+miscresults$SIDAK_TXT <- paste0(
+    miscresults$UPPER_CASE_S_CARON, "id", miscresults$LOWER_CASE_A_ACUTE, "k"
+)
+
 
 # -----------------------------------------------------------------------------
 # Other

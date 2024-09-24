@@ -58,6 +58,7 @@ set.seed(1)
 # -----------------------------------------------------------------------------
 # Individual-level data
 # -----------------------------------------------------------------------------
+
 n_placebo <- 2201
 n_drug <- 1258
 fd1 <- data.table(  # fd, fake data
@@ -481,7 +482,24 @@ m3f <- mk_model_anova_coeffs(
     suppress_nonsig_coeff_tests = FALSE,
     debug = FALSE
 )
-ft3f <- m3f$table_flex
+ft3f <- (
+    m3f$table_flex
+    %>% set_caption(
+        "This is a caption. You can't apply footnotes to captions."
+    )
+    %>% footnote(
+        part = "header",
+        ref_symbols = miscresults$ASTERISK,
+        value = as_paragraph("Header footnote 1, not inline."),
+        inline = FALSE
+    )
+    %>% footnote(
+        part = "header",
+        ref_symbols = miscresults$DAGGER,
+        value = as_paragraph("Header footnote 2, not inline."),
+        inline = FALSE
+    )
+)
 
 
 # =============================================================================
