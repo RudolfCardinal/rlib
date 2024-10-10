@@ -226,7 +226,7 @@ datetimefunc$mk_pulsetable_dimensionless <- function(
     n_events <- length(event_starts)
     if (n_events != n_event_times && n_durations > 1) {
         cat("--- BAD event_times:\n")
-        print(event_times)
+        dput(event_times)
         stop(paste0(
             "You mustn't supply non-unique event_times if you are providing ",
             "individual values of duration_per_event."
