@@ -1413,6 +1413,10 @@ miscresults$mk_model_anova_coeffs <- function(
     # Collate ANOVA and coefficient information
     # -------------------------------------------------------------------------
 
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Establish what contrasts we'll use
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
     using_type_I_ss <- type == "I" || type == 1
     using_type_II_ss <- type == "II" || type == 2
     using_type_III_ss <- type == "III" || type == 3
@@ -1450,12 +1454,27 @@ miscresults$mk_model_anova_coeffs <- function(
         contrasts_coeffs_model <- r_default_contrasts
     }
 
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Run the models, m1 and m2
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
     saved_options_contrasts <- getOption("contrasts")  # save
     options(contrasts = contrasts_anova_model)  # set
     m1 <- model_fn(formula, data = data, ...)
-    options(contrasts = contrasts_coeffs_model)  # set
-    m2 <- model_fn(formula, data = data, ...)
+    if (identical(contrasts_coeffs_model, contrasts_anova_model)) {
+        # Same contrasts. Save time:
+        m2 <- m1
+    } else {
+        # Different contrasts.
+        options(contrasts = contrasts_coeffs_model)  # set
+        m2 <- model_fn(formula, data = data, ...)
+    }
     options(contrasts = saved_options_contrasts)  # restore
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Extract: ANOVA table object (a) from m1, plus summary (s) and
+    # coefficients (coeffs) from m2.
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     if (using_type_I_ss) {
         a <- stats::anova(m1)
@@ -1488,6 +1507,10 @@ miscresults$mk_model_anova_coeffs <- function(
     intermediate_anova <- NULL
     nrow_anova <- nrow(a)
     if(rownames(a)[nrow_anova] != R_RESIDUALS_LABEL) {
+        cat("~~~ Model m1:")
+        print(m1)
+        cat("~~~ ANOVA a, from model m1:")
+        print(a)
         stop(paste0(
             "This function can't yet extract residuals from this type of ",
             "object. If you are using a glm() object with Type I sums of ",

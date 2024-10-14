@@ -809,7 +809,7 @@ datetimefunc$test_pulsetable <- function(verbose = FALSE) {
         mktitle("q1b")
         print(q1b)
     }
-    stopifnot(all.equal(q1a, q1b))
+    stopifnot(isTRUE(all.equal(q1a, q1b)))
     # - use all.equal(), not identical(); the latter reports differences that
     #   are due to infinitesimal floating-point differences; the first doesn't
     #   care (appropriately).
@@ -886,7 +886,7 @@ datetimefunc$test_pulsetable <- function(verbose = FALSE) {
         mktitle("q2b")
         print(q2b)
     }
-    stopifnot(all.equal(q2a, q2b))
+    stopifnot(isTRUE(all.equal(q2a, q2b)))
 
     # -------------------------------------------------------------------------
     # 3
@@ -911,7 +911,7 @@ datetimefunc$test_pulsetable <- function(verbose = FALSE) {
         mktitle("q3b")
         print(q3b)
     }
-    stopifnot(all.equal(q3a, q3b))
+    stopifnot(isTRUE(all.equal(q3a, q3b)))
 
     # -------------------------------------------------------------------------
     # 4
@@ -939,7 +939,7 @@ datetimefunc$test_pulsetable <- function(verbose = FALSE) {
         mktitle("q4b")
         print(q4b)
     }
-    stopifnot(all.equal(q4a, q4b))
+    stopifnot(isTRUE(all.equal(q4a, q4b)))
 
     # -------------------------------------------------------------------------
     # 5
@@ -964,7 +964,7 @@ datetimefunc$test_pulsetable <- function(verbose = FALSE) {
         mktitle("q5b")
         print(q5b)
     }
-    stopifnot(all.equal(q5a, q5b))
+    stopifnot(isTRUE(all.equal(q5a, q5b)))
 
     # -------------------------------------------------------------------------
     # 6
@@ -989,7 +989,7 @@ datetimefunc$test_pulsetable <- function(verbose = FALSE) {
         mktitle("q6b")
         print(q6b)
     }
-    stopifnot(all.equal(q6a, q6b))
+    stopifnot(isTRUE(all.equal(q6a, q6b)))
 
     # -------------------------------------------------------------------------
     # 7
@@ -1013,9 +1013,9 @@ datetimefunc$test_pulsetable <- function(verbose = FALSE) {
     }
     q7a <- datetimefunc$query_pulsetable_times(p7, p1_test_times)
     q7b <- datetimefunc$query_pulsetable_times_slow(p7, p1_test_times)
-    stopifnot(all.equal(p7$event_times, p7data_sorted$event_times))
-    stopifnot(all.equal(p7$event_durations, p7data_sorted$event_durations))
-    stopifnot(all.equal(q7a, q7b))
+    stopifnot(isTRUE(all.equal(p7$event_times, p7data_sorted$event_times)))
+    stopifnot(isTRUE(all.equal(p7$event_durations, p7data_sorted$event_durations)))
+    stopifnot(isTRUE(all.equal(q7a, q7b)))
 }
 
 
@@ -1328,7 +1328,7 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
         cat("e1b:\n")
         print(e1b)
     }
-    stopifnot(all.equal(e1a, e1b))
+    stopifnot(isTRUE(all.equal(e1a, e1b)))
 
     # Speed test
     n_tests <- 1000
@@ -1380,7 +1380,7 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
         cat("e2b:\n")
         print(e2b)
     }
-    stopifnot(all.equal(e2a, e2b))
+    stopifnot(isTRUE(all.equal(e2a, e2b)))
 
     # -------------------------------------------------------------------------
     # 3: dates, small gap
@@ -1420,7 +1420,7 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
         cat("e3b:\n")
         print(e3b)
     }
-    stopifnot(all.equal(e3a, e3b))
+    stopifnot(isTRUE(all.equal(e3a, e3b)))
 
     # -------------------------------------------------------------------------
     # 4: dates, no gap
@@ -1448,7 +1448,7 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
         cat("e4b:\n")
         print(e4b)
     }
-    stopifnot(all.equal(e4a, e4b))
+    stopifnot(isTRUE(all.equal(e4a, e4b)))
 
     # -------------------------------------------------------------------------
     # 5: dimensionless, empty
@@ -1471,7 +1471,7 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
         cat("e5b:\n")
         print(e5b)
     }
-    stopifnot(all.equal(e5a, e5b))
+    stopifnot(isTRUE(all.equal(e5a, e5b)))
 
     # -------------------------------------------------------------------------
     # 6: dates, empty
@@ -1495,7 +1495,7 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
         cat("e6b:\n")
         print(e6b)
     }
-    stopifnot(all.equal(e6a, e6b))
+    stopifnot(isTRUE(all.equal(e6a, e6b)))
 
     # -------------------------------------------------------------------------
     # 7: dimensionless, single row
@@ -1521,7 +1521,7 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
         cat("e7b:\n")
         print(e7b)
     }
-    stopifnot(all.equal(e7a, e7b))
+    stopifnot(isTRUE(all.equal(e7a, e7b)))
 }
 
 

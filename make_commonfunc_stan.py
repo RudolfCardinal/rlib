@@ -403,7 +403,7 @@ SIMPLE_FUNCTIONS = r"""
                         cat("log_p:\n"); print(log_p)
                         p <- exp(log_p)
                         cat("p:\n"); print(p)
-                        stopifnot(all.equal(sum(p), 1))  # check with tolerance
+                        stopifnot(isTRUE(all.equal(sum(p), 1)))  # check with tolerance
                         cat("log_1mp:\n"); print(log_1mp)
                         cat("logit:\n"); print(logit)
                     }
