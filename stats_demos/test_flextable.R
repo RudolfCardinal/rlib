@@ -12,6 +12,7 @@ pacman::p_load(
 
 # RLIB_PREFIX <- "/srv/cardinal_rlib/"
 RLIB_PREFIX <- ""  # use when editing miscresults.R
+# source(paste0(RLIB_PREFIX, "debugfunc.R"))
 source(paste0(RLIB_PREFIX, "miscfile.R"))
 source(paste0(RLIB_PREFIX, "miscstat.R"))
 source(paste0(RLIB_PREFIX, "miscresults.R"))
@@ -312,7 +313,8 @@ fd3 <- data.table(do.call(
             sex = c(SEX_FEMALE, SEX_MALE),
             drug = c(DRUG_PLACEBO, DRUG_LOW, DRUG_HIGH)
         ),
-    simplify = FALSE)
+        simplify = FALSE
+    )
 ))
 fd3[, age := rnorm(n = nrow(fd3), mean = 40, sd = 10)]
 fd3[, boolpred := as.logical(rbinom(n = nrow(fd3), size = 1, prob = 0.5))]
@@ -357,6 +359,44 @@ M3_PREDICTOR_REPLACEMENTS <- c(
     # Logical/boolean levels:
     "TRUE" = "True",
     "FALSE" = "False"
+)
+
+
+# =============================================================================
+# A model for within-subjects analysis with lmer
+# =============================================================================
+
+COEFF_WS_LINEAR <- 0.3
+fd4 <- copy(fd3)
+fd4[, performance := NULL]
+fd4[, succeeded := NULL]
+fd4[, subjnum := 1:nrow(fd4)]
+fd4[, subject := paste0("s", subjnum)]
+fd4 <- (
+    rbind(
+        fd4 %>% mutate(wsfac = "A"),
+        fd4 %>% mutate(wsfac = "B"),
+        fd4 %>% mutate(wsfac = "C"),
+        fd4 %>% mutate(wsfac = "D")
+    )
+    %>% arrange(subjnum, wsfac)
+    %>% mutate(
+        wslinear = rnorm(n = n(), mean = 0, sd = 5.0),
+        err = rnorm(n = n(), mean = 0, sd = 2.0),
+        y_wslin = COEFF_WS_LINEAR * wslinear,
+        y_wsfac = case_when(
+            wsfac == "A" ~ 0.0,
+            wsfac == "B" ~ 0.5,
+            wsfac == "C" ~ -0.3,
+            wsfac == "D" ~ 1.1
+        ),
+        performance = (
+            y_start + y_age + y_sex + y_drug + y_boolpred
+                + y_wslin + y_wsfac
+                + err
+        )
+    )
+    %>% as.data.table()
 )
 
 
@@ -426,7 +466,10 @@ m3a <- mk_model_anova_coeffs(
     data = fd3,
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS
 )
-ft3a <- m3a$table_flex
+ft3a <- (
+    m3a$table_flex
+    %>% set_caption("Model via lm(); default options")
+)
 
 m3b <- mk_model_anova_coeffs(
     model_fn = glm,
@@ -435,7 +478,10 @@ m3b <- mk_model_anova_coeffs(
     data = fd3,
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS
 )
-ft3b <- m3b$table_flex
+ft3b <- (
+    m3b$table_flex
+    %>% set_caption("glm, logistic regression; default options")
+)
 
 m3c <- mk_model_anova_coeffs(
     model_fn = glm,
@@ -445,7 +491,10 @@ m3c <- mk_model_anova_coeffs(
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS,
     squish_up_level_rows = TRUE  # new here
 )
-ft3c <- m3c$table_flex
+ft3c <- (
+    m3c$table_flex
+    %>% set_caption("glm, logistic regression; squish up rows")
+)
 
 m3d <- mk_model_anova_coeffs(
     model_fn = glm,
@@ -456,7 +505,13 @@ m3d <- mk_model_anova_coeffs(
     squish_up_level_rows = TRUE,
     include_reference_levels = FALSE  # new here
 )
-ft3d <- m3d$table_flex
+ft3d <- (
+    m3d$table_flex
+    %>% set_caption(paste0(
+        "glm, logistic regression; ",
+        "squish up rows, skip reference levels"
+    ))
+)
 
 m3e <- mk_model_anova_coeffs(
     # With continuous predictor * factor interaction:
@@ -469,7 +524,12 @@ m3e <- mk_model_anova_coeffs(
     suppress_nonsig_coeff_tests = FALSE,
     debug = FALSE
 )
-ft3e <- m3e$table_flex
+ft3e <- (
+    m3e$table_flex
+    %>% set_caption(
+        "lm; this time don't suppress non-significant coeffs/tests"
+    )
+)
 
 m3f <- mk_model_anova_coeffs(
     # Also with boolean predictor:
@@ -486,7 +546,8 @@ ft3f <- (
     m3f$table_flex
     %>% set_caption(as_paragraph_md(paste0(
         "This is a caption. You can't apply footnotes to captions. ",
-        "Use *ftExtra::as_paragraph_md()* for markdown."
+        "Use *ftExtra::as_paragraph_md()* for markdown. ",
+        "Model via lm() including Boolean (logical) predictor."
     )))
     %>% footnote(
         part = "header",
@@ -500,6 +561,28 @@ ft3f <- (
         value = as_paragraph("Header footnote 2, not inline."),
         inline = FALSE
     )
+)
+
+m4f <- mk_model_anova_coeffs(
+    # Also with boolean predictor:
+    model_fn = lmerTest::lmer,
+    formula = (
+        performance ~
+            age * drug * sex * boolpred
+            + wsfac + wslinear
+            + boolpred:wsfac
+            + (1 | subject)
+    ),
+    data = fd4,
+    predictor_replacements = M3_PREDICTOR_REPLACEMENTS,
+    squish_up_level_rows = TRUE,
+    suppress_nonsig_coeffs = FALSE,
+    suppress_nonsig_coeff_tests = FALSE,
+    debug = FALSE
+)
+ft4a <- (
+    m4f$table_flex
+    %>% set_caption("lmerTest::lmer, with within-subjects predictors")
 )
 
 
@@ -545,3 +628,4 @@ readline(PROMPT); print(ft3c)
 readline(PROMPT); print(ft3d)
 readline(PROMPT); print(ft3e)
 readline(PROMPT); print(ft3f)
+readline(PROMPT); print(ft4a)
