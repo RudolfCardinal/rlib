@@ -32,7 +32,8 @@
 # - bold: **x**
 # - subscript: ~x~
 # - superscript: ^x^
-# - newline: backslash then newline immediately (see miscresults$NEWLINE below)
+# - newline: backslash then newline immediately (see
+#   miscresults$MARKDOWN_NEWLINE below)
 #
 # Less often:
 #
@@ -76,7 +77,8 @@ miscresults <- new.env()
 # ASCII file representation of a Unicode character, which works fine.
 
 # Basic ASCII
-miscresults$NEWLINE <- "\\\n"  # two characters: backslash, newline
+miscresults$MARKDOWN_NEWLINE <- "\\\n"  # two characters: backslash, newline
+# ... Line break: https://ftextra.atusy.net/articles/format_columns
 
 # Common punctuation
 miscresults$HYPHEN <- "-"  # plain ASCII

@@ -280,7 +280,7 @@ t2 <- (
                 "Collapsed",
                 "line_2",
                 "line_3",
-                sep = miscresults$NEWLINE
+                sep = miscresults$MARKDOWN_NEWLINE
             ),
             variable == "sbp" ~ "Systolic BP (mmHg)",
             TRUE ~ variable
