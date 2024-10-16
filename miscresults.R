@@ -1108,6 +1108,10 @@ miscresults$mk_oneway_anova <- function(
 # Formatting full GLM/ANOVA models
 # =============================================================================
 
+# -----------------------------------------------------------------------------
+# Internal functions
+# -----------------------------------------------------------------------------
+
 miscresults$mk_default_flextable_from_markdown <- function(markdown_table) {
     return(
         markdown_table
@@ -1118,6 +1122,7 @@ miscresults$mk_default_flextable_from_markdown <- function(markdown_table) {
         %>% flextable::autofit()  # size columns
     )
 }
+
 
 miscresults$which_anova_term_matches_coeff <- function(
     anova_terms,
@@ -1230,6 +1235,499 @@ miscresults$which_anova_term_matches_coeff <- function(
 #     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms2, "xxB:xB") == 3)
 # }
 
+
+miscresults$summarize_anova_table <- function(a) {
+    # INTERNAL FUNCTION.
+    # Coerces an ANOVA table to a standard internal format.
+    #
+    # Various kinds of model, and different ANOVA summarizing functions, create
+    # slightly different kinds of table formats, so we'll try to unify them
+    # here (or raise an error if we don't know how).
+    #
+    # Arguments:
+    #   a
+    #       Output of e.g. stats::anova(some_model), or car::Anova(some_model,
+    #       ...).
+    #
+    # Returns a table (data frame) with the following columns:
+    #   term
+    #       Term name.
+    #   is_term:
+    #       Logical: is this a subterm? Always TRUE, but provided for
+    #       integration with the output of
+    #       miscresults$summarize_model_coefficients().
+    #   term_idx:
+    #       Row number (term index).
+    #   is_subterm
+    #       Logical: is this a subterm? Always FALSE, but provided for
+    #       integration with the output of
+    #       miscresults$summarize_model_coefficients().
+    #   subterm_idx:
+    #       Always 0. For integration as above.
+    #   is_intercept
+    #       Logical: is this the main intercept term?
+    #   F
+    #       Value of F.
+    #   df
+    #       Term (numerator) degrees of freedom for the F test.
+    #   df_resid
+    #       Residual (denominator) degrees of freedom for the F test.
+    #   pF
+    #       Probability associated with F[df, df_resid].
+
+    nrow_anova <- nrow(a)
+
+    if (identical(colnames(a), c("Sum Sq", "Df", "F value", "Pr(>F)"))
+            && rownames(a)[nrow_anova] == R_RESIDUALS_LABEL) {
+        # Table looks like this:
+        #
+        # Anova Table (Type III tests)      # e.g. from car::Anova()
+        # [or]
+        # Analysis of Variance Table        # e.g. from stats::anova()
+        # [but either way:]
+        #
+        # Response: performance
+        #                       Sum Sq  Df    F value    Pr(>F)
+        # (Intercept)           321575   1 80848.8063 < 2.2e-16 ***
+        # age                     1937   1   486.9119 < 2.2e-16 ***
+        # drug                     647   2    81.3622 < 2.2e-16 ***
+        # ...
+        # age:drug                  10   2     1.2526 0.2865443
+        # ...
+        # Residuals               2291 576
+
+        anova_table <- (
+            a
+            %>% as_tibble()
+            %>% select(c("Df", "F value", "Pr(>F)"))
+            %>% rename(
+                F = "F value",
+                df = "Df",
+                pF = "Pr(>F)"
+            )
+            %>% mutate(
+                term = rownames(a),
+                is_subterm = FALSE,
+                df_resid = a$Df[nrow_anova],
+                is_intercept = term == R_INTERCEPT_LABEL
+            )
+            %>% filter(term != R_RESIDUALS_LABEL)
+        )
+
+    } else if (identical(colnames(a), c("Sum Sq", "Df", "F values", "Pr(>F)"))
+            && rownames(a)[nrow_anova] == R_RESIDUALS_LABEL) {
+        # Table looks like this:
+        #
+        # Analysis of Deviance Table (Type III tests)
+        #
+        # Response: succeeded
+        # Error estimate based on Pearson residuals
+        #
+        #           Sum Sq  Df F values    Pr(>F)
+        # age       100.83   1 157.2595 < 2.2e-16 ***
+        # drug      458.74   2 357.7439 < 2.2e-16 ***
+        # sex        35.81   1  55.8508 2.819e-13 ***
+        # drug:sex    2.51   2   1.9606    0.1417
+        # Residuals 380.20 593
+
+        anova_table <- (
+            a
+            %>% as_tibble()
+            %>% select(c("Df", "F values", "Pr(>F)"))
+            %>% rename(
+                F = "F values",
+                df = "Df",
+                pF = "Pr(>F)"
+            )
+            %>% mutate(
+                term = rownames(a),
+                df_resid = a$Df[nrow_anova]
+            )
+            %>% filter(term != R_RESIDUALS_LABEL)
+        )
+
+    } else if (identical(colnames(a), c("Sum Sq", "Mean Sq", "Num DF",
+                                        "DenDF", "F value", "Pr(>F)"))) {
+        # Table looks like this, e.g. stats::anova(lmerTest::lmer(...))
+        #
+        # Type III Analysis of Variance Table with Satterthwaite's method
+        #                       Sum Sq Mean Sq NumDF   DenDF   F value    Pr(>F)
+        # age                   9168.9  9168.9     1  575.99 2325.2386 < 2.2e-16 ***
+        # drug                  1734.9   867.4     2  575.99  219.9834 < 2.2e-16 ***
+        # ...
+        # age:drug                16.0     8.0     2  575.99    2.0320   0.13201
+        # ...
+        # age:drug:sex:boolpred   13.9     7.0     2  575.99    1.7632   0.17241
+
+        anova_table <- (
+            a
+            %>% as_tibble()
+            %>% select(c("NumDF", "DenDF", "F value", "Pr(>F)"))
+            %>% rename(
+                F = "F value",
+                df = "NumDF",
+                df_resid = "DenDF",
+                pF = "Pr(>F)"
+            )
+            %>% mutate(
+                term = rownames(a)
+            )
+        )
+
+    } else if (identical(colnames(a), c("F", "Df", "Df.res", "Pr(>F)"))) {
+        # Table looks like this:
+        #
+        # Analysis of Deviance Table (Type III Wald F tests with Kenward-Roger df)
+        #
+        # Response: performance
+        #                                F Df  Df.res    Pr(>F)
+        # (Intercept)           2.5122e+05  1  908.14 < 2.2e-16 ***
+        # age                   2.3252e+03  1  576.00 < 2.2e-16 ***
+        # drug                  2.1998e+02  2  576.00 < 2.2e-16 ***
+        # ...
+        # age:drug:sex:boolpred 1.7632e+00  2  576.00   0.17241
+
+        anova_table <- (
+            a
+            %>% as_tibble()
+            # No extraneous columns.
+            %>% rename(
+                # F is already correct.
+                df = "Df",
+                df_resid = "Df.res",
+                pF = "Pr(>F)"
+            )
+            %>% mutate(
+                term = rownames(a)
+            )
+        )
+
+    } else {
+        cat("~~~ ANOVA table, from ANOVA model:\n")
+        print(a)
+        stop(paste0(
+            "This function can't yet extract details from this type of ",
+            "ANOVA table."
+        ))
+    }
+
+    # Add some final information and choose sensible column order (cosmetic).
+    return(
+        anova_table
+        %>% mutate(
+            term_idx = 1:nrow(anova_table),
+            is_term = TRUE,
+            is_subterm = FALSE,
+            subterm_idx = 0,
+            is_intercept = term == R_INTERCEPT_LABEL
+        )
+        %>% select(
+            term,
+            is_term,
+            term_idx,
+            is_subterm,
+            subterm_idx,
+            is_intercept,
+            F,
+            df,
+            df_resid,
+            pF
+        )
+    )
+}
+
+
+miscresults$summarize_model_coefficients <- function(
+    m,
+    anova_table,
+    include_reference_levels = TRUE,
+    ci = miscresults$DEFAULT_CI
+) {
+    # INTERNAL FUNCTION.
+    # Extracts coefficients from a model in a standard internal format.
+    #
+    # Arguments:
+    #   m
+    #       Some kind of linear model, or similar.
+    #   anova_table
+    #       Our internal ANOVA table representation, for matching term names.
+    #   include_reference_levels
+    #       Include reference levels of factors (though without coefficient
+    #       detail, of course).
+    #   ci
+    #       Which confidence intervals to use? Default is 0.95, meaning 95%
+    #       confidence intervals.
+    #
+    # Returns a list with the following elements:
+    #   using_t_not_Z
+    #       Coefficient tests are t tests (not Z tests). If FALSE, they're
+    #       Z tests.
+    #   coeff_table
+    #       Table (data frame) with the following columns:
+    #           level
+    #               Coefficient name, e.g. level of a factor. (May sometimes
+    #               be the same as an ANOVA term name, but not always.)
+    #           term_idx
+    #               Index (row number in anova_table) of the corresponding
+    #               ANOVA term, e.g. the factor of which this is one level, or
+    #               similar. May also be 0 in the case of an intercept term
+    #               when none is explicitly present in the ANOVA table.
+    #           anova_term_name
+    #               Corresponding term name from the ANOVA table.
+    #           is_term
+    #               Always FALSE; provided for integration with the output of
+    #               miscresults$summarize_anova_table().
+    #           is_subterm
+    #               Always TRUE (as coefficients are considered "subterms" of
+    #               their ANOVA term). Provided for integration with the output
+    #               of miscresults$summarize_anova_table().
+    #           subterm_idx:
+    #               Index of this subterm, within the corresponding term.
+    #               Usually numbered from 1 upwards (compare 0 for the main
+    #               term in the ANOVA table, as above), but 0.5 for "reference"
+    #               levels if included, to fit them in conceptually between the
+    #               term heading and the first "real" level (with a
+    #               coefficient).
+    #           is_intercept
+    #               Logical: is this the model's main intercept?
+    #           is_linear
+    #               Logical: is this a linear (continuous) predictor?
+    #           is_reference_level
+    #               Logical: is this a reference level, i.e. a dummy row
+    #               representing a reference level of a factor (against which
+    #               other levels are compared), with no coefficient of its own?
+    #           coeff
+    #               The value of the coefficient.
+    #           se
+    #               The standard error of the coefficient.
+    #           ci_lower
+    #               Lower bound of the confidence interval for the coefficient.
+    #           ci_upper
+    #               Upper bound of the confidence interval for the coefficient.
+    #           coeff_stat
+    #               The statistic (t or Z; see using_t_not_Z) associated with
+    #               the coefficient.
+    #           p_coeff_stat
+    #               The p value associated with the test statistic.
+    #           coeff_df_for_t
+    #               If the test statistic is t, the associated degrees of
+    #               freedom. (NA for Z tests.)
+
+    # Core data
+    s <- summary(m)
+    # ... of class e.g. summary.lm, and of mode list
+    coeffs <- s$coefficients
+    # ... of classes: matrix, array
+    # For some summaries of models from glm(), coefficient headings may be
+    #       Estimate, Std. Error, z value, Pr(>|z|)
+    # For others, e.g. from lm(), may be
+    #       Estimate, Std. Error, t value, Pr(>|t|)
+
+    # Convenience variables
+    coeff_colnames <- colnames(coeffs)
+    coeff_rownames <- rownames(coeffs)
+    n_anova_terms <- nrow(anova_table)
+
+    # Work out if we will use t or Z tests:
+    # For t tests, also work out where we'll get the df information from.
+    using_t_not_Z <- "t value" %in% coeff_colnames
+    if (!using_t_not_Z && !("z value" %in% coeff_colnames)) {
+        stop("Neither t nor z (Z) present in coefficients")
+    }
+    using_overall_t_df <- FALSE
+    using_individual_t_df <- FALSE
+    if (using_t_not_Z) {
+        using_overall_t_df <- "df" %in% names(s)
+        using_individual_t_df <- (
+            !using_overall_t_df && "df" %in% coeff_colnames
+        )
+        if (!using_overall_t_df && !using_individual_t_df) {
+            stop("Don't know how to extract degrees of freedom for t")
+        }
+        colname_stat <- "t value"
+        colname_p_stat <- "Pr(>|t|)"
+    } else {
+        colname_stat <- "z value"
+        colname_p_stat <- "Pr(>|z|)"
+    }
+
+    # Work through the coefficients. Match them to the ANOVA terms.
+    coeff_table <- NULL
+    for (i in 1:nrow(coeffs)) {
+        term_name <- coeff_rownames[i]
+        # The tricky part is assigning them correctly to the ANOVA table terms.
+        term_idx <- miscresults$which_anova_term_matches_coeff(
+            anova_table$term, term_name
+        )
+        if (is.na(term_idx)) {
+            if (term_name == R_INTERCEPT_LABEL) {
+                # For example, the output of
+                #   car::Anova(glm(..., family = binomial(link = "logit")))
+                # does not have an intercept term.
+                anova_term_name <- R_INTERCEPT_LABEL
+                term_idx <- 0
+            } else {
+                cat("--- ERROR. anova_table:\n")
+                print(anova_table)
+                stop(paste0("Can't match term: ", term_name))
+            }
+        } else {
+            anova_term_name <- anova_table$term[term_idx]
+        }
+        is_linear <- FALSE
+        if (term_name %in% anova_table$term
+                || term_name == R_INTERCEPT_LABEL) {
+            # Exact match, e.g. linear coefficient.
+            # Assign at subterm_idx = 0, i.e. level with the term.
+            subterm_idx <- 0
+            is_linear <- TRUE
+        } else if (is.null(coeff_table)) {
+            # Otherwise (e.g. levels of a factor): start from 1
+            subterm_idx <- 1
+        } else {
+            prev_subterm_idxs <- coeff_table[
+                coeff_table$term_idx == term_idx,
+            ]$subterm_idx
+            if (length(prev_subterm_idxs) == 0) {
+                subterm_idx <- 1
+            } else {
+                subterm_idx <- max(prev_subterm_idxs, na.rm = TRUE) + 1
+            }
+        }
+        if (using_overall_t_df) {
+            coeff_df_for_t <- s$df[2]
+            # ... see summary.lm:
+            #       ans$coefficients <- cbind(Estimate = est, `Std. Error` = se,
+            #           `t value` = tval, `Pr(>|t|)` = 2 * pt(abs(tval), rdf,
+            #           lower.tail = FALSE))
+            #       ans$df <- c(p, rdf, NCOL(Qr$qr))
+        } else if (using_individual_t_df) {
+            coeff_df_for_t <- coeffs[i, "df"]
+        } else {
+            # e.g. if using Z tests
+            coeff_df_for_t <- NA_real_
+        }
+        coeff_table <- rbind(
+            coeff_table,
+            data.frame(
+                level = term_name,
+                is_subterm = TRUE,
+                is_linear = is_linear,
+                term_idx = term_idx,
+                anova_term_name = anova_term_name,
+                subterm_idx = subterm_idx,
+                coeff = coeffs[i, "Estimate"],
+                # ... row, column
+                # ... coeffs$`Estimate`[i] fails with
+                #     "$ operator is invalid for atomic vectors"
+                se = coeffs[i, "Std. Error"],
+                coeff_stat = coeffs[i, colname_stat],
+                p_coeff_stat = coeffs[i, colname_p_stat],
+                coeff_df_for_t = coeff_df_for_t
+            )
+        )
+    }
+    coeff_table$is_reference_level <- FALSE
+
+    # Add reference levels?
+    # Inserted at subterm_idx = 0.5, i.e. before the first extracted level.
+    use_xlevels <- ("xlevels" %in% names(m))
+    use_frame <- ("frame" %in% slotNames(m))
+    if (include_reference_levels) {
+        for (i in 1:n_anova_terms) {
+            term_name <- anova_table$term[i]
+            term_idx <- anova_table$term_idx[i]
+            if (use_xlevels) {
+                if (term_name %in% names(m$xlevels)) {
+                    first_level_name <- m$xlevels[[term_name]][1]
+                    coeff_table <- rbind(
+                        coeff_table,
+                        data.frame(
+                            level = first_level_name,
+                            is_subterm = TRUE,
+                            is_linear = FALSE,
+                            is_reference_level = TRUE,
+                            term_idx = term_idx,
+                            anova_term_name = term_name,
+                            subterm_idx = 0.5,
+                            coeff = NA_real_,
+                            se = NA_real_,
+                            coeff_stat = NA_real_,
+                            p_coeff_stat = NA_real_,
+                            coeff_df_for_t = NA_real_
+                        )
+                    )
+                }
+            } else if (use_frame) {
+                if (term_name %in% names(m@frame)) {
+                    factor_levels <- levels(m@frame[[term_name]])
+                    if (!is.null(factor_levels)) {
+                        first_level_name <- factor_levels[1]
+                        coeff_table <- rbind(
+                            coeff_table,
+                            data.frame(
+                                level = first_level_name,
+                                is_subterm = TRUE,
+                                is_linear = FALSE,
+                                is_reference_level = TRUE,
+                                term_idx = term_idx,
+                                anova_term_name = term_name,
+                                subterm_idx = 0.5,
+                                coeff = NA_real_,
+                                se = NA_real_,
+                                coeff_stat = NA_real_,
+                                p_coeff_stat = NA_real_,
+                                coeff_df_for_t = NA_real_
+                            )
+                        )
+                    }
+                }
+            } else {
+                cat("~~~ Contrasts model:\n")
+                print(m)
+                stop(paste0(
+                    "Don't know how to extract reference levels from this ",
+                    "model type"
+                ))
+            }
+        }
+    }
+
+    # Add confidence intervals. Also mark intercepts, and set is_term == FALSE
+    # for later merging.
+    if (using_t_not_Z) {
+        conf_int <- miscstat$confidence_interval_from_mu_sem_df_via_t(
+            mu = coeff_table$coeff,
+            sem = coeff_table$se,
+            df = coeff_table$coeff_df_for_t,
+            ci = ci
+        )
+    } else {
+        conf_int <- miscstat$confidence_interval_from_mu_sem_via_Z(
+            mu = coeff_table$coeff,
+            sem = coeff_table$se,
+            ci = ci
+        )
+    }
+    coeff_table <- (
+        coeff_table
+        %>% mutate(
+            ci_lower = conf_int$ci_lower,
+            ci_upper = conf_int$ci_upper,
+            is_intercept = anova_term_name == R_INTERCEPT_LABEL,
+            is_term = FALSE
+        )
+    )
+    return(list(
+        using_t_not_Z = using_t_not_Z,
+        coeff_table = coeff_table
+    ))
+}
+
+
+# -----------------------------------------------------------------------------
+# Public interface
+# -----------------------------------------------------------------------------
 
 miscresults$mk_model_anova_coeffs <- function(
     model_fn,
@@ -1482,372 +1980,30 @@ miscresults$mk_model_anova_coeffs <- function(
         a <- car::Anova(m1, type = type, test.statistic = "F")
         # ... of classes: anova, data.frame
     }
-    s <- summary(m2)
-    # ... of class e.g. summary.lm, and of mode list
-    coeffs <- s$coefficients
-    # ... of classes: matrix, array
-    # For some summaries of models from glm(), coefficient headings may be
-    #       Estimate, Std. Error, z value, Pr(>|z|)
-    # For others, e.g. from lm(), may be
-    #       Estimate, Std. Error, t value, Pr(>|t|)
 
     # -------------------------------------------------------------------------
     # Build our version of the ANOVA table, in intermediate_anova
     # -------------------------------------------------------------------------
-    intermediate_anova <- NULL
-    nrow_anova <- nrow(a)
-    if (identical(colnames(a), c("Sum Sq", "Df", "F value", "Pr(>F)"))
-            && rownames(a)[nrow_anova] == R_RESIDUALS_LABEL) {
-        # Table looks like this:
-        #
-        # Anova Table (Type III tests)      # e.g. from car::Anova()
-        # [or]
-        # Analysis of Variance Table        # e.g. from stats::anova()
-        # [but either way:]
-        #
-        # Response: performance
-        #                       Sum Sq  Df    F value    Pr(>F)
-        # (Intercept)           321575   1 80848.8063 < 2.2e-16 ***
-        # age                     1937   1   486.9119 < 2.2e-16 ***
-        # drug                     647   2    81.3622 < 2.2e-16 ***
-        # ...
-        # age:drug                  10   2     1.2526 0.2865443
-        # ...
-        # Residuals               2291 576
-
-        df_resid <- a$Df[nrow_anova]
-        for (i in 1:nrow_anova) {
-            term_name <- rownames(a)[i]
-            if (term_name == R_RESIDUALS_LABEL) {
-                next  # but will be the end; residuals come last
-            }
-            intermediate_anova <- rbind(
-                intermediate_anova,
-                data.frame(
-                    term = term_name,
-                    is_subterm = FALSE,
-                    F = a[i, "F value"],  # or: a$`F value`[i]
-                    df = a[i, "Df"],
-                    df_resid = df_resid,
-                    pF = a[i, "Pr(>F)"],
-                    is_intercept = term_name == R_INTERCEPT_LABEL
-                )
-            )
-        }
-        rm(df_resid)
-    } else if (identical(colnames(a), c("Sum Sq", "Df", "F values", "Pr(>F)"))
-            && rownames(a)[nrow_anova] == R_RESIDUALS_LABEL) {
-        # Table looks like this:
-        #
-        # Analysis of Deviance Table (Type III tests)
-        #
-        # Response: succeeded
-        # Error estimate based on Pearson residuals
-        #
-        #           Sum Sq  Df F values    Pr(>F)
-        # age       100.83   1 157.2595 < 2.2e-16 ***
-        # drug      458.74   2 357.7439 < 2.2e-16 ***
-        # sex        35.81   1  55.8508 2.819e-13 ***
-        # drug:sex    2.51   2   1.9606    0.1417
-        # Residuals 380.20 593
-
-        df_resid <- a$Df[nrow_anova]
-        for (i in 1:nrow_anova) {
-            term_name <- rownames(a)[i]
-            if (term_name == R_RESIDUALS_LABEL) {
-                next  # but will be the end; residuals come last
-            }
-            intermediate_anova <- rbind(
-                intermediate_anova,
-                data.frame(
-                    term = term_name,
-                    is_subterm = FALSE,
-                    F = a[i, "F values"],
-                    df = a[i, "Df"],
-                    df_resid = df_resid,
-                    pF = a[i, "Pr(>F)"],
-                    is_intercept = term_name == R_INTERCEPT_LABEL
-                )
-            )
-        }
-        rm(df_resid)
-
-    } else if (identical(colnames(a), c("Sum Sq", "Mean Sq", "Num DF",
-                                        "DenDF", "F value", "Pr(>F)"))) {
-        # Table looks like this, e.g. stats::anova(lmerTest::lmer(...))
-        #
-        # Type III Analysis of Variance Table with Satterthwaite's method
-        #                       Sum Sq Mean Sq NumDF   DenDF   F value    Pr(>F)
-        # age                   9168.9  9168.9     1  575.99 2325.2386 < 2.2e-16 ***
-        # drug                  1734.9   867.4     2  575.99  219.9834 < 2.2e-16 ***
-        # ...
-        # age:drug                16.0     8.0     2  575.99    2.0320   0.13201
-        # ...
-        # age:drug:sex:boolpred   13.9     7.0     2  575.99    1.7632   0.17241
-
-        for (i in 1:nrow_anova) {
-            term_name <- rownames(a)[i]
-            intermediate_anova <- rbind(
-                intermediate_anova,
-                data.frame(
-                    term = term_name,
-                    is_subterm = FALSE,
-                    F = a[i, "F value"],
-                    df = a[i, "NumDF"],
-                    df_resid = a[i, "DenDF"],
-                    pF = a[i, "Pr(>F)"],
-                    is_intercept = term_name == R_INTERCEPT_LABEL
-                )
-            )
-        }
-
-    } else if (identical(colnames(a), c("F", "Df", "Df.res", "Pr(>F)"))) {
-        # Table looks like this:
-        #
-        # Analysis of Deviance Table (Type III Wald F tests with Kenward-Roger df)
-        #
-        # Response: performance
-        #                                F Df  Df.res    Pr(>F)
-        # (Intercept)           2.5122e+05  1  908.14 < 2.2e-16 ***
-        # age                   2.3252e+03  1  576.00 < 2.2e-16 ***
-        # drug                  2.1998e+02  2  576.00 < 2.2e-16 ***
-        # ...
-        # age:drug:sex:boolpred 1.7632e+00  2  576.00   0.17241
-
-        for (i in 1:nrow_anova) {
-            term_name <- rownames(a)[i]
-            intermediate_anova <- rbind(
-                intermediate_anova,
-                data.frame(
-                    term = term_name,
-                    is_subterm = FALSE,
-                    F = a[i, "F"],
-                    df = a[i, "Df"],
-                    df_resid = a[i, "Df.res"],
-                    pF = a[i, "Pr(>F)"],
-                    is_intercept = term_name == R_INTERCEPT_LABEL
-                )
-            )
-        }
-
-    } else {
-        cat("~~~ ANOVA model:\n")
-        print(m1)
-        cat("~~~ ANOVA table, from ANOVA model:\n")
-        print(a)
-        stop(paste0(
-            "This function can't yet extract details from this type of ",
-            "ANOVA table."
-        ))
-    }
-
+    intermediate_anova <- miscresults$summarize_anova_table(a)
     # If we are using Type II SS, the intercept from the ANOVA model is *not*
     # the same as the intercept from the coefficients model. Do not consider
     # the ANOVA F test for the intercept.
     if (using_type_III_ss) {
         intermediate_anova <- dplyr::filter(intermediate_anova, !is_intercept)
     }
-
     n_anova_terms <- nrow(intermediate_anova)
-    intermediate_anova$term_idx <- 1:n_anova_terms
-    intermediate_anova$is_term <- TRUE
-    intermediate_anova$subterm_idx <- 0
 
     # -------------------------------------------------------------------------
     # Build our version of the coefficient table, intermediate_coeffs
     # -------------------------------------------------------------------------
-    # Work out if we will use t or Z tests:
-    coeff_colnames <- colnames(coeffs)
-    using_t_not_Z <- "t value" %in% coeff_colnames
-    if (!using_t_not_Z && !("z value" %in% coeff_colnames)) {
-        stop("Neither t nor z (Z) present in coefficients")
-    }
-    using_overall_t_df <- FALSE
-    using_individual_t_df <- FALSE
-    if (using_t_not_Z) {
-        using_overall_t_df <- "df" %in% names(s)
-        using_individual_t_df <- (
-            !using_overall_t_df && "df" %in% coeff_colnames
-        )
-        if (!using_overall_t_df && !using_individual_t_df) {
-            stop("Don't know how to extract degrees of freedom for t")
-        }
-        colname_stat <- "t value"
-        colname_p_stat <- "Pr(>|t|)"
-    } else {
-        colname_stat <- "z value"
-        colname_p_stat <- "Pr(>|z|)"
-    }
-    # Work through the coefficients. Match them to the ANOVA terms.
-    ci_pct <- ci * 100
-    coeff_rownames <- rownames(coeffs)
-    intermediate_coeffs <- NULL
-    for (i in 1:nrow(coeffs)) {
-        term_name <- coeff_rownames[i]
-        # The tricky part is assigning them correctly to the ANOVA table terms.
-        term_idx <- miscresults$which_anova_term_matches_coeff(
-            intermediate_anova$term, term_name
-        )
-        if (is.na(term_idx)) {
-            if (term_name == R_INTERCEPT_LABEL) {
-                # For example, the output of
-                #   car::Anova(glm(..., family = binomial(link = "logit")))
-                # does not have an intercept term.
-                anova_term_name <- R_INTERCEPT_LABEL
-                term_idx <- 0
-            } else {
-                cat("--- ERROR. intermediate_anova:\n")
-                print(intermediate_anova)
-                stop(paste0("Can't match term: ", term_name))
-            }
-        } else {
-            anova_term_name <- intermediate_anova$term[term_idx]
-        }
-        is_linear <- FALSE
-        if (term_name %in% intermediate_anova$term
-                || term_name == R_INTERCEPT_LABEL) {
-            # Exact match, e.g. linear coefficient.
-            # Assign at subterm_idx = 0, i.e. level with the term.
-            subterm_idx <- 0
-            is_linear <- TRUE
-        } else if (is.null(intermediate_coeffs)) {
-            # Otherwise (e.g. levels of a factor): start from 1
-            subterm_idx <- 1
-        } else {
-            prev_subterm_idxs <- intermediate_coeffs[
-                intermediate_coeffs$term_idx == term_idx,
-            ]$subterm_idx
-            if (length(prev_subterm_idxs) == 0) {
-                subterm_idx <- 1
-            } else {
-                subterm_idx <- max(prev_subterm_idxs, na.rm = TRUE) + 1
-            }
-        }
-        if (using_overall_t_df) {
-            coeff_df_for_t <- s$df[2]
-            # ... see summary.lm:
-            #       ans$coefficients <- cbind(Estimate = est, `Std. Error` = se,
-            #           `t value` = tval, `Pr(>|t|)` = 2 * pt(abs(tval), rdf,
-            #           lower.tail = FALSE))
-            #       ans$df <- c(p, rdf, NCOL(Qr$qr))
-        } else if (using_individual_t_df) {
-            coeff_df_for_t <- coeffs[i, "df"]
-            # *** TODO: fix wrong t/p values coming out in this situation; wrong column numbers; use names instead
-        } else {
-            # e.g. if using Z tests
-            coeff_df_for_t <- NA_real_
-        }
-        intermediate_coeffs <- rbind(
-            intermediate_coeffs,
-            data.frame(
-                level = term_name,
-                is_subterm = TRUE,
-                is_linear = is_linear,
-                term_idx = term_idx,
-                anova_term_name = anova_term_name,
-                subterm_idx = subterm_idx,
-                coeff = coeffs[i, "Estimate"],
-                # ... row, column
-                # ... coeffs$`Estimate`[i] fails with
-                #     "$ operator is invalid for atomic vectors"
-                se = coeffs[i, "Std. Error"],
-                coeff_stat = coeffs[i, colname_stat],
-                p_coeff_stat = coeffs[i, colname_p_stat],
-                coeff_df_for_t = coeff_df_for_t
-            )
-        )
-    }
-
-    # Add reference levels?
-    # Inserted at subterm_idx = 0.5, i.e. before the first extracted level.
-    intermediate_coeffs$is_reference_level <- FALSE
-    use_xlevels <- ("xlevels" %in% names(m2))
-    use_frame <- ("frame" %in% slotNames(m2))
-    if (include_reference_levels) {
-        for (i in 1:n_anova_terms) {
-            term_name <- intermediate_anova$term[i]
-            term_idx <- intermediate_anova$term_idx[i]
-            if (use_xlevels) {
-                if (term_name %in% names(m2$xlevels)) {
-                    first_level_name <- m2$xlevels[[term_name]][1]
-                    intermediate_coeffs <- rbind(
-                        intermediate_coeffs,
-                        data.frame(
-                            level = first_level_name,
-                            is_subterm = TRUE,
-                            is_linear = FALSE,
-                            is_reference_level = TRUE,
-                            term_idx = term_idx,
-                            anova_term_name = term_name,
-                            subterm_idx = 0.5,
-                            coeff = NA_real_,
-                            se = NA_real_,
-                            coeff_stat = NA_real_,
-                            p_coeff_stat = NA_real_,
-                            coeff_df_for_t = NA_real_
-                        )
-                    )
-                }
-            } else if (use_frame) {
-                if (term_name %in% names(m2@frame)) {
-                    factor_levels <- levels(m2@frame[[term_name]])
-                    if (!is.null(factor_levels)) {
-                        first_level_name <- factor_levels[1]
-                        intermediate_coeffs <- rbind(
-                            intermediate_coeffs,
-                            data.frame(
-                                level = first_level_name,
-                                is_subterm = TRUE,
-                                is_linear = FALSE,
-                                is_reference_level = TRUE,
-                                term_idx = term_idx,
-                                anova_term_name = term_name,
-                                subterm_idx = 0.5,
-                                coeff = NA_real_,
-                                se = NA_real_,
-                                coeff_stat = NA_real_,
-                                p_coeff_stat = NA_real_,
-                                coeff_df_for_t = NA_real_
-                            )
-                        )
-                    }
-                }
-            } else {
-                cat("~~~ Contrasts model:\n")
-                print(m2)
-                stop(paste0(
-                    "Don't know how to extract reference levels from this ",
-                    "model type"
-                ))
-            }
-        }
-    }
-
-    # Add confidence intervals. Also mark intercepts, and set is_term == FALSE
-    # for later merging.
-    if (using_t_not_Z) {
-        conf_int <- miscstat$confidence_interval_from_mu_sem_df_via_t(
-            mu = intermediate_coeffs$coeff,
-            sem = intermediate_coeffs$se,
-            df = intermediate_coeffs$coeff_df_for_t,
-            ci = ci
-        )
-    } else {
-        conf_int <- miscstat$confidence_interval_from_mu_sem_via_Z(
-            mu = intermediate_coeffs$coeff,
-            sem = intermediate_coeffs$se,
-            ci = ci
-        )
-    }
-    intermediate_coeffs <- (
-        intermediate_coeffs
-        %>% mutate(
-            ci_lower = conf_int$ci_lower,
-            ci_upper = conf_int$ci_upper,
-            is_intercept = anova_term_name == R_INTERCEPT_LABEL,
-            is_term = FALSE
-        )
+    cf <- miscresults$summarize_model_coefficients(
+        m2,
+        anova_table = intermediate_anova,
+        include_reference_levels = include_reference_levels,
+        ci = ci
     )
+    using_t_not_Z <- cf$using_t_not_Z
+    intermediate_coeffs <- cf$coeff_table
 
     # -------------------------------------------------------------------------
     # Optionally (but by default), suppress statistical coefficient tests for
@@ -1909,7 +2065,7 @@ miscresults$mk_model_anova_coeffs <- function(
     }
 
     # -------------------------------------------------------------------------
-    # Merge the ANOVA and coefficients
+    # Merge the ANOVA and coefficients tables
     # -------------------------------------------------------------------------
     intermediate <- (
         dplyr::full_join(
@@ -1956,11 +2112,10 @@ miscresults$mk_model_anova_coeffs <- function(
     # Debugging output?
     # -------------------------------------------------------------------------
     if (debug) {
-        cat("* miscresults$fmt_lm:\n")
-        cat("- ANOVA:\n")
+        cat("- ANOVA model:\n")
         print(a)
-        cat("\n- Summary:\n")
-        print(s)
+        cat("\n- Summary of coefficient model:\n")
+        print(summary(m2))
         cat("\n- intermediate_anova:\n")
         print(intermediate_anova)
         cat("\n- intermediate_coeffs:\n")
@@ -2067,6 +2222,7 @@ miscresults$mk_model_anova_coeffs <- function(
             p_coeff_stat_txt
         )
     )
+    ci_pct <- ci * 100
     colnames(table_markdown) <- c(
         # Prettier versions:
         "Term",
@@ -2114,10 +2270,14 @@ miscresults$mk_model_anova_coeffs <- function(
 # Formatting Cox proportional hazards models
 # =============================================================================
 
+# -----------------------------------------------------------------------------
+# Internal functions
+# -----------------------------------------------------------------------------
+
 miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
-    # INTERNAL FUNCTION. Takes a Cox proportional hazards model (of type
-    # coxph.object), and returns a tibble that will be used by
-    # miscresults$mk_cph_table().
+    # INTERNAL FUNCTION.
+    # Takes a Cox proportional hazards model (of type coxph.object), and
+    # returns a tibble that will be used by miscresults$mk_cph_table().
 
     # Core information about the predictors
     all_term_names <- attr(cph_model$terms, "term.labels")
@@ -2315,6 +2475,10 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
     )
 }
 
+
+# -----------------------------------------------------------------------------
+# Public interfaces
+# -----------------------------------------------------------------------------
 
 miscresults$mk_cph_table <- function(
     cph_model,
@@ -2677,7 +2841,7 @@ miscresults$summarize_multiple_cph <- function(
 
 
 # =============================================================================
-# Manipulating display
+# Manipulating the display of results tables
 # =============================================================================
 
 miscresults$detect_significant_in_result_str <- function(x) {
