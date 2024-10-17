@@ -2805,6 +2805,8 @@ miscresults$summarize_multiple_cph <- function(
             n_comparisons <- n_comparisons + sum(
                 !is.na(cph_list[[i]]$working$p)
             )
+            # ... add the number of probabilities (the number of tests) being
+            # summarised (see below for that process)
         }
     } else {
         stop("bug in summarize_multiple_cph/correct_for")
