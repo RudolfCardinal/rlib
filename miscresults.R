@@ -1506,6 +1506,9 @@ miscresults$summarize_model_coefficients <- function(
     #               Lower bound of the confidence interval for the coefficient.
     #           ci_upper
     #               Upper bound of the confidence interval for the coefficient.
+    #           using_t_not_Z
+    #               A copy of the using_t_not_Z variable, this one present in
+    #               every table row. Tells you what coeff_stat is.
     #           coeff_stat
     #               The statistic (t or Z; see using_t_not_Z) associated with
     #               the coefficient.
@@ -1717,7 +1720,28 @@ miscresults$summarize_model_coefficients <- function(
             ci_lower = conf_int$ci_lower,
             ci_upper = conf_int$ci_upper,
             is_intercept = anova_term_name == R_INTERCEPT_LABEL,
-            is_term = FALSE
+            is_term = FALSE,
+            using_t_not_Z = using_t_not_Z
+        )
+        %>% select(
+            # Cosmetic order
+            level,
+            term_idx,
+            anova_term_name,
+            is_term,
+            is_subterm,
+            subterm_idx,
+            is_intercept,
+            is_linear,
+            is_reference_level,
+            coeff,
+            se,
+            ci_lower,
+            ci_upper,
+            using_t_not_Z,
+            coeff_stat,
+            p_coeff_stat,
+            coeff_df_for_t
         )
     )
     return(list(
@@ -1894,11 +1918,15 @@ miscresults$mk_model_anova_coeffs <- function(
     #         shapiro.test(r)  # Shapiro-Wilk test; "significant" = "non-normal"
     #   contrasts_anova_model:
     #       Contrasts used for anova_model.
+    #   anova_table
+    #       Internal starting-point version of the ANOVA table.
     #   coeffs_model:
     #       Model used to extract coefficients. Use summary() to see the
     #       detail.
     #   contrasts_coeffs_model:
     #       Contrasts used for coeffs_model.
+    #   coeffs_table
+    #       Internal starting-point version of the coefficients table.
     #   working:
     #       Full-working internal table. (Also used by the
     #       miscresults$summarize_multiple_cph() function.)
@@ -1986,12 +2014,15 @@ miscresults$mk_model_anova_coeffs <- function(
     # -------------------------------------------------------------------------
     # Build our version of the ANOVA table, in intermediate_anova
     # -------------------------------------------------------------------------
-    intermediate_anova <- miscresults$summarize_anova_table(a)
-    # If we are using Type II SS, the intercept from the ANOVA model is *not*
+
+    anova_table <- miscresults$summarize_anova_table(a)
+    # If we are using Type III SS, the intercept from the ANOVA model is *not*
     # the same as the intercept from the coefficients model. Do not consider
     # the ANOVA F test for the intercept.
     if (using_type_III_ss) {
-        intermediate_anova <- dplyr::filter(intermediate_anova, !is_intercept)
+        intermediate_anova <- dplyr::filter(anova_table, !is_intercept)
+    } else {
+        intermediate_anova <- anova_table
     }
     n_anova_terms <- nrow(intermediate_anova)
 
@@ -2258,9 +2289,10 @@ miscresults$mk_model_anova_coeffs <- function(
     return(list(
         anova_model = m1,
         contrasts_anova_model = contrasts_anova_model,
-        anova_model_table = a,  # since method may vary
+        anova_table = anova_table,
         coeffs_model = m2,
         contrasts_coeffs_model = contrasts_coeffs_model,
+        coeffs_table = coeffs_table,
         working = working,
         table_markdown = table_markdown,
         table_flex = table_flex
