@@ -1461,12 +1461,14 @@ miscresults$summarize_model_coefficients <- function(
     #       confidence intervals.
     #
     # Returns a list with the following elements:
+    #   coeff_summary
+    #       Original version of summary(m).
     #   using_t_not_Z
     #       Coefficient tests are t tests (not Z tests). If FALSE, they're
     #       Z tests.
-    #   coeff_table
+    #   coeff_detail
     #       Table (data frame) with the following columns:
-    #           level
+    #           coeff_name
     #               Coefficient name, e.g. level of a factor. (May sometimes
     #               be the same as an ANOVA term name, but not always.)
     #           term_idx
@@ -1557,7 +1559,7 @@ miscresults$summarize_model_coefficients <- function(
     }
 
     # Work through the coefficients. Match them to the ANOVA terms.
-    coeff_table <- NULL
+    coeff_detail <- NULL
     for (i in 1:nrow(coeffs)) {
         term_name <- coeff_rownames[i]
         # The tricky part is assigning them correctly to the ANOVA table terms.
@@ -1586,12 +1588,12 @@ miscresults$summarize_model_coefficients <- function(
             # Assign at subterm_idx = 0, i.e. level with the term.
             subterm_idx <- 0
             is_linear <- TRUE
-        } else if (is.null(coeff_table)) {
+        } else if (is.null(coeff_detail)) {
             # Otherwise (e.g. levels of a factor): start from 1
             subterm_idx <- 1
         } else {
-            prev_subterm_idxs <- coeff_table[
-                coeff_table$term_idx == term_idx,
+            prev_subterm_idxs <- coeff_detail[
+                coeff_detail$term_idx == term_idx,
             ]$subterm_idx
             if (length(prev_subterm_idxs) == 0) {
                 subterm_idx <- 1
@@ -1612,10 +1614,10 @@ miscresults$summarize_model_coefficients <- function(
             # e.g. if using Z tests
             coeff_df_for_t <- NA_real_
         }
-        coeff_table <- rbind(
-            coeff_table,
+        coeff_detail <- rbind(
+            coeff_detail,
             data.frame(
-                level = term_name,
+                coeff_name = term_name,
                 is_subterm = TRUE,
                 is_linear = is_linear,
                 term_idx = term_idx,
@@ -1632,7 +1634,7 @@ miscresults$summarize_model_coefficients <- function(
             )
         )
     }
-    coeff_table$is_reference_level <- FALSE
+    coeff_detail$is_reference_level <- FALSE
 
     # Add reference levels?
     # Inserted at subterm_idx = 0.5, i.e. before the first extracted level.
@@ -1645,10 +1647,10 @@ miscresults$summarize_model_coefficients <- function(
             if (use_xlevels) {
                 if (term_name %in% names(m$xlevels)) {
                     first_level_name <- m$xlevels[[term_name]][1]
-                    coeff_table <- rbind(
-                        coeff_table,
+                    coeff_detail <- rbind(
+                        coeff_detail,
                         data.frame(
-                            level = first_level_name,
+                            coeff_name = first_level_name,
                             is_subterm = TRUE,
                             is_linear = FALSE,
                             is_reference_level = TRUE,
@@ -1668,10 +1670,10 @@ miscresults$summarize_model_coefficients <- function(
                     factor_levels <- levels(m@frame[[term_name]])
                     if (!is.null(factor_levels)) {
                         first_level_name <- factor_levels[1]
-                        coeff_table <- rbind(
-                            coeff_table,
+                        coeff_detail <- rbind(
+                            coeff_detail,
                             data.frame(
-                                level = first_level_name,
+                                coeff_name = first_level_name,
                                 is_subterm = TRUE,
                                 is_linear = FALSE,
                                 is_reference_level = TRUE,
@@ -1702,20 +1704,20 @@ miscresults$summarize_model_coefficients <- function(
     # for later merging.
     if (using_t_not_Z) {
         conf_int <- miscstat$confidence_interval_from_mu_sem_df_via_t(
-            mu = coeff_table$coeff,
-            sem = coeff_table$se,
-            df = coeff_table$coeff_df_for_t,
+            mu = coeff_detail$coeff,
+            sem = coeff_detail$se,
+            df = coeff_detail$coeff_df_for_t,
             ci = ci
         )
     } else {
         conf_int <- miscstat$confidence_interval_from_mu_sem_via_Z(
-            mu = coeff_table$coeff,
-            sem = coeff_table$se,
+            mu = coeff_detail$coeff,
+            sem = coeff_detail$se,
             ci = ci
         )
     }
-    coeff_table <- (
-        coeff_table
+    coeff_detail <- (
+        coeff_detail
         %>% mutate(
             ci_lower = conf_int$ci_lower,
             ci_upper = conf_int$ci_upper,
@@ -1725,7 +1727,7 @@ miscresults$summarize_model_coefficients <- function(
         )
         %>% select(
             # Cosmetic order
-            level,
+            coeff_name,
             term_idx,
             anova_term_name,
             is_term,
@@ -1745,8 +1747,9 @@ miscresults$summarize_model_coefficients <- function(
         )
     )
     return(list(
+        coeff_summary = s,
         using_t_not_Z = using_t_not_Z,
-        coeff_table = coeff_table
+        coeff_detail = coeff_detail
     ))
 }
 
@@ -1761,7 +1764,7 @@ miscresults$mk_model_anova_coeffs <- function(
     data,
     type = "III",
     contrasts_anova_model = NULL,
-    contrasts_coeffs_model = NULL,
+    contrasts_coeff_model = NULL,
     # Cosmetic:
     include_intercept = TRUE,
     include_reference_levels = TRUE,
@@ -1840,7 +1843,7 @@ miscresults$mk_model_anova_coeffs <- function(
     #
     #       See type_III_sums_of_squares.R as to why.
     #
-    #   contrasts_coeffs_model:
+    #   contrasts_coeff_model:
     #       Global contrast options to specify for the summary model. If NULL,
     #       do something sensible, namely default R contrasts (as above).
     #
@@ -1918,15 +1921,21 @@ miscresults$mk_model_anova_coeffs <- function(
     #         shapiro.test(r)  # Shapiro-Wilk test; "significant" = "non-normal"
     #   contrasts_anova_model:
     #       Contrasts used for anova_model.
-    #   anova_table
-    #       Internal starting-point version of the ANOVA table.
-    #   coeffs_model:
+    #   anova_table:
+    #       Original ANOVA table object.
+    #   anova_detail:
+    #       Internal starting-point version of the ANOVA table. The output of
+    #       miscresults$summarize_anova_table().
+    #   coeff_model:
     #       Model used to extract coefficients. Use summary() to see the
     #       detail.
-    #   contrasts_coeffs_model:
-    #       Contrasts used for coeffs_model.
-    #   coeffs_table
-    #       Internal starting-point version of the coefficients table.
+    #   contrasts_coeff_model:
+    #       Contrasts used for coeff_model.
+    #   coeff_summary:
+    #       Original R summary() of the coefficient model.
+    #   coeff_detail:
+    #       Internal starting-point version of the coefficients table. The
+    #       output of miscresults$summarize_model_coefficients().
     #   working:
     #       Full-working internal table. (Also used by the
     #       miscresults$summarize_multiple_cph() function.)
@@ -1978,8 +1987,8 @@ miscresults$mk_model_anova_coeffs <- function(
             contrasts_anova_model <- r_default_contrasts
         }
     }
-    if (is.null(contrasts_coeffs_model)) {
-        contrasts_coeffs_model <- r_default_contrasts
+    if (is.null(contrasts_coeff_model)) {
+        contrasts_coeff_model <- r_default_contrasts
     }
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1989,12 +1998,12 @@ miscresults$mk_model_anova_coeffs <- function(
     saved_options_contrasts <- getOption("contrasts")  # save
     options(contrasts = contrasts_anova_model)  # set
     m1 <- model_fn(formula, data = data, ...)
-    if (identical(contrasts_coeffs_model, contrasts_anova_model)) {
+    if (identical(contrasts_coeff_model, contrasts_anova_model)) {
         # Same contrasts. Save time:
         m2 <- m1
     } else {
         # Different contrasts.
-        options(contrasts = contrasts_coeffs_model)  # set
+        options(contrasts = contrasts_coeff_model)  # set
         m2 <- model_fn(formula, data = data, ...)
     }
     options(contrasts = saved_options_contrasts)  # restore
@@ -2015,14 +2024,14 @@ miscresults$mk_model_anova_coeffs <- function(
     # Build our version of the ANOVA table, in intermediate_anova
     # -------------------------------------------------------------------------
 
-    anova_table <- miscresults$summarize_anova_table(a)
+    anova_detail <- miscresults$summarize_anova_table(a)
     # If we are using Type III SS, the intercept from the ANOVA model is *not*
     # the same as the intercept from the coefficients model. Do not consider
     # the ANOVA F test for the intercept.
     if (using_type_III_ss) {
-        intermediate_anova <- dplyr::filter(anova_table, !is_intercept)
+        intermediate_anova <- dplyr::filter(anova_detail, !is_intercept)
     } else {
-        intermediate_anova <- anova_table
+        intermediate_anova <- anova_detail
     }
     n_anova_terms <- nrow(intermediate_anova)
 
@@ -2036,7 +2045,7 @@ miscresults$mk_model_anova_coeffs <- function(
         ci = ci
     )
     using_t_not_Z <- cf$using_t_not_Z
-    intermediate_coeffs <- cf$coeff_table
+    intermediate_coeffs <- cf$coeff_detail
 
     # -------------------------------------------------------------------------
     # Optionally (but by default), suppress statistical coefficient tests for
@@ -2080,20 +2089,9 @@ miscresults$mk_model_anova_coeffs <- function(
             intermediate_coeffs
             %>% group_by(term_idx)
             %>% arrange(subterm_idx)
-            %>% mutate(
-                # has_reference_level = any(is_reference_level),
-                # n_nonreference_levels = sum(!is_reference_level),
-                new_subterm_idx = row_number() - 1
-            )
+            %>% mutate(new_subterm_idx = row_number() - 1)
             %>% ungroup()
-            %>% mutate(
-                subterm_idx = new_subterm_idx
-                # subterm_idx = if_else(
-                #     has_reference_level | n_nonreference_levels == 1,
-                #     new_subterm_idx,
-                #     subterm_idx
-                # )
-            )
+            %>% mutate(subterm_idx = new_subterm_idx)
         )
     }
 
@@ -2133,7 +2131,8 @@ miscresults$mk_model_anova_coeffs <- function(
         )
         %>% dplyr::select(
             -is_intercept.x, -is_intercept.y,
-            -is_subterm.x, -is_subterm.y,
+            -is_term.x, -is_term.y,
+            -is_subterm.x, -is_subterm.y
         )
         %>% dplyr::arrange(term_idx, subterm_idx)
     )
@@ -2193,10 +2192,10 @@ miscresults$mk_model_anova_coeffs <- function(
                 )
             ),
             formatted_level = case_when(
-                is_reference_level ~ level,
+                is_reference_level ~ coeff_name,
                 is_intercept ~ level_not_applicable,
                 is_subterm ~ miscresults$fmt_level(
-                    level,
+                    coeff_name,
                     anova_term_name,
                     replacements = predictor_replacements,
                     interaction_txt = level_combination_text
@@ -2289,10 +2288,12 @@ miscresults$mk_model_anova_coeffs <- function(
     return(list(
         anova_model = m1,
         contrasts_anova_model = contrasts_anova_model,
-        anova_table = anova_table,
-        coeffs_model = m2,
-        contrasts_coeffs_model = contrasts_coeffs_model,
-        coeffs_table = coeffs_table,
+        anova_table = a,
+        anova_detail = anova_detail,
+        coeff_model = m2,
+        contrasts_coeff_model = contrasts_coeff_model,
+        coeff_summary = cf$coeff_summary,
+        coeff_detail = cf$coeff_detail,
         working = working,
         table_markdown = table_markdown,
         table_flex = table_flex
