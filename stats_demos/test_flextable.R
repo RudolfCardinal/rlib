@@ -563,6 +563,38 @@ ft3f <- (
     )
 )
 
+# Type 1 checks:
+m3g <- mk_model_anova_coeffs(
+    model_fn = lm,
+    formula = performance ~ age + drug,
+    data = fd3,
+    type = "I",
+    predictor_replacements = M3_PREDICTOR_REPLACEMENTS
+)
+m3h <- mk_model_anova_coeffs(
+    model_fn = lm,
+    formula = performance ~ drug + age,
+    data = fd3,
+    type = "I",
+    predictor_replacements = M3_PREDICTOR_REPLACEMENTS
+)
+# Manual checks: order dependency as expected in m3g versus m3h
+m3i <- mk_model_anova_coeffs(
+    model_fn = glm,
+    formula = performance ~ age + drug,
+    data = fd3,
+    type = "I",
+    predictor_replacements = M3_PREDICTOR_REPLACEMENTS
+)
+m3j <- mk_model_anova_coeffs(
+    model_fn = glm,
+    formula = performance ~ drug + age,
+    data = fd3,
+    type = "I",
+    predictor_replacements = M3_PREDICTOR_REPLACEMENTS
+)
+# Manual checks: order dependency as expected in m3i versus m3j
+
 m4f <- mk_model_anova_coeffs(
     # Also with boolean predictor:
     model_fn = lmerTest::lmer,

@@ -1278,9 +1278,17 @@ miscresults$summarize_anova_table <- function(a) {
     #       Probability associated with F[df, df_resid].
 
     nrow_anova <- nrow(a)
+    a_colnames <- colnames(a)
+    last_rowname <- rownames(a)[nrow_anova]
 
-    if (identical(colnames(a), c("Sum Sq", "Df", "F value", "Pr(>F)"))
-            && rownames(a)[nrow_anova] == R_RESIDUALS_LABEL) {
+    if (
+        (
+            identical(a_colnames, c("Sum Sq", "Df", "F value", "Pr(>F)"))
+            || identical(a_colnames,
+                         c("Df", "Sum Sq", "Mean Sq", "F value", "Pr(>F)"))
+        )
+        && last_rowname == R_RESIDUALS_LABEL
+    ) {
         # Table looks like this:
         #
         # Anova Table (Type III tests)      # e.g. from car::Anova()
@@ -1297,6 +1305,16 @@ miscresults$summarize_anova_table <- function(a) {
         # age:drug                  10   2     1.2526 0.2865443
         # ...
         # Residuals               2291 576
+        #
+        # OR LIKE THIS:
+        #
+        # Analysis of Variance Table
+        #
+        # Response: performance
+        #            Df Sum Sq Mean Sq F value    Pr(>F)
+        # age         1 2132.9  2132.9  361.49 < 2.2e-16 ***
+        # drug        2 9822.3  4911.2  832.34 < 2.2e-16 ***
+        # Residuals 596 3516.6     5.9
 
         anova_table <- (
             a
@@ -1309,15 +1327,13 @@ miscresults$summarize_anova_table <- function(a) {
             )
             %>% mutate(
                 term = rownames(a),
-                is_subterm = FALSE,
-                df_resid = a$Df[nrow_anova],
-                is_intercept = term == R_INTERCEPT_LABEL
+                df_resid = a$Df[nrow_anova]
             )
             %>% filter(term != R_RESIDUALS_LABEL)
         )
 
-    } else if (identical(colnames(a), c("Sum Sq", "Df", "F values", "Pr(>F)"))
-            && rownames(a)[nrow_anova] == R_RESIDUALS_LABEL) {
+    } else if (identical(a_colnames, c("Sum Sq", "Df", "F values", "Pr(>F)"))
+            && last_rowname == R_RESIDUALS_LABEL) {
         # Table looks like this:
         #
         # Analysis of Deviance Table (Type III tests)
@@ -1348,8 +1364,8 @@ miscresults$summarize_anova_table <- function(a) {
             %>% filter(term != R_RESIDUALS_LABEL)
         )
 
-    } else if (identical(colnames(a), c("Sum Sq", "Mean Sq", "NumDF",
-                                        "DenDF", "F value", "Pr(>F)"))) {
+    } else if (identical(a_colnames, c("Sum Sq", "Mean Sq", "NumDF",
+                                       "DenDF", "F value", "Pr(>F)"))) {
         # Table looks like this, e.g. stats::anova(lmerTest::lmer(...))
         #
         # Type III Analysis of Variance Table with Satterthwaite's method
@@ -1376,7 +1392,7 @@ miscresults$summarize_anova_table <- function(a) {
             )
         )
 
-    } else if (identical(colnames(a), c("F", "Df", "Df.res", "Pr(>F)"))) {
+    } else if (identical(a_colnames, c("F", "Df", "Df.res", "Pr(>F)"))) {
         # Table looks like this:
         #
         # Analysis of Deviance Table (Type III Wald F tests with Kenward-Roger df)
@@ -1402,6 +1418,42 @@ miscresults$summarize_anova_table <- function(a) {
             %>% mutate(
                 term = rownames(a)
             )
+        )
+
+    } else if (identical(a_colnames, c("Df", "Deviance", "Resid. Df",
+                                       "Resid. Dev", "F", "Pr(>F)"))) {
+        # Table looks like this, e.g. from anova(glm(...), test = "F"):
+        #
+        # Analysis of Deviance Table
+        #
+        # Model: gaussian, link: identity
+        #
+        # Response: performance
+        #
+        # Terms added sequentially (first to last)
+        #
+        #
+        #      Df Deviance Resid. Df Resid. Dev      F    Pr(>F)
+        # NULL                   599    15471.9
+        # age   1   2132.9       598    13339.0 361.49 < 2.2e-16 ***
+        # drug  2   9822.3       596     3516.6 832.34 < 2.2e-16 ***
+        # ---
+        # Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+        anova_table <- (
+            a
+            %>% as_tibble()
+            %>% select(c("Df", "Resid. Df", "F", "Pr(>F)"))
+            %>% rename(
+                # F is already correct.
+                df = "Df",
+                df_resid = "Resid. Df",
+                pF = "Pr(>F)"
+            )
+            %>% mutate(
+                term = rownames(a)
+            )
+            %>% filter(!is.na(df))  # or: term != "NULL"
         )
 
     } else {
@@ -1762,7 +1814,7 @@ miscresults$mk_model_anova_coeffs <- function(
     model_fn,
     formula,
     data,
-    type = "III",
+    type = c("III", "II", "I", 3, 2, 1),  # default first
     contrasts_anova_model = NULL,
     contrasts_coeff_model = NULL,
     # Cosmetic:
@@ -1946,6 +1998,8 @@ miscresults$mk_model_anova_coeffs <- function(
     #       table. You may want to start with table_markdown and process it
     #       yourself, though, for your own table style.
 
+    type <- match.arg(type)
+
     # -------------------------------------------------------------------------
     # Collate ANOVA and coefficient information
     # -------------------------------------------------------------------------
@@ -2013,11 +2067,62 @@ miscresults$mk_model_anova_coeffs <- function(
     # coefficients (coeffs) from m2.
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    if (using_type_I_ss) {
-        a <- stats::anova(m1)
-    } else {
+    is_lmertest <- "lmerModLmerTest" %in% class(m1)
+    if (is_lmertest) {
+        # lmerTest::anova.lmerModLmerTest() takes an explicit "type" argument,
+        # accepting I/II/III or synonyms.
+        a <- anova(m1, type = type)
+        # ... will be overloaded to the S3 method anova.lmerModLmerTest(); see
+        # https://cran.r-project.org/web/packages/lmerTest/lmerTest.pdf
+    } else if (!using_type_I_ss) {
+        # The "type" argument car::Anova can be "II", "III", 2, 3. So we can be
+        # explicit:
         a <- car::Anova(m1, type = type, test.statistic = "F")
         # ... of classes: anova, data.frame
+    } else {
+        # This is a bit nastier; we are relying on a default rather than an
+        # explicit type argument. stats::anova(), which is R's default
+        # "anova()" command, passes arguments to other functions, e.g.
+        # stats::anova.glm(), stats::anova.lm(), or
+        # lmerTest::anova.lmerModLmerTest() (but we handled that one explicitly
+        # above). Most don't take a "type" argument.
+        #
+        # - We are confident that anova(lm(...)) uses Type I SS by default.
+        #   See type_III_sums_of_squares.R and
+        #   https://rcardinal.ddns.net/statistics/R/anova.html.
+        #   Also, quickly, using test_flextable.R, try:
+        #       ltest1 <- lm(performance ~ age + drug, data = fd3)
+        #       ltest2 <- lm(performance ~ drug + age, data = fd3)
+        #       anova(ltest1)
+        #       anova(ltest2)  # different, i.e. order-dependent, i.e. Type I.
+        #
+        # - The same is true for anova(glm(...)).
+        #   Using test_flextable.R, try:
+        #       gtest1 <- glm(performance ~ age + drug, data = fd3)
+        #       gtest2 <- glm(performance ~ drug + age, data = fd3)
+        #       anova(gtest1, test = "F")
+        #       anova(gtest2, test = "F")  # different, i.e. Type I.
+        #   (Although, separately, this produces an analysis of deviance table
+        #   that we may struggle to extract from.)
+        #
+        # - Otherwise, this is something unexpected and the user needs to
+        #   check.
+
+        is_lm <- all("lm" == class(m1))  # Is "lm" the one and only class?
+        is_glm <- "glm" %in% class(m1)
+        if (is_lm) {
+            a <- stats::anova(m1)  # ?anova.lm
+        } else if (is_glm) {
+            a <- stats::anova(m1, test = "F")  # ?anova.glm
+        } else {
+            cat("ANOVA model:\n")
+            print(m1)
+            stop(paste0(
+                "ANOVA model is none of {lmerModLmerTest, glm, [pure] lm}. ",
+                "Unable to guarantee Type I sums of squares; ",
+                "won't try something uncertain.",
+            ))
+        }
     }
 
     # -------------------------------------------------------------------------
@@ -2026,12 +2131,16 @@ miscresults$mk_model_anova_coeffs <- function(
 
     anova_detail <- miscresults$summarize_anova_table(a)
     # If we are using Type III SS, the intercept from the ANOVA model is *not*
-    # the same as the intercept from the coefficients model. Do not consider
-    # the ANOVA F test for the intercept.
-    if (using_type_III_ss) {
-        intermediate_anova <- dplyr::filter(anova_detail, !is_intercept)
-    } else {
+    # the same as the intercept from the coefficients model. (And more
+    # generally, this is likely true if we have set different contrasts for the
+    # two models, or at least I'm not confident that it's not.) In these
+    # circumstances, do not consider the ANOVA F test for the intercept.
+    if (identical(contrasts_coeff_model, contrasts_anova_model)) {
+        # Same contrasts. Keep the intercept term.
         intermediate_anova <- anova_detail
+    } else {
+        # Different contrasts. Ditch the intercept term's F test.
+        intermediate_anova <- dplyr::filter(anova_detail, !is_intercept)
     }
     n_anova_terms <- nrow(intermediate_anova)
 
