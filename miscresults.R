@@ -1348,7 +1348,7 @@ miscresults$summarize_anova_table <- function(a) {
             %>% filter(term != R_RESIDUALS_LABEL)
         )
 
-    } else if (identical(colnames(a), c("Sum Sq", "Mean Sq", "Num DF",
+    } else if (identical(colnames(a), c("Sum Sq", "Mean Sq", "NumDF",
                                         "DenDF", "F value", "Pr(>F)"))) {
         # Table looks like this, e.g. stats::anova(lmerTest::lmer(...))
         #
