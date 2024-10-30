@@ -468,6 +468,8 @@ datetimefunc$query_pulsetable_times <- function(pulsetable, query_times) {
     #   cum_t_after
     #       Cumulative time that the subject has had OFF exposure, after the
     #       first exposure. (Will be t_since_first - cum_t_on.)
+    #   t_since_last
+    #       Time since the last known exposure.
     #   ever
     #       Does the event ever occur for the subject (across the lifetime,
     #       including in the future)? Boolean. Obviously, this value will be
@@ -546,7 +548,7 @@ datetimefunc$query_pulsetable_times <- function(pulsetable, query_times) {
         t_since_first <- pmax(0, query_times - first_event)
 
         # ---------------------------------------------------------------------
-        # cum_t_on
+        # cum_t_on, cum_t_after, t_since_last
         # ---------------------------------------------------------------------
         if (n_events >= 2) {
             event_ends <- pmin(  # until the first of:
@@ -556,9 +558,11 @@ datetimefunc$query_pulsetable_times <- function(pulsetable, query_times) {
             event_durations <- event_ends - event_times
             cum_durations <- cumsum(event_durations)  # at the end of events
             cum_duration_at_start <- c(0, cum_durations[1 : n_events - 1])
+            last_exposure <- max(event_ends)
         } else {
             # n_events is 1
             cum_duration_at_start <- 0
+            last_exposure <- event_times + event_durations
         }
         cum_t_on <- ifelse(
             invalid_indexes,  # is the query time before the first start time?
@@ -574,11 +578,8 @@ datetimefunc$query_pulsetable_times <- function(pulsetable, query_times) {
                 )
             )
         )
-
-        # ---------------------------------------------------------------------
-        # cum_t_after
-        # ---------------------------------------------------------------------
         cum_t_after <- t_since_first - cum_t_on
+        t_since_last <- pmax(0, query_times - last_exposure)
 
         # cat("- query_pulsetable_times():\n")
         # cat("... query_times:\n"); print(query_times)
@@ -592,6 +593,7 @@ datetimefunc$query_pulsetable_times <- function(pulsetable, query_times) {
         # cat("... cum_durations:\n"); print(cum_durations)
         # cat("... cum_duration_at_start:\n"); print(cum_duration_at_start)
         # cat("... cum_t_on:\n"); print(cum_t_on)
+        # cat("... t_since_last:\n"); print(t_since_last)
 
     } else {
         # never!
@@ -600,6 +602,7 @@ datetimefunc$query_pulsetable_times <- function(pulsetable, query_times) {
         t_since_first <- 0
         cum_t_on <- 0
         cum_t_after <- 0
+        t_since_last <- 0
     }
 
     return(tibble(
@@ -609,6 +612,7 @@ datetimefunc$query_pulsetable_times <- function(pulsetable, query_times) {
         t_since_first = t_since_first,
         cum_t_on = cum_t_on,
         cum_t_after = cum_t_after,
+        t_since_last = t_since_last,
         ever = ever
     ))
 }
@@ -629,7 +633,12 @@ datetimefunc$query_pulsetable_times_slow <- function(pulsetable, query_times) {
         ))
     }
     ever <- any(intervals$event)
-    query_fn <- function(t) {  # t is a SINGLE VALUE.
+    last_exposure <- ifelse(
+        ever,
+        max(intervals %>% filter(event == TRUE) %>% pull(t_end)),
+        NA_real_
+    )
+    query_fn <- function(t) {  # t is a SINGLE VALUE, the query time.
         # Slices
         previous_and_current_intervals <- (
             # "finishes before t [= previous], or starts before/at t and not
@@ -686,6 +695,7 @@ datetimefunc$query_pulsetable_times_slow <- function(pulsetable, query_times) {
                 sum(prev_off_intervals_after_first$duration)
                 + t_off_during_this_interval
             )
+            t_since_last <- max(0, t - last_exposure)
             # debugging:
             # cat("previous_intervals:\n"); print(previous_intervals)
             # cat("last_previous_interval:\n"); print(last_previous_interval)
@@ -697,6 +707,7 @@ datetimefunc$query_pulsetable_times_slow <- function(pulsetable, query_times) {
             t_since_first <- 0
             cum_t_on <- 0
             cum_t_after <- 0
+            t_since_last <- 0
         }
         return(tibble(
             t = t,
@@ -704,7 +715,8 @@ datetimefunc$query_pulsetable_times_slow <- function(pulsetable, query_times) {
             hx = hx,
             t_since_first = t_since_first,
             cum_t_on = cum_t_on,
-            cum_t_after = cum_t_after
+            cum_t_after = cum_t_after,
+            t_since_last = t_since_last
         ))
     }
     result <- (
