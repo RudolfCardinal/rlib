@@ -20,6 +20,15 @@
 #   defaults.
 #
 # -----------------------------------------------------------------------------
+# "Standard" markdown notation
+# -----------------------------------------------------------------------------
+# - https://en.wikipedia.org/wiki/Markdown discusses evolution and versions
+# - https://datatracker.ietf.org/doc/html/rfc7763 is an early standard
+# - https://datatracker.ietf.org/doc/html/rfc7764 covers some versions; Pandoc
+#   is the only one with a superscript/subscript extension then.
+# So there's no common standard for these features.
+#
+# -----------------------------------------------------------------------------
 # Markdown for flextable
 # -----------------------------------------------------------------------------
 # ftExtra uses Pandoc markdown;
@@ -39,6 +48,35 @@
 #
 # - code: `x`
 # - underline: [x]{.underline}
+#
+# -----------------------------------------------------------------------------
+# Markdown for ggplot/ggtext
+# -----------------------------------------------------------------------------
+# Markdown syntax for ggplot, which is via ggtext::element_markdown(), is given
+# by:
+#
+#   library(ggtext)
+#   vignette("theme_elements")
+#   vignette("plotting_text")
+#
+# ... in brief:
+#       *italic*
+#       **bold**
+#       <sup>superscript</sup> AND SOMETIMES BUT NOT CONSISTENTLY ^superscript^
+#       <sub>subscript</sub> AND SOMETIMES BUT NOT CONSISTENTLY ~subscript~
+#       <br>
+#
+# etc. In contrast, ftExtra supports ^superscript^ and ~subscript~, but not
+# <sup>superscript</sup> or <sub>subscript</sub>.
+#
+# Since there is inconsistency with the ^~ notation, and with these:
+#       working via Docker          not working via CPFT
+#       ggtext_0.1.2                ggtext_0.1.2
+#       ggplot2_3.4.4               ggplot2_3.5.1
+# ... I'm not sure what the issue is here, so we'll use separate markdown for
+# tables and figures where this applies. See the function
+#       miscresults$markdown_ggtext_to_flextable()
+
 
 local({
     tmp_require_package_namespace <- function(...) {
@@ -176,6 +214,32 @@ contr.sum.keepnames <- function(...) {
     # ... For example, if the row names are A-D, this will assign the column
     # names to be A-C, dropping the last element.
     conS
+}
+
+
+miscresults$markdown_ggtext_to_flextable <- function(x) {
+    # Converts between different flavours of non-standard markdown.
+
+    # Superscript:
+    sup1_html <- stringr::fixed("<sup>")
+    sup2_html <- stringr::fixed("</sup>")
+    sup_md <- "^"
+    # Subscript:
+    sub1_html <- stringr::fixed("<sub>")
+    sub2_html <- stringr::fixed("</sub>")
+    sub_md <- "~"
+    # Newline/break:
+    newline_html <- stringr::fixed("<br>")
+    newline_md <- miscresults$MARKDOWN_NEWLINE
+    # Translate all:
+    return(
+        x
+        %>% stringr::str_replace_all(sup1_html, sup_md)
+        %>% stringr::str_replace_all(sup2_html, sup_md)
+        %>% stringr::str_replace_all(sub1_html, sub_md)
+        %>% stringr::str_replace_all(sub2_html, sub_md)
+        %>% stringr::str_replace_all(newline_html, newline_md)
+    )
 }
 
 
@@ -734,7 +798,8 @@ miscresults$fmt_t <- function(
     df_txt <- ifelse(
         is.na(df),
         "",
-        sprintf("~%s~", miscresults$mk_df_text(df))
+        # sprintf("~%s~", miscresults$mk_df_text(df))
+        sprintf("<%s~", miscresults$mk_df_text(df))
     )
     t_txt <- miscresults$fmt_float(t, use_plus = TRUE)
     return(ifelse(
