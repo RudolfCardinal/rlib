@@ -188,11 +188,15 @@ miscresults$NOT_SIGNIFICANT <- "NS"
 miscresults$DEFAULT_ALPHA <- 0.05  # Per Fisher.
 miscresults$DEFAULT_CI <- 1 - miscresults$DEFAULT_ALPHA
 
-R_INTERACTION_MARKER <- stringr::fixed(":")
-R_RESIDUALS_LABEL <- "Residuals"
-R_INTERCEPT_LABEL <- "(Intercept)"
-R_FALSE_TEXT <- "FALSE"
-R_TRUE_TEXT <- "TRUE"
+miscresults$DF_FORMAT_OPTIONS <- c(
+    "subscript", "roundbracket", "squarebracket"
+)
+
+miscresults$R_INTERACTION_MARKER <- stringr::fixed(":")
+miscresults$R_RESIDUALS_LABEL <- "Residuals"
+miscresults$R_INTERCEPT_LABEL <- "(Intercept)"
+miscresults$R_FALSE_TEXT <- "FALSE"
+miscresults$R_TRUE_TEXT <- "TRUE"
 
 
 # =============================================================================
@@ -240,6 +244,32 @@ miscresults$markdown_ggtext_to_flextable <- function(x) {
         %>% stringr::str_replace_all(sub2_html, sub_md)
         %>% stringr::str_replace_all(newline_html, newline_md)
     )
+}
+
+
+# =============================================================================
+# Markdown helpers
+# =============================================================================
+# Use "_" suffix to avoid confusion with e.g. flextable::bold().
+
+miscresults$italic_ <- function(x) {
+    sprintf("*%s*", x)
+}
+
+miscresults$bold_ <- function(x) {
+    sprintf("**%s**", x)
+}
+
+miscresults$superscript_ <- function(x) {
+    sprintf("^%s^", x)
+}
+
+miscresults$subscript_ <- function(x) {
+    sprintf("~%s~", x)
+}
+
+miscresults$abs_ <- function(x) {
+    sprintf("|%s|", x)
 }
 
 
@@ -406,11 +436,13 @@ miscresults$mk_p_text <- function(
     return(ifelse(
         p < min_p,
         paste0(
-            "*p* < ",
+            miscresults$italic_("p"),
+            " < ",
             miscresults$fmt_float(min_p, sf = sf)
         ),
         paste0(
-            "*p* = ",
+            miscresults$italic_("p"),
+            " = ",
             miscresults$fmt_float(p, sf = sf)
         )
     ))
@@ -469,6 +501,21 @@ miscresults$mk_df_text <- function(
 }
 
 
+miscresults$fmt_df_text <- function(
+    df_txt,
+    df_format = miscresults$DF_FORMAT_OPTIONS
+) {
+    df_format <- match.arg(df_format)
+    if (df_format == "subscript") {
+        return(miscresults$subscript_(df_txt))
+    } else if (df_format == "roundbracket") {
+        return(sprintf("(%s)", df_txt))
+    } else {  # squarebracket
+        return(sprintf("[%s]", df_txt))
+    }
+}
+
+
 miscresults$fmt_pct <- function(
     proportion,
     include_trailing_zero = FALSE,
@@ -491,6 +538,7 @@ miscresults$fmt_pct <- function(
         .default = txt
     ))
 }
+
 
 miscresults$fmt_n_percent <- function(
     n,
@@ -744,17 +792,22 @@ miscresults$mk_median_range <- function(
 
 miscresults$fmt_chisq <- function(
     chisq, df,
-    min_chisq = 1  # minimum value shown exactly
+    min_chisq = 1,  # minimum value shown exactly
     # ... critical value is qchisq(0.95, df) at α=0.05 and df=1, increasing
     #     for higher df. We might want to report things that didn't
     #     make it, but 1 seems like a reasonable "definitely do not care"
     #     threshold.
+    df_format = miscresults$DF_FORMAT_OPTIONS
 ) {
     # Format a chi-square statistic (without a p value).
     # - Note that chi-square can only be positive.
-    df_txt <- miscresults$mk_df_text(df)
-    symbol_df_txt <- sprintf(
-        paste0("*", miscresults$CHI_LOWER, "*^2^~%s~"),
+    df_txt <- miscresults$fmt_df_text(
+        miscresults$mk_df_text(df),
+        df_format = df_format
+    )
+    symbol_df_txt <- paste0(
+        miscresults$italic_(miscresults$CHI_LOWER),
+        miscresults$superscript_("2"),
         df_txt
     )
     return(ifelse(
@@ -769,10 +822,14 @@ miscresults$fmt_chisq_p <- function(
     chisq, df, p,
     min_chisq = 1,  # see miscresults$fmt_chisq()
     ns_text = miscresults$NOT_SIGNIFICANT,
-    check_alpha = DEFAULT_ALPHA
+    check_alpha = DEFAULT_ALPHA,
+    df_format = miscresults$DF_FORMAT_OPTIONS
 ) {
     # Format a chi-square statistic with a p value).
-    chisq_txt <- miscresults$fmt_chisq(chisq, df, min_chisq = min_chisq)
+    chisq_txt <- miscresults$fmt_chisq(
+        chisq, df,
+        min_chisq = min_chisq, df_format = df_format
+    )
     p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
     if (any(chisq < min_chisq & p < check_alpha)) {
         stop(sprintf(
@@ -791,25 +848,33 @@ miscresults$fmt_chisq_p <- function(
 miscresults$fmt_t <- function(
     t, df,
     min_abs_t = miscresults$MINIMUM_ABS_T_SHOWN,
-    omit_df_below_min_t = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS
+    omit_df_below_min_t = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS,
+    df_format = miscresults$DF_FORMAT_OPTIONS
 ) {
     # Format a t statistic (without a p value).
     # - Note that t can be negative or positive.
     df_txt <- ifelse(
         is.na(df),
         "",
-        # sprintf("~%s~", miscresults$mk_df_text(df))
-        sprintf("<%s~", miscresults$mk_df_text(df))
+        miscresults$fmt_df_text(
+            miscresults$mk_df_text(df),
+            df_format = df_format
+        )
     )
     t_txt <- miscresults$fmt_float(t, use_plus = TRUE)
+    italic_t <- miscresults$italic_("t")
+    min_abs_t_txt <- as.character(min_abs_t)
     return(ifelse(
         abs(t) < min_abs_t,
         ifelse(
             omit_df_below_min_t,
-            sprintf("|*t*| < %s", min_abs_t),
-            sprintf("|*t*%s| < %s", df_txt, min_abs_t)
+            paste0(miscresults$abs_(italic_t), " < ", min_abs_t_txt),
+            paste0(
+                miscresults$abs_(paste0(italic_t, df_txt)),
+                " < ", min_abs_t_txt
+            )
         ),
-        sprintf("*t*%s = %s", df_txt, t_txt)
+        paste0(italic_t, df_txt, " = ", t_txt)
     ))
 }
 
@@ -819,13 +884,15 @@ miscresults$fmt_t_p <- function(
     min_abs_t = miscresults$MINIMUM_ABS_T_SHOWN,
     omit_df_below_min_t = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS,
     ns_text = miscresults$NOT_SIGNIFICANT,
-    check_alpha = DEFAULT_ALPHA
+    check_alpha = DEFAULT_ALPHA,
+    df_format = miscresults$DF_FORMAT_OPTIONS
 ) {
     # Format a t statistic with a p value.
     t_txt <- miscresults$fmt_t(
         t, df,
         min_abs_t = min_abs_t,
-        omit_df_below_min_t = omit_df_below_min_t
+        omit_df_below_min_t = omit_df_below_min_t,
+        df_format = df_format
     )
     p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
     if (any(abs(t) < min_abs_t & p < check_alpha)) {
@@ -845,7 +912,8 @@ miscresults$fmt_t_p <- function(
 miscresults$fmt_F <- function(
     F, df1, df2,
     min_F = miscresults$MINIMUM_F_SHOWN,
-    omit_df_below_min_F = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS
+    omit_df_below_min_F = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS,
+    df_format = miscresults$DF_FORMAT_OPTIONS
 ) {
     # Format an F statistic (without a p value).
     # - Note that F will always be positive.
@@ -853,15 +921,19 @@ miscresults$fmt_F <- function(
     #   separated by commas anyway.
     df1_txt <- miscresults$mk_df_text(df1, big.mark = "")
     df2_txt <- miscresults$mk_df_text(df2, big.mark = "")
-    df_txt <- sprintf("~%s,%s~", df1_txt, df2_txt)
+    df_txt <- miscresults$fmt_df_text(
+        sprintf("%s,%s", df1_txt, df2_txt),
+        df_format = df_format
+    )
+    italic_F <- miscresults$italic_("F")
     return(ifelse(
         F < min_F,
         ifelse(
             omit_df_below_min_F,
-            sprintf("*F* < %s", min_F),
-            sprintf("*F*%s < %s", df_txt, min_F)
+            sprintf("%s < %s", italic_F, min_F),
+            sprintf("%s%s < %s", italic_F, df_txt, min_F)
         ),
-        sprintf("*F*%s = %s", df_txt, miscresults$fmt_float(F))
+        paste0(italic_F, df_txt, " = ", miscresults$fmt_float(F))
     ))
 }
 
@@ -871,13 +943,15 @@ miscresults$fmt_F_p <- function(
     min_F = miscresults$MINIMUM_F_SHOWN,
     omit_df_below_min_F = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS,
     ns_text = miscresults$NOT_SIGNIFICANT,
-    check_alpha = DEFAULT_ALPHA
+    check_alpha = DEFAULT_ALPHA,
+    df_format = miscresults$DF_FORMAT_OPTIONS
 ) {
     # Format an F statistic with a p value.
     f_txt <- miscresults$fmt_F(
         F, df1, df2,
         min_F = min_F,
-        omit_df_below_min_F = omit_df_below_min_F
+        omit_df_below_min_F = omit_df_below_min_F,
+        df_format = df_format
     )
     p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
     if (any(F < min_F & p < check_alpha)) {
@@ -897,7 +971,11 @@ miscresults$fmt_F_p <- function(
 miscresults$fmt_Z <- function(Z, use_plus = TRUE) {
     # Format a Z statistic (without a p value).
     z_txt <- miscresults$fmt_float(Z, use_plus = use_plus)
-    return(sprintf("*Z* = %s", z_txt))
+    return(paste0(
+        miscresults$italic_("Z"),
+        " = ",
+        z_txt
+    ))
 }
 
 
@@ -909,7 +987,7 @@ miscresults$fmt_Z_p <- function(
     # Format a Z statistic with a p value.
     z_txt <- miscresults$fmt_Z(Z, use_plus = use_plus)
     p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
-    return(sprintf("%s, %s", z_txt, p_txt))
+    return(paste0(z_txt, ", ", p_txt))
 }
 
 
@@ -921,7 +999,7 @@ miscresults$fmt_predictor <- function(
     # Format a predictor nicely, e.g. changing "drug:sex" to "Drug x Sex".
     predictor_txt <- stringr::str_replace_all(
         predictor_txt,
-        pattern = R_INTERACTION_MARKER,
+        pattern = miscresults$R_INTERACTION_MARKER,
         replacement = interaction_txt
     )
     if (!is.null(replacements)) {
@@ -963,14 +1041,20 @@ miscresults$fmt_single_level <- function(
     #
     # See fmt_level() for a vectorized version.
 
-    if (is.na(level_txt) || level_txt == R_INTERCEPT_LABEL) {
+    if (is.na(level_txt) || level_txt == miscresults$R_INTERCEPT_LABEL) {
         return(level_txt)
     }
-    level_n_parts <- stringr::str_count(level_txt, R_INTERACTION_MARKER) + 1
-    anova_n_parts <- stringr::str_count(anova_term_txt, R_INTERACTION_MARKER) + 1
+    level_n_parts <- stringr::str_count(
+        level_txt,
+        miscresults$R_INTERACTION_MARKER
+    ) + 1
+    anova_n_parts <- stringr::str_count(
+        anova_term_txt,
+        miscresults$R_INTERACTION_MARKER
+    ) + 1
     stopifnot(level_n_parts == anova_n_parts)
     getParts <- function(x) {
-        stringr::str_split_1(x, R_INTERACTION_MARKER)
+        stringr::str_split_1(x, miscresults$R_INTERACTION_MARKER)
     }
     level_parts <- getParts(level_txt)
     anova_parts <- getParts(anova_term_txt)
@@ -1133,7 +1217,7 @@ miscresults$mk_wilcoxon_test <- function(
     # There is no df parameter here; result$parameter will be NULL.
     p <- result$p.value
     z_p_txt <- miscresults$fmt_Z_p(z, p, ns_text = ns_text)
-    return(sprintf("*W* = %s, %s", w_txt, z_p_txt))
+    return(paste0(miscresults$italic_("W"), " = ", w_txt, ", ", z_p_txt))
 }
 
 
@@ -1229,14 +1313,14 @@ miscresults$which_anova_term_matches_coeff <- function(
     #       drugLowDose -> drug
     #       drugLowDose:sexMale -> drug:sex
     getParts <- function(x) {
-        stringr::str_split_1(x, R_INTERACTION_MARKER)
+        stringr::str_split_1(x, miscresults$R_INTERACTION_MARKER)
     }
     termtable <- (
         tibble(anova_term = anova_terms)
         %>% mutate(
             term_idx = row_number(),
             anova_n_parts = stringr::str_count(
-                anova_term, R_INTERACTION_MARKER
+                anova_term, miscresults$R_INTERACTION_MARKER
             ) + 1
         )
         %>% arrange(desc(anova_term))
@@ -1244,7 +1328,10 @@ miscresults$which_anova_term_matches_coeff <- function(
         # "x", so we match the longest possible string as we proceed in
         # conventional order through the table.
     )
-    coeff_n_parts <- stringr::str_count(coeff_term, R_INTERACTION_MARKER) + 1
+    coeff_n_parts <- stringr::str_count(
+        coeff_term,
+        miscresults$R_INTERACTION_MARKER
+    ) + 1
     coeff_parts <- getParts(coeff_term)
     if (debug) {
         cat("... termtable:\n")
@@ -1352,7 +1439,7 @@ miscresults$summarize_anova_table <- function(a) {
             || identical(a_colnames,
                          c("Df", "Sum Sq", "Mean Sq", "F value", "Pr(>F)"))
         )
-        && last_rowname == R_RESIDUALS_LABEL
+        && last_rowname == miscresults$R_RESIDUALS_LABEL
     ) {
         # Table looks like this:
         #
@@ -1394,11 +1481,11 @@ miscresults$summarize_anova_table <- function(a) {
                 term = rownames(a),
                 df_resid = a$Df[nrow_anova]
             )
-            %>% filter(term != R_RESIDUALS_LABEL)
+            %>% filter(term != miscresults$R_RESIDUALS_LABEL)
         )
 
     } else if (identical(a_colnames, c("Sum Sq", "Df", "F values", "Pr(>F)"))
-            && last_rowname == R_RESIDUALS_LABEL) {
+            && last_rowname == miscresults$R_RESIDUALS_LABEL) {
         # Table looks like this:
         #
         # Analysis of Deviance Table (Type III tests)
@@ -1426,7 +1513,7 @@ miscresults$summarize_anova_table <- function(a) {
                 term = rownames(a),
                 df_resid = a$Df[nrow_anova]
             )
-            %>% filter(term != R_RESIDUALS_LABEL)
+            %>% filter(term != miscresults$R_RESIDUALS_LABEL)
         )
 
     } else if (identical(a_colnames, c("Sum Sq", "Mean Sq", "NumDF",
@@ -1538,7 +1625,7 @@ miscresults$summarize_anova_table <- function(a) {
             is_term = TRUE,
             is_subterm = FALSE,
             subterm_idx = 0,
-            is_intercept = term == R_INTERCEPT_LABEL
+            is_intercept = term == miscresults$R_INTERCEPT_LABEL
         )
         %>% select(
             term,
@@ -2433,10 +2520,10 @@ miscresults$mk_model_anova_coeffs <- function(
         # Prettier versions:
         "Term",
         paste0(
-            "*F*",
+            miscresults$italic_("F"),
             ifelse(show_ss_type, formatted_ss_type, "")
         ),
-        "*p~F~*",
+        miscresults$italic_(paste0("p", miscresults$subscript_("F"))),
         "Level",
         ifelse(
             show_ci,
@@ -2444,8 +2531,16 @@ miscresults$mk_model_anova_coeffs <- function(
             "Coefficient"
         ),
         "Standard error",
-        ifelse(using_t_not_Z, "*t*", "*Z*"),
-        ifelse(using_t_not_Z, "*p~t~*", "*p~Z~*")
+        ifelse(
+            using_t_not_Z,
+            miscresults$italic_("t"),
+            miscresults$italic_("Z")
+        ),
+        ifelse(
+            using_t_not_Z,
+            miscresults$italic_(paste0("p", miscresults$subscript_("t"))),
+            miscresults$italic_(paste0("p", miscresults$subscript_("Z")))
+        )
     )
 
     # -------------------------------------------------------------------------
@@ -2517,10 +2612,16 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
         # There are some potentials for error here if someone uses a variable
         # like xTRUE as a predictor...
         without_true_suffix <- all_term_names[i]
-        with_true_suffix <- paste0(without_true_suffix, R_TRUE_TEXT)
+        with_true_suffix <- paste0(
+            without_true_suffix,
+            miscresults$R_TRUE_TEXT
+        )
         if (with_true_suffix %in% coefficient_names) {
             # We've found one.
-            new_logical_predictor <- list(c(R_FALSE_TEXT, R_TRUE_TEXT))
+            new_logical_predictor <- list(c(
+                miscresults$R_FALSE_TEXT,
+                miscresults$R_TRUE_TEXT
+            ))
             names(new_logical_predictor) <- without_true_suffix
             factor_level_list <- c(factor_level_list, new_logical_predictor)
             is_factor_logical <- c(is_factor_logical, TRUE)
@@ -2545,7 +2646,10 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
         # There are factors present.
         for (t in 1:n_terms) {
             term_plain <- all_term_names[t]  # may be e.g. "x" or "x:y:z"
-            components <- str_split_1(term_plain, R_INTERACTION_MARKER)
+            components <- str_split_1(
+                term_plain,
+                miscresults$R_INTERACTION_MARKER
+            )
             n_components <- length(components)
             term_list <- vector("list", n_components)
             term_plain_list <- vector("list", n_components)
@@ -2573,14 +2677,18 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
             }
             term_grid <- (
                 expand.grid(term_list)
-                %>% unite("term", everything(), sep = R_INTERACTION_MARKER)
+                %>% unite(
+                    "term",
+                    everything(),
+                    sep = miscresults$R_INTERACTION_MARKER
+                )
             )
             term_plain_grid <- (
                 expand.grid(term_plain_list)
                 %>% unite(
                     "term_plain",
                     everything(),
-                    sep = R_INTERACTION_MARKER
+                    sep = miscresults$R_INTERACTION_MARKER
                 )
             )
             level_grid <- (
@@ -2588,7 +2696,7 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
                 %>% unite(
                     "level",
                     everything(),
-                    sep = R_INTERACTION_MARKER,
+                    sep = miscresults$R_INTERACTION_MARKER,
                     na.rm = TRUE
                 )
             )
@@ -2643,7 +2751,10 @@ miscresults$get_pretty_cph_terms <- function(cph_model, debug = FALSE) {
             is_reference_level = replace_na(is_reference_level, FALSE),
             is_factor_reflevel = replace_na(is_factor_reflevel, FALSE),
             is_logical_reflevel = replace_na(is_logical_reflevel, FALSE),
-            involves_interaction = str_detect(term, R_INTERACTION_MARKER)
+            involves_interaction = str_detect(
+                term,
+                miscresults$R_INTERACTION_MARKER
+            )
         )
         %>% group_by(term_plain)
         %>% mutate(term_sort = min(coefficient_num, na.rm = TRUE))
@@ -2893,6 +3004,8 @@ miscresults$mk_cph_table <- function(
         )
         %>% rename(
             # OK to have absent columns here (if CI not being shown).
+            # But you can't use paste0() on the LHS here, so the markup is
+            # manual.
             "Term" = "txt_term",
             "Level" = "txt_level",
             "Coefficient" = "txt_coeff",
