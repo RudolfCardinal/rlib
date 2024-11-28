@@ -595,6 +595,23 @@ m3j <- mk_model_anova_coeffs(
 )
 # Manual checks: order dependency as expected in m3i versus m3j
 
+# More for model comparison:
+m3k <- mk_model_anova_coeffs(
+    # With continuous predictor * factor interaction:
+    model_fn = lm,
+    formula = performance ~ age,
+    data = fd3,
+    predictor_replacements = M3_PREDICTOR_REPLACEMENTS
+)
+m3l <- mk_model_anova_coeffs(
+    # With continuous predictor * factor interaction:
+    model_fn = lm,
+    formula = performance ~ age + drug,
+    data = fd3,
+    predictor_replacements = M3_PREDICTOR_REPLACEMENTS
+)
+
+
 m4f <- mk_model_anova_coeffs(
     # Also with boolean predictor:
     model_fn = lmerTest::lmer,
@@ -615,6 +632,48 @@ m4f <- mk_model_anova_coeffs(
 ft4a <- (
     m4f$table_flex
     %>% set_caption("lmerTest::lmer, with within-subjects predictors")
+)
+
+
+# =============================================================================
+# Model comparison
+# =============================================================================
+
+mcomp1 <- miscresults$compare_models_via_anova(list(
+    "Model K" = list(
+        model = m3k$anova_model,
+        description = "Description of K",
+        compare_to = NA
+    ),
+    "Model L" = list(
+        model = m3l$anova_model,
+        description = "Description of L",
+        compare_to = "Model K"
+    ),
+    "Model E" = list(
+        model = m3e$anova_model,
+        description = "Description of E",
+        compare_to = "Model L"
+    ),
+    "Model F" = list(
+        model = m3f$anova_model,
+        description = "Description of F",
+        compare_to = "Model E"
+    ),
+    "Model E again, compare to self" = list(
+        model = m3e$anova_model,
+        description = "Description of E again",
+        compare_to = "Model E"
+    ),
+    "Model E yet again, backwards comparison" = list(
+        model = m3e$anova_model,
+        description = "Description of E yet again",
+        compare_to = "Model F"
+    )
+))
+ftcomp1 <- (
+    mcomp1$table_flex
+    %>% set_caption("Model comparison 1")
 )
 
 
@@ -661,3 +720,4 @@ readline(PROMPT); print(ft3d)
 readline(PROMPT); print(ft3e)
 readline(PROMPT); print(ft3f)
 readline(PROMPT); print(ft4a)
+readline(PROMPT); print(ftcomp1)
