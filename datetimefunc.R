@@ -216,12 +216,11 @@ datetimefunc$mk_pulsetable_dimensionless <- function(
     # Argument checks
     n_event_times <- length(event_times)
     n_durations <- length(event_durations)
-    stopifnot(
-        all(is.finite(event_times))  # excludes NA values (but 0-length OK)
-        && (n_durations == 1 || n_durations == n_event_times)
-        && all(is.finite(event_durations))
-        && all(event_durations > 0)
-    )
+    stopifnot(all(is.finite(event_times)))
+    # ... excludes NA values (but 0-length OK)
+    stopifnot(n_durations == 1 || n_durations == n_event_times)
+    stopifnot(all(is.finite(event_durations)))
+    stopifnot(all(event_durations > 0))
 
     if (n_event_times == 0) {
         # Return a "non-event" result.
