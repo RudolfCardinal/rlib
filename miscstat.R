@@ -800,8 +800,7 @@ miscstat$lr_test <- function(model1_nLL, model1_df, model2_nLL, model2_df) {
         df2 <- model2_df
         nLL1 <- model1_nLL
         nLL2 <- model2_nLL
-    }
-    else {
+    } else {
         df1 <- model2_df
         df2 <- model1_df
         nLL1 <- model2_nLL
@@ -860,8 +859,7 @@ miscstat$softmax <- function(x, b = 1, debug = TRUE) {
         answer <- rep(0, length(x))
         answer[which.max(x)] <- 1
         answer[is.na(x)] <- NA
-    }
-    else {
+    } else {
         exponented <- exp(products)
         answer <- exponented / sum(exponented, na.rm = TRUE)
     }

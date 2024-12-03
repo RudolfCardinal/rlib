@@ -83,8 +83,7 @@ dirichlet$dirichlet_posterior_alpha <- function(
     exp_r <- alpha / sum(alpha)
     if (K == 2) {
         xp <- dirichlet$dirichlet_exceedance_2_models(alpha)
-    }
-    else {
+    } else {
         xp <- dirichlet$dirichlet_exceedance_by_sampling(alpha, Nsamp)
     }
     return(list(

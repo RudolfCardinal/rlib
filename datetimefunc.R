@@ -187,7 +187,7 @@ datetimefunc$mk_pulsetable_dimensionless <- function(
     #   event_durations
     #       As for the input, but sorted (to match event_times in the output).
     #   intervals
-    #       If include_interval_table == FALSE, NULL. Otherwise: a tibble,
+    #       If include_interval_table == FALSE, NULL. Otherwise: a data.table,
     #       containing one time interval per row, collectively covering all
     #       time from -Inf to +Inf with no gaps. Columns are:
     #
@@ -226,7 +226,7 @@ datetimefunc$mk_pulsetable_dimensionless <- function(
     if (n_event_times == 0) {
         # Return a "non-event" result.
         if (include_interval_table) {
-            intervals <- tibble(
+            intervals <- data.table(
                 t_start = -Inf,
                 t_end = Inf,
                 event = FALSE,
@@ -383,13 +383,13 @@ datetimefunc$mk_pulsetable_dates <- function(
             && lubridate::is.Date(origin_date))) {
         stop("Bad origin_date parameter: ", origin_date)
     }
-    if (!(length(event_dates) == 0
-            || all(lubridate::is.Date(event_dates)))) {
+    n_event_dates <- length(event_dates)
+    if (!(n_event_dates == 0 || all(lubridate::is.Date(event_dates)))) {
         stop("Bad event_dates parameter: ", event_dates)
     }
+    n_event_durations <- length(event_durations)
     if (!(
-        (length(event_durations) == 1
-            || length(event_durations) == length(event_dates))
+        (n_event_durations == 1 || n_event_durations == n_event_dates)
         && all(lubridate::is.duration(event_durations))
     )) {
         stop("Bad event_durations parameter: ", event_durations)
@@ -407,21 +407,14 @@ datetimefunc$mk_pulsetable_dates <- function(
         include_interval_table = include_interval_table
     )
     if (include_interval_table) {
-        pt$intervals <- (
-            pt$intervals
-            %>% mutate(
-                t_start_date = as.Date(
-                    origin_date
-                    + lubridate::duration(t_start, units = time_units)
-                ),
-                t_end_date = as.Date(
-                    origin_date
-                    + lubridate::duration(t_end, units = time_units)
-                )
-                # A date plus "1 day" gives a date, but a date plus "1 year"
-                # gives a datetime, so we'll force to a date.
-            )
-        )
+        pt$intervals[, t_start_date := as.Date(
+            origin_date + lubridate::duration(t_start, units = time_units)
+        )]
+        pt$intervals[, t_end_date := as.Date(
+            origin_date + lubridate::duration(t_end, units = time_units)
+        )]
+        # A date plus "1 day" gives a date, but a date plus "1 year" gives a
+        # datetime, so we'll force to a date.
     }
     pt$origin_date <- origin_date
     pt$time_units <- time_units
@@ -454,7 +447,7 @@ datetimefunc$query_pulsetable_times <- function(pulsetable, query_times) {
     #   query_times
     #       The (dimensionless) times at which to produce a row in the output.
     #
-    # Returns a tibble with columns:
+    # Returns a data.table with columns:
     #
     #   t
     #       The input times, i.e. query_times.
@@ -608,7 +601,7 @@ datetimefunc$query_pulsetable_times <- function(pulsetable, query_times) {
         t_since_last <- 0
     }
 
-    return(tibble(
+    return(data.table(
         t = query_times,
         current = current,
         hx = hx,
@@ -712,7 +705,7 @@ datetimefunc$query_pulsetable_times_slow <- function(pulsetable, query_times) {
             cum_t_after <- 0
             t_since_last <- 0
         }
-        return(tibble(
+        return(data.table(
             t = t,
             current = current,
             hx = hx,
@@ -727,6 +720,7 @@ datetimefunc$query_pulsetable_times_slow <- function(pulsetable, query_times) {
         %>% rowwise()
         %>% reframe(query_fn(t))
         %>% mutate(ever = ever)
+        %>% as.data.table()
     )
     return(result)
 }
@@ -775,18 +769,19 @@ datetimefunc$query_pulsetable_dates <- function(
             pulsetable = pulsetable,
             query_times = query_times
         )
-    }
-    else {
+    } else {
         q <- datetimefunc$query_pulsetable_times(
             pulsetable = pulsetable,
             query_times = query_times
         )
     }
-    return(q %>% mutate(t_raw = t, t = query_dates))
+    q[, t_raw := t]
+    q[, t := query_dates]
+    return(q)
 }
 
 
-datetimefunc$test_pulsetable <- function(verbose = FALSE) {
+datetimefunc$test_pulsetable <- function(verbose = TRUE) {
     # Create and query pulsetable objects.
     line <- paste(rep("=", 79), collapse = "")
     mktitle <- function(x) {
