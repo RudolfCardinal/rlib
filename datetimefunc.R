@@ -213,9 +213,10 @@ datetimefunc$mk_pulsetable_dimensionless <- function(
     #   time_units
     #       Units of time (e.g. "years" or NA).
 
-    # Argument checks
     n_event_times <- length(event_times)
     n_durations <- length(event_durations)
+
+    # Argument checks
     stopifnot(all(is.finite(event_times)))
     # ... excludes NA values (but 0-length OK)
     stopifnot(n_durations == 1 || n_durations == n_event_times)
@@ -430,7 +431,10 @@ datetimefunc$mk_pulsetable_dates <- function(
 
 datetimefunc$query_pulsetable_ever <- function(pt) {
     # Queries a pulsetable in a very basic way: "Did the event ever occur?"
-    return(any(pt$intervals$event))
+
+    # Don't rely on the existence of pt$intervals; that is only non-NULL if
+    # include_interval_table was set during pulsetable creation.
+    return(length(pt$event_times) > 0)
 }
 
 
@@ -793,27 +797,35 @@ datetimefunc$test_pulsetable <- function(verbose = FALSE) {
     # 1
     # -------------------------------------------------------------------------
 
-    p1 <- datetimefunc$mk_pulsetable_dimensionless(
+    p1a <- datetimefunc$mk_pulsetable_dimensionless(
         event_times = c(5, 20, 100, 105, 150, 200),
         event_durations = 10,
         include_interval_table = TRUE
     )
     if (verbose) {
         mktitle("p1")
-        print(p1)
+        print(p1a)
     }
 
     # Very basic query:
-    q1ever <- datetimefunc$query_pulsetable_ever(p1)
+    q1a_ever <- datetimefunc$query_pulsetable_ever(p1a)
     if (verbose) {
-        mktitle("q1ever")
-        print(q1ever)
+        mktitle("q1a_ever")
+        print(q1a_ever)
     }
+
+    p1b <- datetimefunc$mk_pulsetable_dimensionless(
+        event_times = c(5, 20, 100, 105, 150, 200),
+        event_durations = 10,
+        include_interval_table = FALSE
+    )  # same as p1a but without the interval table
+    q1b_ever <- datetimefunc$query_pulsetable_ever(p1b)
+    stopifnot(identical(q1a_ever, q1b_ever))
 
     # Times, two ways:
     p1_test_times <- c(0, 5, 7, 17, 50, 103, 115, 500)
-    q1a <- datetimefunc$query_pulsetable_times(p1, p1_test_times)
-    q1b <- datetimefunc$query_pulsetable_times_slow(p1, p1_test_times)
+    q1a <- datetimefunc$query_pulsetable_times(p1a, p1_test_times)
+    q1b <- datetimefunc$query_pulsetable_times_slow(p1a, p1_test_times)
     if (verbose) {
         mktitle("q1a")
         print(q1a)
@@ -831,7 +843,7 @@ datetimefunc$test_pulsetable <- function(verbose = FALSE) {
     mktitle("Speed test, query_pulsetable_times")
     tmp_start <- Sys.time()
     for (i in 1:n_tests) {
-        datetimefunc$query_pulsetable_times(p1, p1_test_times)
+        datetimefunc$query_pulsetable_times(p1a, p1_test_times)
     }
     tmp_end <- Sys.time()
     cat("- ", n_tests, " iterations took:\n", sep = "")
