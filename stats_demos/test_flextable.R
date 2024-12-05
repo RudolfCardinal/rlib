@@ -51,6 +51,27 @@ FOOTNOTE_OPTIONS <- ftExtra::footnote_options(
 
 
 # =============================================================================
+# Self-tests
+# =============================================================================
+
+test_which_anova_term_matches_coeff <- function() {
+    tmp_anova_terms1 <- c("x", "xx", "x:xx")
+    stopifnot(miscresults$which_anova_term_matches_coeff(tmp_anova_terms1, "x") == 1)
+    stopifnot(miscresults$which_anova_term_matches_coeff(tmp_anova_terms1, "xx") == 2)
+    stopifnot(miscresults$which_anova_term_matches_coeff(tmp_anova_terms1, "xB") == 1)
+    stopifnot(miscresults$which_anova_term_matches_coeff(tmp_anova_terms1, "xxB") == 2)
+    stopifnot(miscresults$which_anova_term_matches_coeff(tmp_anova_terms1, "xB:xxB") == 3)
+    tmp_anova_terms2 <- c("xx", "x", "xx:x")
+    stopifnot(miscresults$which_anova_term_matches_coeff(tmp_anova_terms2, "xx") == 1)
+    stopifnot(miscresults$which_anova_term_matches_coeff(tmp_anova_terms2, "x") == 2)
+    stopifnot(miscresults$which_anova_term_matches_coeff(tmp_anova_terms2, "xxB") == 1)
+    stopifnot(miscresults$which_anova_term_matches_coeff(tmp_anova_terms2, "xB") == 2)
+    stopifnot(miscresults$which_anova_term_matches_coeff(tmp_anova_terms2, "xxB:xB") == 3)
+}
+test_which_anova_term_matches_coeff()
+
+
+# =============================================================================
 # Made-up data and formatting demonstrations
 # =============================================================================
 
@@ -412,7 +433,7 @@ ft1 <- (
     )  # apply markdown
     %>% flextable::valign(valign = "top")  # align all cells top
     %>% autofit()  # size columns
-    %>% set_caption("My first flextable")
+    %>% set_caption("[ft1] My first flextable")
     # Mark significant differences in bold. To make this harder, note that
     # asterisks are present in the markdown text! So we're looking for
     # whitespace (\s), one or more asterisks (\*+), end of string ($). Then
@@ -453,7 +474,7 @@ ft2 <- (
     )  # apply markdown
     %>% flextable::valign(valign = "top")  # align all cells top
     %>% autofit()  # size columns
-    %>% set_caption("Three-group table")
+    %>% set_caption("[ft2] Three-group table")
     %>% bold(
         i = ~ miscresults$detect_significant_in_result_str(Comparison),
         j = c("Placebo", "Low dose", "High dose")
@@ -468,7 +489,7 @@ m3a <- mk_model_anova_coeffs(
 )
 ft3a <- (
     m3a$table_flex
-    %>% set_caption("Model via lm(); default options")
+    %>% set_caption("[ft3a] Model via lm(); default options")
 )
 
 m3b <- mk_model_anova_coeffs(
@@ -480,7 +501,7 @@ m3b <- mk_model_anova_coeffs(
 )
 ft3b <- (
     m3b$table_flex
-    %>% set_caption("glm, logistic regression; default options")
+    %>% set_caption("[ft3b] glm, logistic regression; default options")
 )
 
 m3c <- mk_model_anova_coeffs(
@@ -489,11 +510,13 @@ m3c <- mk_model_anova_coeffs(
     family = binomial(link = "logit"),
     data = fd3,
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS,
+    suppress_nonsig_coeffs = FALSE,
+    suppress_nonsig_coeff_tests = FALSE,
     squish_up_level_rows = TRUE  # new here
 )
 ft3c <- (
     m3c$table_flex
-    %>% set_caption("glm, logistic regression; squish up rows")
+    %>% set_caption("[ft3c] glm, logistic regression; squish up rows")
 )
 
 m3d <- mk_model_anova_coeffs(
@@ -502,13 +525,15 @@ m3d <- mk_model_anova_coeffs(
     family = binomial(link = "logit"),
     data = fd3,
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS,
+    suppress_nonsig_coeffs = FALSE,
+    suppress_nonsig_coeff_tests = FALSE,
     squish_up_level_rows = TRUE,
     include_reference_levels = FALSE  # new here
 )
 ft3d <- (
     m3d$table_flex
     %>% set_caption(paste0(
-        "glm, logistic regression; ",
+        "[ft3d] glm, logistic regression; ",
         "squish up rows, skip reference levels"
     ))
 )
@@ -521,13 +546,28 @@ m3e <- mk_model_anova_coeffs(
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS,
     squish_up_level_rows = TRUE,
     suppress_nonsig_coeffs = FALSE,
-    suppress_nonsig_coeff_tests = FALSE,
-    debug = FALSE
+    suppress_nonsig_coeff_tests = TRUE
 )
 ft3e <- (
     m3e$table_flex
     %>% set_caption(
-        "lm; this time don't suppress non-significant coeffs/tests"
+        "[ft3e] lm; this time suppress coeffs tests for non-significant F"
+    )
+)
+m3m <- mk_model_anova_coeffs(
+    # With continuous predictor * factor interaction:
+    model_fn = lm,
+    formula = performance ~ age * drug * sex,
+    data = fd3,
+    predictor_replacements = M3_PREDICTOR_REPLACEMENTS,
+    squish_up_level_rows = TRUE,
+    suppress_nonsig_coeffs = TRUE,
+    suppress_nonsig_coeff_tests = TRUE
+)
+ft3m <- (
+    m3m$table_flex
+    %>% set_caption(
+        "[ft3e] lm; this time suppress coeffs/tests for non-significant F"
     )
 )
 
@@ -539,13 +579,12 @@ m3f <- mk_model_anova_coeffs(
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS,
     squish_up_level_rows = TRUE,
     suppress_nonsig_coeffs = FALSE,
-    suppress_nonsig_coeff_tests = FALSE,
-    debug = FALSE
+    suppress_nonsig_coeff_tests = TRUE
 )
 ft3f <- (
     m3f$table_flex
     %>% set_caption(as_paragraph_md(paste0(
-        "This is a caption. You can't apply footnotes to captions. ",
+        "[ft3f] This is a caption. You can't apply footnotes to captions. ",
         "Use *ftExtra::as_paragraph_md()* for markdown. ",
         "Model via lm() including Boolean (logical) predictor."
     )))
@@ -626,12 +665,11 @@ m4f <- mk_model_anova_coeffs(
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS,
     squish_up_level_rows = TRUE,
     suppress_nonsig_coeffs = FALSE,
-    suppress_nonsig_coeff_tests = FALSE,
-    debug = FALSE
+    suppress_nonsig_coeff_tests = TRUE
 )
 ft4a <- (
     m4f$table_flex
-    %>% set_caption("lmerTest::lmer, with within-subjects predictors")
+    %>% set_caption("[ft4a] lmerTest::lmer, with within-subjects predictors")
 )
 
 
@@ -673,7 +711,7 @@ mcomp1 <- miscresults$compare_models_via_anova(list(
 ))
 ftcomp1 <- (
     mcomp1$table_flex
-    %>% set_caption("Model comparison 1")
+    %>% set_caption("[ftcomp1] Model comparison 1")
 )
 
 
@@ -718,6 +756,7 @@ readline(PROMPT); print(ft3b)
 readline(PROMPT); print(ft3c)
 readline(PROMPT); print(ft3d)
 readline(PROMPT); print(ft3e)
+readline(PROMPT); print(ft3m)
 readline(PROMPT); print(ft3f)
 readline(PROMPT); print(ft4a)
 readline(PROMPT); print(ftcomp1)
