@@ -2462,7 +2462,7 @@ miscresults$mk_model_anova_coeffs <- function(
                     interaction_txt = level_combination_text
                 ),
                 !is.na(coeff) ~ level_not_applicable,
-                .default = ""
+                .default = level_not_applicable,
             ),
             coeff_txt = case_when(
                 is_reference_level ~ reference_label,

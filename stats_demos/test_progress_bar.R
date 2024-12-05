@@ -8,7 +8,11 @@ PROGRESS_BAR_FORMAT <- paste0(
     "(:spin) [:bar] :percent ",
     "[:current/:total | Rate :tick_rate/s | ",
     "Elapsed :elapsedfull | Estimated time left :eta]"
-)  # for progress::progress_bar
+)
+# ... for progress::progress_bar.
+# NB ":eta" sometimes includes a leading space, e.g. for "0s", but not
+# always, e.g. for "14h". Its code involves progress::progress_bar() and
+# prettyunits::vague_dt().
 PROGRESS_BAR_CLEAR <- FALSE
 
 SLEEP_TIME <- 0.2
