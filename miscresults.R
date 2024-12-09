@@ -2878,6 +2878,7 @@ miscresults$mk_cph_table <- function(
 
     # 1. Coefficients
     coeffs <- s$coefficients
+    coeff_rownames <- rownames(coeffs)
     coeffs_intermediate <- (
         coeffs
         %>% as_tibble()
