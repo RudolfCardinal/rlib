@@ -1044,6 +1044,9 @@ miscresults$fmt_single_level <- function(
     if (is.na(level_txt) || level_txt == miscresults$R_INTERCEPT_LABEL) {
         return(level_txt)
     }
+    if (is.na(anova_term_txt)) {
+        stop(paste0("anova_term_txt is NA, for level_txt = ", level_txt))
+    }
     level_n_parts <- stringr::str_count(
         level_txt,
         miscresults$R_INTERACTION_MARKER
@@ -1052,7 +1055,16 @@ miscresults$fmt_single_level <- function(
         anova_term_txt,
         miscresults$R_INTERACTION_MARKER
     ) + 1
-    stopifnot(level_n_parts == anova_n_parts)
+    if (level_n_parts != anova_n_parts) {
+        cat(
+            "- level_txt: ", level_txt, "\n",
+            "- level_n_parts: ", level_n_parts, "\n",
+            "- anova_term_txt: ", anova_term_txt, "\n",
+            "- anova_n_parts: ", anova_n_parts, "\n",
+            sep = ""
+        )
+        stop("level_n_parts != anova_n_parts")
+    }
     getParts <- function(x) {
         stringr::str_split_1(x, miscresults$R_INTERACTION_MARKER)
     }
@@ -1278,6 +1290,7 @@ miscresults$mk_default_flextable_from_markdown <- function(markdown_table) {
 miscresults$which_anova_term_matches_coeff <- function(
     anova_terms,
     coeff_term,
+    anova_term_idx = NULL,
     debug = FALSE
 ) {
     # Arguments:
@@ -1287,10 +1300,19 @@ miscresults$which_anova_term_matches_coeff <- function(
     #       e.g. c("x", "xx", "x:xx").
     #   coeff_term
     #       Text, e.g. "xxB" or "xB:xxB".
+    #   anova_term_idx
+    #       Vector of term_idx values to return from, corresponding to
+    #       anova_terms. If NULL, defaults to 1:length(anova_terms).
     #
-    # Returns the index of anova_terms for which coeff_term is the best match.
+    # Returns the ELEMENT of anova_term_idx corresponding to the INDEX of
+    # anova_terms for which coeff_term is the best match.
 
     stopifnot(length(coeff_term) == 1)  # not parallel yet!
+    if (is.null(anova_term_idx)) {
+        anova_term_idx <- 1:length(anova_terms)
+    } else {
+        stopifnot(length(anova_terms) == length(anova_term_idx))
+    }
     if (debug) {
         cat("which_anova_term_matches_coeff:\n")
         cat("... anova_terms:\n")
@@ -1306,7 +1328,7 @@ miscresults$which_anova_term_matches_coeff <- function(
         if (debug) {
             cat("... exact match.\n")
         }
-        return(which(anova_terms == coeff_term))
+        return(anova_term_idx[which(anova_terms == coeff_term)])
     }
 
     # Otherwise, we are going to match e.g.
@@ -1316,9 +1338,11 @@ miscresults$which_anova_term_matches_coeff <- function(
         stringr::str_split_1(x, miscresults$R_INTERACTION_MARKER)
     }
     termtable <- (
-        tibble(anova_term = anova_terms)
+        tibble(
+            anova_term = anova_terms,
+            term_idx = anova_term_idx
+        )
         %>% mutate(
-            term_idx = row_number(),
             anova_n_parts = stringr::str_count(
                 anova_term, miscresults$R_INTERACTION_MARKER
             ) + 1
@@ -1371,23 +1395,6 @@ miscresults$which_anova_term_matches_coeff <- function(
     # Failure.
     return(NA_integer_)
 }
-
-# if (FALSE) {
-#     # TESTS:
-#     # ... particularly when one factor name starts with another factor's name!
-#     tmp_anova_terms1 <- c("x", "xx", "x:xx")
-#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms1, "x") == 1)
-#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms1, "xx") == 2)
-#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms1, "xB") == 1)
-#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms1, "xxB") == 2)
-#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms1, "xB:xxB") == 3)
-#     tmp_anova_terms2 <- c("xx", "x", "xx:x")
-#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms2, "xx") == 1)
-#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms2, "x") == 2)
-#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms2, "xxB") == 1)
-#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms2, "xB") == 2)
-#     stopifnot(which_anova_term_matches_coeff(tmp_anova_terms2, "xxB:xB") == 3)
-# }
 
 
 miscresults$summarize_anova_table <- function(a) {
@@ -1737,7 +1744,6 @@ miscresults$summarize_model_coefficients <- function(
     # Convenience variables
     coeff_colnames <- colnames(coeffs)
     coeff_rownames <- rownames(coeffs)
-    n_anova_terms <- nrow(anova_table)
 
     # Work out if we will use t or Z tests:
     # For t tests, also work out where we'll get the df information from.
@@ -1768,7 +1774,7 @@ miscresults$summarize_model_coefficients <- function(
         term_name <- coeff_rownames[i]
         # The tricky part is assigning them correctly to the ANOVA table terms.
         term_idx <- miscresults$which_anova_term_matches_coeff(
-            anova_table$term, term_name
+            anova_table$term, term_name, anova_table$term_idx
         )
         if (is.na(term_idx)) {
             if (term_name == R_INTERCEPT_LABEL) {
@@ -1783,7 +1789,12 @@ miscresults$summarize_model_coefficients <- function(
                 stop(paste0("Can't match term: ", term_name))
             }
         } else {
-            anova_term_name <- anova_table$term[term_idx]
+            anova_term_name <- (
+                anova_table
+                %>% filter(term_idx == .env$term_idx)
+                %>% pull(term)
+            )
+            stopifnot(length(anova_term_name) == 1)
         }
         is_linear <- FALSE
         if (term_name %in% anova_table$term
@@ -1845,7 +1856,7 @@ miscresults$summarize_model_coefficients <- function(
     use_xlevels <- ("xlevels" %in% names(m))
     use_frame <- ("frame" %in% slotNames(m))
     if (include_reference_levels) {
-        for (i in 1:n_anova_terms) {
+        for (i in 1:nrow(anova_table)) {
             term_name <- anova_table$term[i]
             term_idx <- anova_table$term_idx[i]
             if (use_xlevels) {
@@ -1975,8 +1986,8 @@ miscresults$mk_model_anova_coeffs <- function(
     predictor_replacements = NULL,
     coeff_use_plus = TRUE,
     show_ci = TRUE,
-    suppress_nonsig_coeffs = TRUE,
-    suppress_nonsig_coeff_tests = TRUE,
+    suppress_nonsig_coeffs = FALSE,
+    suppress_nonsig_coeff_tests = FALSE,
     keep_intercept_if_suppressing = TRUE,
     squish_up_level_rows = FALSE,
     # Tweaking:
@@ -2159,7 +2170,6 @@ miscresults$mk_model_anova_coeffs <- function(
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Establish what contrasts we'll use
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     using_type_I_ss <- type == "I" || type == 1
     using_type_II_ss <- type == "II" || type == 2
     using_type_III_ss <- type == "III" || type == 3
@@ -2200,7 +2210,6 @@ miscresults$mk_model_anova_coeffs <- function(
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Run the models, m1 and m2
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     saved_options_contrasts <- getOption("contrasts")  # save
     options(contrasts = contrasts_anova_model)  # set
     m1 <- model_fn(formula, data = data, ...)
@@ -2218,7 +2227,6 @@ miscresults$mk_model_anova_coeffs <- function(
     # Extract: ANOVA table object (a) from m1, plus summary (s) and
     # coefficients (coeffs) from m2.
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     is_lmertest <- "lmerModLmerTest" %in% class(m1)
     if (is_lmertest) {
         # lmerTest::anova.lmerModLmerTest() takes an explicit "type" argument,
@@ -2280,7 +2288,6 @@ miscresults$mk_model_anova_coeffs <- function(
     # -------------------------------------------------------------------------
     # Build our version of the ANOVA table, in intermediate_anova
     # -------------------------------------------------------------------------
-
     anova_detail <- miscresults$summarize_anova_table(a)
     # If we are using Type III SS, the intercept from the ANOVA model is *not*
     # the same as the intercept from the coefficients model. (And more
@@ -2294,7 +2301,6 @@ miscresults$mk_model_anova_coeffs <- function(
         # Different contrasts. Ditch the intercept term's F test.
         intermediate_anova <- dplyr::filter(anova_detail, !is_intercept)
     }
-    n_anova_terms <- nrow(intermediate_anova)
 
     # -------------------------------------------------------------------------
     # Build our version of the coefficient table, intermediate_coeffs
@@ -2319,8 +2325,9 @@ miscresults$mk_model_anova_coeffs <- function(
                 "suppress_nonsig_coeffs or suppress_nonsig_coeff_tests"
             ))
         }
-        for (t_idx in 1:n_anova_terms) {
-            if (intermediate_anova[t_idx, ]$pF >= alpha_show_coeffs) {
+        for (anova_rownum in 1:nrow(intermediate_anova)) {
+            if (intermediate_anova[anova_rownum, ]$pF >= alpha_show_coeffs) {
+                t_idx <- intermediate_anova[anova_rownum, ]$term_idx
                 if (suppress_nonsig_coeffs) {
                     # Remove this set of coefficients, i.e. keep all others.
                     # We might keep the intercept for this term also.
@@ -2345,7 +2352,11 @@ miscresults$mk_model_anova_coeffs <- function(
     # -------------------------------------------------------------------------
     # Squish things up to save space?
     # -------------------------------------------------------------------------
+    intermediate_coeffs_before_squish <- NULL
     if (squish_up_level_rows) {
+        if (debug) {
+            intermediate_coeffs_before_squish <- intermediate_coeffs
+        }
         intermediate_coeffs <- (
             intermediate_coeffs
             %>% group_by(term_idx)
@@ -2359,6 +2370,7 @@ miscresults$mk_model_anova_coeffs <- function(
     # -------------------------------------------------------------------------
     # Merge the ANOVA and coefficients tables
     # -------------------------------------------------------------------------
+    # We link on term_idx, subterm_idx.
     intermediate <- (
         dplyr::full_join(
             x = intermediate_anova,
@@ -2409,8 +2421,14 @@ miscresults$mk_model_anova_coeffs <- function(
         print(a)
         cat("\n- Summary of coefficient model:\n")
         print(summary(m2))
+        cat("\n- anova_detail:\n")
+        print(anova_detail)
         cat("\n- intermediate_anova:\n")
         print(intermediate_anova)
+        cat("\n- cf$coeff_detail:\n")
+        print(cf$coeff_detail)
+        cat("\n- intermediate_coeffs_before_squish:\n")
+        print(intermediate_coeffs_before_squish)
         cat("\n- intermediate_coeffs:\n")
         print(intermediate_coeffs)
         cat("\n- intermediate:\n")
@@ -2455,6 +2473,7 @@ miscresults$mk_model_anova_coeffs <- function(
             formatted_level = case_when(
                 is_reference_level ~ coeff_name,
                 is_intercept ~ level_not_applicable,
+                is_linear ~ level_not_applicable,
                 is_subterm ~ miscresults$fmt_level(
                     coeff_name,
                     anova_term_name,
@@ -2462,7 +2481,7 @@ miscresults$mk_model_anova_coeffs <- function(
                     interaction_txt = level_combination_text
                 ),
                 !is.na(coeff) ~ level_not_applicable,
-                .default = ""
+                .default = ""  # includes: not an actual level row
             ),
             coeff_txt = case_when(
                 is_reference_level ~ reference_label,
@@ -3423,7 +3442,6 @@ miscresults$compare_models_via_anova <- function(
             )
         }
         # Combine
-        print(newrow)
         working <- rbind(working, newrow)
     }
     table_markdown <- (
