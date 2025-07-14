@@ -78,6 +78,10 @@
 #       miscresults$markdown_ggtext_to_flextable()
 
 
+# =============================================================================
+# Packages
+# =============================================================================
+
 local({
     tmp_require_package_namespace <- function(...) {
         packages <- as.character(match.call(expand.dots = FALSE)[[2]])

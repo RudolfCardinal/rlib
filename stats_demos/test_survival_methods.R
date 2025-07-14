@@ -3,7 +3,7 @@
 # test_survival_methods.R
 #
 # Exploring different approaches to survival analysis.
-# Rudolf Cardinal, 14 Dec 2023
+# Rudolf Cardinal, 14 Dec 2023 onwards.
 
 
 # =============================================================================
@@ -53,6 +53,7 @@ source(paste0(RLIB_PREFIX, "debugfunc.R"))
 source(paste0(RLIB_PREFIX, "miscmath.R"))
 source(paste0(RLIB_PREFIX, "miscresults.R"))
 source(paste0(RLIB_PREFIX, "miscstat.R"))
+source(paste0(RLIB_PREFIX, "miscsurv.R"))
 
 # Set up flextable defaults before ANY functions using flextable formatting.
 flextable::set_flextable_defaults(
@@ -112,6 +113,16 @@ mksurvplot <- function(
     vlines = 1:4,
     hlines = 0.5 ^ seq(1:4)
 ) {
+    # Make a survival plot.
+    #
+    # Args:
+    #   formula, data
+    #       Formula and data for survminer::surv_fit().
+    #   title, line_alpha, line_colour
+    #       Cosmetics
+    #   vlines, hlines
+    #       Vertical/horizontal lines to add.
+    #
     # Note:
     #   test_formula <- survobject ~ predictors
     #   test_coxph_model <- coxph(test_formula, data = d)
@@ -156,34 +167,6 @@ mksurvplot <- function(
 }
 
 
-mk_survfit_table_group <- function(survfit_object) {
-    sf <- survfit_object  # shorter name internally
-    n_strata <- length(sf$strata)
-    strata_names <- names(sf$strata)
-    strata_lengths <- sf$strata
-    d <- NULL
-    cum_n <- 0
-    for (i in 1:n_strata) {
-        start_idx <- cum_n + 1
-        end_idx <- cum_n + strata_lengths[i]
-        d <- rbind(d, data.table(
-            stratum = strata_names[i],
-            # Order as in ?survfit.object:
-            n = sf$n[i],
-            time = sf$time[start_idx : end_idx],
-            n.risk = sf$n.risk[start_idx : end_idx],
-            n.enter = sf$n.enter[start_idx : end_idx],
-            n.censor = sf$n.censor[start_idx : end_idx],
-            surv = sf$surv[start_idx : end_idx],
-            std.err = sf$std.err[start_idx : end_idx],
-            cumhaz = sf$cumhaz[start_idx : end_idx],
-            upper = sf$upper[start_idx : end_idx],
-            lower = sf$lower[start_idx : end_idx]
-        ))
-        cum_n <- cum_n + strata_lengths[i]
-    }
-    return(d)
-}
 
 
 build_composite_survival_prediction <- function(
@@ -192,14 +175,33 @@ build_composite_survival_prediction <- function(
     alpha = 0.05,
     ...
 ) {
+    # From a GLM model ("model") of survival, e.g.
+    #       glm(
+    #           cbind(n_died, observation_time) ~ 1 + x,
+    #           family = poisreg,
+    #           data = d1
+    #       )
+    # produce predicted survival (with confidence intervals), predicting at
+    # the times in "newtime". The value "alpha" is for a two-tailed confidence
+    # interval.
+    #
+    # The input "..." contains other predictors to crosscombine and use, for
+    # each time point.
+    #
+    # The resulting table has these columns:
+    #   t
+    #   ... other predictors ...
+    #   survival
+    #   survival_lower
+    #   survival_upper
+    #
     # RATIONALE: The glm.Lexis() function works fine but seems a bit risky in
     # terms of predicting things later; I produced duff predictions (not
     # reading [all] input values correctly). An alternative is to use glm()
     # with the "poisreg" family. This expects a dependent variable of the form
     # cbind(numevents, time). But actually it's the Epi::ci.surv() function
-    # that I've not got the hang of; this seems to ignore its inputs.
-    #
-    # How is it operating?
+    # that I've not got the hang of; this seems to ignore its inputs. How is it
+    # operating?
     # - ci.surv() calls ci.cum()
     # - It looks like that takes the first column name as the "time" variable:
     #           tnam <- colnames(ctr.mat)[1]
@@ -217,8 +219,8 @@ build_composite_survival_prediction <- function(
             time_for_prediction,
             Epi::ci.surv(
                 obj = model,
-                  ctr.mat = time_for_prediction,
-                  alpha = alpha
+                ctr.mat = time_for_prediction,
+                alpha = alpha
             )
         )
     } else {
@@ -259,7 +261,7 @@ build_composite_survival_prediction <- function(
 # =============================================================================
 
 print_heading <- function(x) {
-    line <- "===============================================================================\n"
+    line <- paste(c(rep("=", 79), "\n"), collapse = "")
     cat(line, ">>> ", x, "\n", line, sep = "")
 }
 
@@ -289,7 +291,11 @@ manual_check_baseline_beta <- function(label) {
 # =============================================================================
 
 mk_survival_time <- function(hazard_rate, scale = 1) {
-    # Time to event
+    # Generate specimen times to event, one for each value of hazard_rate,
+    # using the relevant hazard rate (scaled by "scale"). This is a STOCHASTIC
+    # function; e.g. try mk_survival_time(rep(1, 100)).
+    #
+    # See
     # - [Austin2012]
     # - [Leemis1987]
     # - [Bender2005] -- particularly this one.
@@ -383,14 +389,17 @@ mk_survival_time <- function(hazard_rate, scale = 1) {
 }
 
 
-mk_censor_time <- function(n) {
-    # Random time of censorship
-    runif(n = n, min = 0, max = MAX_DURATION)
+mk_censor_time <- function(n, max_duration = MAX_DURATION) {
+    # Generate n random times of censorship, in the range [0, max_duration].
+    runif(n = n, min = 0, max = max_duration)
 }
 
 
 add_time_and_event_vars <- function(d, censor = CENSOR) {
-    # Modify the data table based the "hazard" column.
+    # Modify the data table of specimen data based on the "hazard" column,
+    # adding "observation_time" and "died" (and a working variable:
+    # "censor_time", which might be beyond "observation_time" if the subject
+    # dies before censoring).
     d[, survival_time := mk_survival_time(hazard)]  # a.k.a. failure time
     if (censor) {
         # Some artificial right-censoring:
@@ -480,7 +489,7 @@ surv1 <- survival::Surv(
 formula1 <- surv1 ~ x
 survfit1a <- survival::survfit(formula1, data = d1)  # ?survfit.object
 survfit1b <- survminer::surv_fit(formula1, data = d1)
-survfittable1 <- mk_survfit_table_group(survfit1b)
+survfittable1 <- miscsurv$mk_survfit_stratum_table(survfit1b)
 survfittable1[, x := as.integer(str_remove(stratum, "x="))]
 survfittable1[, x_factor := as.factor(x)]
 cph1 <- survival::coxph(formula1, data = d1)
@@ -493,7 +502,7 @@ manual_check_x_multiple("'exp(coef)' for 'x'")
 # -----------------------------------------------------------------------------
 # Analyse via Poisson regression:
 # -----------------------------------------------------------------------------
-
+#
 # Can we extract the baseline hazard?
 # https://stats.stackexchange.com/questions/68737/ says: Cox models estimate
 # hazard ratios *without* having to estimate the baseline hazard function.
@@ -509,7 +518,7 @@ manual_check_x_multiple("'exp(coef)' for 'x'")
 # - https://rviews.rstudio.com/2022/09/06/deep-survival/
 # ... and the second of these captures my intuition of using "time" and "event
 # during that time?", but does it properly.
-
+#
 # So here's how to do it:
 # (a) split time into multiple chunks -- see e.g. popEpi::splitMulti
 # (b) glm using the "poisreg" family
@@ -727,7 +736,7 @@ data_complex <- data.table(
     xlinear = rnorm(n = complex_n, mean = 0.3, sd = 1),
     yboolean = as.logical(rbinom(n = complex_n, size = 1, prob = 0.5)),
     abcfactor = rep(c("A", "B", "C"), each = complex_n_per_group * 2),
-    pqfactor = rep(c("P", "Q"), each = complex_n_per_group, times = 2)
+    pqfactor = rep(c("P", "Q"), each = complex_n_per_group, times = 3)
 )
 data_complex[, hazard := (
     0.3
