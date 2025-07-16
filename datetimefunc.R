@@ -19,6 +19,7 @@ local({
         dplyr,
         ggplot2,
         lubridate,
+        microbenchmark,
         patchwork
     )
     tmp_require_package_library(
@@ -32,6 +33,46 @@ local({
 # =============================================================================
 
 datetimefunc <- new.env()
+
+
+# =============================================================================
+# Speed notes
+# =============================================================================
+
+if (FALSE) {
+    # Speed of sorting two vectors by one of them:
+    # This is a clear win for base_order.
+    # See also https://stackoverflow.com/questions/72090199.
+    v1 <- sample(50)  # random numbers from 1:50
+    v2 <- 1:50
+    microbenchmark::microbenchmark(
+        data_table = {
+            d <- data.table(v1 = v1, v2 = v2)
+            data.table::setkeyv(d, c("v1", "v2"))
+            list(
+                v1 = d$v1,
+                v2 = d$v2
+            )
+        },
+        base_order = {
+            ordering <- order(v1, v2)
+            list(
+                v1 = v1[ordering],
+                v2 = v2[ordering]
+            )
+        },
+        times = 1000
+    )
+
+    # ifelse() is *fractionally* faster than if_else().:
+    v1 <- sample(1:1000);
+    v2 <- sample(1:1000)
+    microbenchmark(
+        ifelse = if_else(v1 > v2, 1, 0),
+        if_else = if_else(v1 > v2, 1, 0),
+        times = 10000
+    )
+}
 
 
 # =============================================================================
@@ -148,17 +189,23 @@ datetimefunc$duration_days <- function(start_date, end_date) {
 #
 #   But we have moved to the "pulsetable" format, so this is less an issue.
 
+# -----------------------------------------------------------------------------
+# Create pulsetable objects
+# -----------------------------------------------------------------------------
 
 datetimefunc$mk_pulsetable_dimensionless <- function(
     event_times,
     event_durations,
-    include_interval_table = FALSE,
-    merge_interval_table = FALSE
+    with_checks = FALSE
 ) {
     # Creates a "pulsetable" object, documenting events for a single subject,
     # with a presumed duration for each. This object can then be queried, e.g.
     # for dates, via query_pulsetable_ever(), query_pulsetable_times(), and
     # query_pulsetable_dates().
+    #
+    # This function DOES NOT MERGE events. But the query functions work
+    # correctly regardless, and mk_intervaltable_from_pulsetable() can produce
+    # a merged representation.
     #
     # This version of the function creates a dimensionless pulsetable object.
     # See also mk_pulsetable_dates().
@@ -171,14 +218,12 @@ datetimefunc$mk_pulsetable_dimensionless <- function(
     #   event_durations
     #       Numeric time that each event is presumed to have endured for.
     #       Either a single number, or a vector as long as event_times.
-    #       Consecutive events can "merge". This is not additive; for example,
-    #       if event duration is 10 and events occur at times 20 and 25, then
-    #       this will be treated as an event starting at time 20 and enduring
-    #       until time 35.
-    #   merge_interval_table
-    #       Merge consecutive contiguous events? Only applicable for the
-    #       interval table. (Pulse calculations are unaffected by such a
-    #       merge.)
+    #       Consecutive events can "merge", functionally. This is not additive;
+    #       for example, if event duration is 10 and events occur at times 20
+    #       and 25, then this will be treated as an event starting at time 20
+    #       and enduring until time 35.
+    #   with_checks
+    #       Validate inputs? Faster not to.
     #
     # Returns a list, with elements:
     #
@@ -186,153 +231,51 @@ datetimefunc$mk_pulsetable_dimensionless <- function(
     #       As for the input (event_times), but sorted.
     #   event_durations
     #       As for the input, but sorted (to match event_times in the output).
-    #   intervals
-    #       If include_interval_table == FALSE, NULL. Otherwise: a data.table,
-    #       containing one time interval per row, collectively covering all
-    #       time from -Inf to +Inf with no gaps. Columns are:
-    #
-    #       t_start
-    #           Numeric time at which each interval starts.
-    #       t_end
-    #           Numeric time at which each interval ends. The interval is
-    #           represented by [start, end), i.e. inclusive start, exclusive
-    #           end.
-    #       event
-    #           Is the event occurring (TRUE) or not (FALSE) during this
-    #           interval?
-    #       duration
-    #           Interval duration.
-    #       event_duration
-    #           Interval duration if the event is occurring, or 0 if it's not.
-    #       cum_event_dur
-    #           Cumulative duration, to the END of the interval, spent "during"
-    #           events.
     #   origin_date
     #       The date from which times are calculated, or NA if this object
-    #       is not using dates.
+    #       is not using dates. (From this function: always
+    #       lubridate::NA_Date_. But included for compatibility with
+    #       mk_pulsetable_dates().)
     #   time_units
-    #       Units of time (e.g. "years" or NA).
+    #       Units of time (e.g. "years" or NA). (From this function: always NA.
+    #       But included for compatibility with mk_pulsetable_dates().)
 
     n_event_times <- length(event_times)
     n_durations <- length(event_durations)
 
     # Argument checks
-    stopifnot(all(is.finite(event_times)))
-    # ... excludes NA values (but 0-length OK)
-    stopifnot(n_durations == 1 || n_durations == n_event_times)
-    stopifnot(all(is.finite(event_durations)))
-    stopifnot(all(event_durations > 0))
+    if (with_checks) {
+        stopifnot(all(is.finite(event_times)))
+        # ... excludes NA values (but 0-length OK)
+        stopifnot(n_durations == 1 || n_durations == n_event_times)
+        stopifnot(all(is.finite(event_durations)))
+        stopifnot(all(event_durations > 0))
+    }
 
     if (n_event_times == 0) {
         # Return a "non-event" result.
-        if (include_interval_table) {
-            intervals <- data.table(
-                t_start = -Inf,
-                t_end = Inf,
-                event = FALSE,
-                duration = Inf,
-                event_duration = 0,
-                cum_event_dur = 0
-            )
-        } else {
-            intervals <- NULL
-        }
         return(list(
-            event_times = event_times,
-            event_durations = event_durations,
-            intervals = intervals,
+            event_times = NULL,  # NULL is equivalent to c()
+            event_durations = NULL,
             origin_date = lubridate::NA_Date_,
             time_units = NA_character_
         ))
     }
     # From here on, we have at least one event.
 
-    # Create a table so that we can sort start times and durations in sync.
-    intervals_occurring <- data.table::data.table(
-        t_start = event_times,
-        src_duration = event_durations
-    )
-    data.table::setkeyv(intervals_occurring, c("t_start", "src_duration"))
-    # Fish out the sorted values, which we'll return.
-    event_times <- intervals_occurring$t_start
-    event_durations <- intervals_occurring$src_duration
-
-    # Create intervals
-    # (a) "Event occurring" intervals
-    if (include_interval_table) {
-        # We know there is at least one event, as above.
-        # If there's only one event, though, we need to do very little.
-        n_events <- length(event_times)
-        if (n_events == 1) {
-            intervals_occurring[, t_end := t_start + src_duration]
-        } else {
-            # More than one event.
-            intervals_occurring[
-                ,
-                t_end := pmin(
-                    # When this event expires:
-                    t_start + src_duration,
-                    # When the next event starts:
-                    c(event_times[2 : n_events], Inf)
-                )
-                # ... up until the expiry of this event, or until the next
-                # event starts
-            ]
-
-            # (b) Merge consecutive contiguous events, if required.
-            #     Only applicable if more than one event.
-            if (merge_interval_table) {
-                # Already sorted by t_start then src_duration, as above.
-                intervals_occurring[
-                    ,
-                    prev_event_ends := c(-Inf, t_end[1 : (n_events - 1)])
-                ]
-                intervals_occurring[
-                    ,
-                    groupnum := cumsum(
-                        ifelse(t_start > prev_event_ends, 1, 0)
-                        # ... 1 if we're starting a new group, 0 otherwise.
-                    )
-                ]
-                intervals_occurring <- intervals_occurring[
-                    ,
-                    .(
-                        t_start = min(t_start),
-                        t_end = max(t_end)
-                    ),
-                    by = groupnum
-                ]
-                intervals_occurring[, groupnum := NULL]
-                intervals_occurring[, prev_event_ends := NULL]
-            }
-        }
-        intervals_occurring[, event := TRUE]
-        intervals_occurring[, src_duration := NULL]
-
-        # (c) Now add in "non-occurring" events: the gaps.
-        #     Any overlapping intervals will be culled later.
-        intervals_not_occurring <- data.table::data.table(
-            t_start = c(-Inf, intervals_occurring$t_end),
-            t_end = c(intervals_occurring$t_start, Inf),
-            event = FALSE
-        )
-
-        # (d) Combine and finish off calculations.
-        intervals <- rbind(intervals_occurring, intervals_not_occurring)
-        intervals[, duration := t_end - t_start]
-        intervals <- intervals[duration > 0]
-        # ... eliminates dummy non-event intervals
-        data.table::setkeyv(intervals, c("t_start", "duration"))
-        intervals[, event_duration := ifelse(event, duration, 0)]
-        # ... don't multiply; duration may be infinite
-        intervals[, cum_event_dur := cumsum(event_duration)]
+    # Return the sorted values.
+    if (n_durations > 1) {
+        ordering <- order(event_times, event_durations)
+        # ... sort by the first, then the second for tiebreaks
+        ordered_durations <- event_durations[ordering]
     } else {
-        intervals <- NULL
+        # Single duration
+        ordering <- order(event_times)
+        ordered_durations <- event_durations
     }
     return(list(
-        event_times = event_times,
-        event_durations = event_durations,
-        intervals = intervals,
+        event_times = event_times[ordering],
+        event_durations = ordered_durations,
         origin_date = lubridate::NA_Date_,
         time_units = NA_character_
     ))
@@ -343,8 +286,7 @@ datetimefunc$mk_pulsetable_dates <- function(
     origin_date,
     event_dates,
     event_durations,
-    time_units = "years",
-    include_interval_table = FALSE
+    time_units = "years"
 ) {
     # As for mk_pulsetable_dimensionless(), which it relies on, but using
     # dates.
@@ -365,19 +307,11 @@ datetimefunc$mk_pulsetable_dates <- function(
     #   time_units
     #       Textual units (e.g. "days", "years") to operate with internally.
     #       As used by the lubridate package.
-    #   include_interval_table
-    #       As for mk_pulsetable_dimensionless().
     #
     # Returns:
     #
-    #   As for mk_pulsetable_dimensionless(). However, if
-    #   include_interval_table == TRUE, the following columns are also added to
-    #   the "intervals" element:
-    #
-    #       t_start_date
-    #           Date version of t_start.
-    #       t_end_date
-    #           Date version of t_end.
+    #   As for mk_pulsetable_dimensionless(), but this version of the
+    #   pulsetable object will carry date "anchoring" information too.
 
     if (!(length(origin_date) == 1
             && lubridate::is.Date(origin_date))) {
@@ -403,24 +337,178 @@ datetimefunc$mk_pulsetable_dates <- function(
         event_durations = (
             event_durations /
             lubridate::duration(1, units = time_units)
-        ),
-        include_interval_table = include_interval_table
+        )
     )
-    if (include_interval_table) {
-        pt$intervals[, t_start_date := as.Date(
-            origin_date + lubridate::duration(t_start, units = time_units)
-        )]
-        pt$intervals[, t_end_date := as.Date(
-            origin_date + lubridate::duration(t_end, units = time_units)
-        )]
-        # A date plus "1 day" gives a date, but a date plus "1 year" gives a
-        # datetime, so we'll force to a date.
-    }
     pt$origin_date <- origin_date
     pt$time_units <- time_units
     return(pt)
 }
 
+
+# -----------------------------------------------------------------------------
+# Make interval tables
+# -----------------------------------------------------------------------------
+
+datetimefunc$mk_intervaltable_from_pulsetable <- function(
+    pt,
+    merge_events = TRUE,
+    include_non_event_intervals = TRUE
+) {
+    # From a "pulsetable" object (see e.g. mk_pulsetable_dimensionless()),
+    # create an "interval table". This is mostly a cosmetic thing, for human
+    # inspection!
+    #
+    # Arguments:
+    #
+    #   merge_events
+    #       Merge consecutive contiguous events?
+    #   include_non_event_intervals
+    #       If FALSE, rows with "event == FALSE" are not included.
+    #
+    # Returns:
+    #   A data.table, usually containing one time interval per row,
+    #   collectively covering all time from -Inf to +Inf with no gaps. Columns
+    #   are:
+    #
+    #       t_start
+    #           Numeric time at which each interval starts.
+    #       t_end
+    #           Numeric time at which each interval ends. The interval is
+    #           represented by [start, end), i.e. inclusive start, exclusive
+    #           end.
+    #       duration
+    #           Interval duration.
+    #       event
+    #           Is the event occurring (TRUE) or not (FALSE) during this
+    #           interval?
+    #       event_duration
+    #           Interval duration if the event is occurring, or 0 if it's not.
+    #       cum_event_dur
+    #           Cumulative duration, to the END of the interval, spent "during"
+    #           events.
+    #       t_start_date (D)
+    #           Only present if the pulsetable object had date information.
+    #           Date corresponding to the start of the interval.
+    #       t_end_date (D)
+    #           Only present if the pulsetable object had date information.
+    #           Date corresponding to the end of the interval.
+
+    n_events <- length(pt$event_times)
+
+    # Deal with "no intervals".
+    if (n_events == 0) {
+        # Return a "non-event" result.
+        if (include_non_event_intervals) {
+            return(data.table(
+                t_start = -Inf,
+                t_end = Inf,
+                event = FALSE,
+                duration = Inf,
+                event_duration = 0,
+                cum_event_dur = 0
+            ))
+        } else {
+            return(NULL)
+        }
+    }
+
+    # Start with start time and duration.
+    intervals <- data.table::data.table(
+        t_start = pt$event_times,
+        src_duration = pt$event_durations
+    )
+    # These are PRE-SORTED by the pulsetable object.
+
+    # Intervals where an event occurred:
+    # - Calculate end times.
+    if (n_events == 1) {
+        # Single event: simple calculation
+        intervals[, t_end := t_start + src_duration]
+        intervals[, src_duration := NULL]
+    } else {
+        # More than one event.
+        intervals[
+            ,
+            t_end := pmin(
+                # When this event expires:
+                t_start + src_duration,
+                # When the next event starts:
+                c(t_start[2 : n_events], Inf)
+            )
+            # ... up until the expiry of this event, or until the next
+            # event starts
+        ]
+
+        # Merge consecutive contiguous events, if required.
+        # (Only applicable if more than one event.)
+        if (merge_events) {
+            # Already sorted by t_start then src_duration, as above.
+            intervals[
+                ,
+                prev_event_ends := c(-Inf, t_end[1 : (n_events - 1)])
+            ]
+            intervals[
+                ,
+                groupnum := cumsum(
+                    ifelse(t_start > prev_event_ends, 1, 0)
+                    # ... 1 if we're starting a new group, 0 otherwise.
+                )
+            ]
+            intervals <- intervals[
+                ,
+                .(
+                    t_start = min(t_start),
+                    t_end = max(t_end)
+                ),
+                by = groupnum
+            ]
+            # ... creates a table with columns groupnum, t_start, t_end (only)
+            intervals[, groupnum := NULL]
+        } else {
+            intervals[, src_duration := NULL]
+        }
+    }
+    intervals[, event := TRUE]
+
+    if (include_non_event_intervals) {
+        # Add in "non-occurring" events: the gaps.
+        # Any zero-length intervals will be culled later.
+        intervals_not_occurring <- data.table::data.table(
+            t_start = c(-Inf, intervals$t_end),
+            t_end = c(intervals$t_start, Inf),
+            event = FALSE
+        )
+        intervals <- rbind(intervals, intervals_not_occurring)
+    }
+
+    # Finish off calculations.
+    intervals[, duration := t_end - t_start]
+    # Eliminate any dummy non-event intervals:
+    intervals <- intervals[duration > 0]
+    data.table::setkeyv(intervals, c("t_start", "duration"))
+    intervals[, event_duration := ifelse(event, duration, 0)]
+    # ... don't multiply; duration may be infinite
+    intervals[, cum_event_dur := cumsum(event_duration)]
+
+    # Add dates?
+    if (!is.na(pt$origin_date)) {
+        intervals[, t_start_date := as.Date(
+            pt$origin_date + lubridate::duration(t_start, units = pt$time_units)
+        )]
+        intervals[, t_end_date := as.Date(
+            pt$origin_date + lubridate::duration(t_end, units = pt$time_units)
+        )]
+        # A date plus "1 day" gives a date, but a date plus "1 year" gives a
+        # datetime, so we'll force to a date.
+    }
+
+    return(intervals)
+}
+
+
+# -----------------------------------------------------------------------------
+# Query pulsetable objects
+# -----------------------------------------------------------------------------
 
 datetimefunc$query_pulsetable_ever <- function(pt) {
     # Queries a pulsetable in a very basic way: "Did the event ever occur?"
@@ -431,14 +519,14 @@ datetimefunc$query_pulsetable_ever <- function(pt) {
 }
 
 
-datetimefunc$query_pulsetable_times <- function(pulsetable, query_times) {
+datetimefunc$query_pulsetable_times_v1 <- function(pulsetable, query_times) {
     # Query a pulse table (see above -- relating to a single subject) at
     # various times (in the dimensionless time units used within the
     # pulsetable).
     #
-    # This version operates in parallel and is sufficiently fast. It uses only
-    # the very plain data from mk_pulsetable_dimensionless(), i.e. the
-    # event_times and event_durations; it doesn't use the interval table.
+    # This version is vectorized and is sufficiently fast. It uses only the
+    # very plain data from mk_pulsetable_dimensionless(), i.e. the event_times
+    # and event_durations; it doesn't use the interval table.
     #
     # Arguments:
     #
@@ -614,20 +702,13 @@ datetimefunc$query_pulsetable_times <- function(pulsetable, query_times) {
 }
 
 
-datetimefunc$query_pulsetable_times_slow <- function(pulsetable, query_times) {
-    # See query_pulsetable_times() above. This version is TOO SLOW: e.g. 19.3
-    # seconds for 1000 interations with p1/p1_test_times in the test function.
-    # It uses the interval table.
+datetimefunc$query_pulsetable_times_v2 <- function(pulsetable, query_times) {
+    # See query_pulsetable_times() above. This version is not vectorized and is
+    # TOO SLOW: e.g. 19.3 seconds for 1000 interations with p1/p1_test_times in
+    # the test function. It uses the interval table.
 
     stopifnot(all(is.numeric(query_times)))  # also fails for empty input
-    intervals <- pulsetable$intervals
-    if (is.null(intervals)) {
-        stop(paste0(
-            "Must use create_interval_table = TRUE argument to ",
-            "mk_pulsetable_dimensionless() or mk_pulsetable_dates() to use ",
-            "this version of the function."
-        ))
-    }
+    intervals <- datetimefunc$mk_intervaltable_from_pulsetable(pulsetable)
     ever <- any(intervals$event)
     last_exposure <- ifelse(
         ever,
@@ -726,10 +807,14 @@ datetimefunc$query_pulsetable_times_slow <- function(pulsetable, query_times) {
 }
 
 
+# Pick the fastest:
+datetimefunc$query_pulsetable_times <- datetimefunc$query_pulsetable_times_v1
+
+
 datetimefunc$query_pulsetable_dates <- function(
     pulsetable,
     query_dates,
-    use_slow = FALSE
+    query_pulsetable_fn = datetimefunc$query_pulsetable_times
 ) {
     # Query a pulsetable using dates (not dimensionless times).
     #
@@ -740,9 +825,9 @@ datetimefunc$query_pulsetable_dates <- function(
     #   query_dates
     #       The dates to produce results for, analogous to query_times for
     #       query_pulsetable_times().
-    #   use_slow
-    #       Use a slow method (for cross-checking). Should NOT be true for
-    #       production code.
+    #   query_pulsetable_fn
+    #       The underlying function to use. Defaults to the fastest we have.
+    #       Only varied for cross-checking during testing.
     #
     # Returns:
     #   As for query_pulsetable_times(), but now the column "t" is a date
@@ -764,22 +849,56 @@ datetimefunc$query_pulsetable_dates <- function(
         end_date = query_dates,
         units = pulsetable$time_units
     )
-    if (use_slow) {
-        q <- datetimefunc$query_pulsetable_times_slow(
-            pulsetable = pulsetable,
-            query_times = query_times
-        )
-    } else {
-        q <- datetimefunc$query_pulsetable_times(
-            pulsetable = pulsetable,
-            query_times = query_times
-        )
-    }
+    q <- query_pulsetable_fn(
+        pulsetable = pulsetable,
+        query_times = query_times
+    )
     q[, t_raw := t]
     q[, t := query_dates]
     return(q)
 }
 
+
+# -----------------------------------------------------------------------------
+# Test pulsetable functions
+# -----------------------------------------------------------------------------
+
+datetimefunc$ensure_two_tables_equal <- function(x, y) {
+    # - use all.equal(), not identical(); the latter reports differences that
+    #   are due to infinitesimal floating-point differences; the first doesn't
+    #   care (appropriately).
+    # - if discrepancy: print(q1a == q1b), then fix bug!
+    #
+    # HOWEVER, sometimes this fails:
+    #   stopifnot(isTRUE(all.equal(e2a$end, e2c$end)))
+    # ... This doesn't work: you get
+    #   [1] "Attributes: < Names: 2 string mismatches >"                               "Attributes: < Length mismatch: comparison on first 2 components >"
+    #   [3] "Attributes: < Component 1: Modes: character, externalptr >"               "Attributes: < Component 1: Lengths: 3, 1 >"
+    #   [5] "Attributes: < Component 1: target is character, current is externalptr >" "Attributes: < Component 2: Modes: numeric, character >"
+    #   [7] "Attributes: < Component 2: Lengths: 8, 3 >"                               "Attributes: < Component 2: target is numeric, current is character >"
+    # Yet this is fine:
+    #   stopifnot(isTRUE(all.equal(e2a$start, e2c$start)))
+    #   stopifnot(isTRUE(all.equal(e2a$end, e2c$end)))
+
+    xlab <- deparse(substitute(x))
+    ylab <- deparse(substitute(y))
+    xcols <- sort(colnames(x))
+    ycols <- sort(colnames(y))
+    if (!identical(xcols, ycols)) {
+        cat("Sorted columns  for ", xlab, ":\n", sep = "")
+        print(xcols)
+        cat("Sorted columns  for ", ylab, ":\n", sep = "")
+        print(ycols)
+        stop(paste0(xlab, " and ", ylab, " have different column names"))
+    }
+    for (colname in xcols) {
+        if (!isTRUE(all.equal(x[[colname]], y[[colname]]))) {
+            print(x == y)
+            stop(paste0(xlab, " and ", ylab, " differ in column ", colname))
+        }
+    }
+    cat(paste0(xlab, " and ", ylab, " are functionally identical\n"))
+}
 
 datetimefunc$test_pulsetable <- function(verbose = TRUE) {
     # Create and query pulsetable objects.
@@ -794,12 +913,13 @@ datetimefunc$test_pulsetable <- function(verbose = TRUE) {
 
     p1a <- datetimefunc$mk_pulsetable_dimensionless(
         event_times = c(5, 20, 100, 105, 150, 200),
-        event_durations = 10,
-        include_interval_table = TRUE
+        event_durations = 10
     )
+    p1ai <- datetimefunc$mk_intervaltable_from_pulsetable(p1a)
     if (verbose) {
         mktitle("p1")
         print(p1a)
+        print(p1ai)
     }
 
     # Very basic query:
@@ -811,27 +931,22 @@ datetimefunc$test_pulsetable <- function(verbose = TRUE) {
 
     p1b <- datetimefunc$mk_pulsetable_dimensionless(
         event_times = c(5, 20, 100, 105, 150, 200),
-        event_durations = 10,
-        include_interval_table = FALSE
-    )  # same as p1a but without the interval table
+        event_durations = 10
+    )  # same as p1a
     q1b_ever <- datetimefunc$query_pulsetable_ever(p1b)
     stopifnot(identical(q1a_ever, q1b_ever))
 
     # Times, two ways:
     p1_test_times <- c(0, 5, 7, 17, 50, 103, 115, 500)
-    q1a <- datetimefunc$query_pulsetable_times(p1a, p1_test_times)
-    q1b <- datetimefunc$query_pulsetable_times_slow(p1a, p1_test_times)
+    q1a <- datetimefunc$query_pulsetable_times_v1(p1a, p1_test_times)
+    q1b <- datetimefunc$query_pulsetable_times_v2(p1a, p1_test_times)
     if (verbose) {
         mktitle("q1a")
         print(q1a)
         mktitle("q1b")
         print(q1b)
     }
-    stopifnot(isTRUE(all.equal(q1a, q1b)))
-    # - use all.equal(), not identical(); the latter reports differences that
-    #   are due to infinitesimal floating-point differences; the first doesn't
-    #   care (appropriately).
-    # - if discrepancy: print(q1a == q1b), then fix bug!
+    datetimefunc$ensure_two_tables_equal(q1a, q1b)
 
     # Speed test
     n_tests <- 1000
@@ -877,12 +992,13 @@ datetimefunc$test_pulsetable <- function(verbose = TRUE) {
             "1910-01-01", "1915-01-01", "1915-06-01", "1940-01-01"
         )),
         event_durations = lubridate::duration(300, units = "days"),
-        time_units = p2_time_units,
-        include_interval_table = TRUE
+        time_units = p2_time_units
     )
+    p2i <- datetimefunc$mk_intervaltable_from_pulsetable(p2)
     if (verbose) {
         mktitle("p2")
         print(p2)
+        print(p2i)
     }
 
     # Dates, two ways:
@@ -891,12 +1007,13 @@ datetimefunc$test_pulsetable <- function(verbose = TRUE) {
     ))
     q2a <- datetimefunc$query_pulsetable_dates(
         pulsetable = p2,
-        query_dates = p2_query_dates
+        query_dates = p2_query_dates,
+        query_pulsetable_fn = datetimefunc$query_pulsetable_times_v1
     )
     q2b <- datetimefunc$query_pulsetable_dates(
         pulsetable = p2,
         query_dates = p2_query_dates,
-        use_slow = TRUE
+        query_pulsetable_fn = datetimefunc$query_pulsetable_times_v2
     )
     if (verbose) {
         mktitle("q2a")
@@ -904,7 +1021,7 @@ datetimefunc$test_pulsetable <- function(verbose = TRUE) {
         mktitle("q2b")
         print(q2b)
     }
-    stopifnot(isTRUE(all.equal(q2a, q2b)))
+    datetimefunc$ensure_two_tables_equal(q2a, q2b)
 
     # -------------------------------------------------------------------------
     # 3
@@ -913,23 +1030,24 @@ datetimefunc$test_pulsetable <- function(verbose = TRUE) {
     # An empty one:
     p3 <- datetimefunc$mk_pulsetable_dimensionless(
         event_times = c(),
-        event_durations = 10,
-        include_interval_table = TRUE
+        event_durations = 10
     )
+    p3i <- datetimefunc$mk_intervaltable_from_pulsetable(p3)
     if (verbose) {
         mktitle("p3")
         print(p3)
+        print(p3i)
     }
     # Empty ones:
-    q3a <- datetimefunc$query_pulsetable_times(p3, p1_test_times)
-    q3b <- datetimefunc$query_pulsetable_times_slow(p3, p1_test_times)
+    q3a <- datetimefunc$query_pulsetable_times_v1(p3, p1_test_times)
+    q3b <- datetimefunc$query_pulsetable_times_v2(p3, p1_test_times)
     if (verbose) {
         mktitle("q3a")
         print(q3a)
         mktitle("q3b")
         print(q3b)
     }
-    stopifnot(isTRUE(all.equal(q3a, q3b)))
+    datetimefunc$ensure_two_tables_equal(q3a, q3b)
 
     # -------------------------------------------------------------------------
     # 4
@@ -940,24 +1058,31 @@ datetimefunc$test_pulsetable <- function(verbose = TRUE) {
         origin_date = p2_origin_date,
         event_dates = c(),
         event_durations = lubridate::duration(300, units = "days"),
-        time_units = p2_time_units,
-        include_interval_table = TRUE
+        time_units = p2_time_units
     )
+    p4i <- datetimefunc$mk_intervaltable_from_pulsetable(p4)
     if (verbose) {
         mktitle("p4")
         print(p4)
+        print(p4i)
     }
     # Empty ones:
-    q4a <- datetimefunc$query_pulsetable_dates(p4, p2_query_dates)
-    q4b <- datetimefunc$query_pulsetable_dates(p4, p2_query_dates,
-                                               use_slow = TRUE)
+    q4a <- datetimefunc$query_pulsetable_dates(
+        p4,
+        p2_query_dates
+    )
+    q4b <- datetimefunc$query_pulsetable_dates(
+        p4,
+        p2_query_dates,
+        query_pulsetable_fn = datetimefunc$query_pulsetable_times_v2
+    )
     if (verbose) {
         mktitle("q4a")
         print(q4a)
         mktitle("q4b")
         print(q4b)
     }
-    stopifnot(isTRUE(all.equal(q4a, q4b)))
+    datetimefunc$ensure_two_tables_equal(q4a, q4b)
 
     # -------------------------------------------------------------------------
     # 5
@@ -966,23 +1091,24 @@ datetimefunc$test_pulsetable <- function(verbose = TRUE) {
     # A single-event one:
     p5 <- datetimefunc$mk_pulsetable_dimensionless(
         event_times = c(7),
-        event_durations = 10,
-        include_interval_table = TRUE
+        event_durations = 10
     )
+    p5i <- datetimefunc$mk_intervaltable_from_pulsetable(p5)
     if (verbose) {
         mktitle("p5")
         print(p5)
+        print(p5i)
     }
     # Single-event ones:
-    q5a <- datetimefunc$query_pulsetable_times(p5, p1_test_times)
-    q5b <- datetimefunc$query_pulsetable_times_slow(p5, p1_test_times)
+    q5a <- datetimefunc$query_pulsetable_times_v1(p5, p1_test_times)
+    q5b <- datetimefunc$query_pulsetable_times_v2(p5, p1_test_times)
     if (verbose) {
         mktitle("q5a")
         print(q5a)
         mktitle("q5b")
         print(q5b)
     }
-    stopifnot(isTRUE(all.equal(q5a, q5b)))
+    datetimefunc$ensure_two_tables_equal(q5a, q5b)
 
     # -------------------------------------------------------------------------
     # 6
@@ -991,23 +1117,24 @@ datetimefunc$test_pulsetable <- function(verbose = TRUE) {
     # Multiple event durations:
     p6 <- datetimefunc$mk_pulsetable_dimensionless(
         event_times =     c(5,  20, 100, 105, 150, 200),
-        event_durations = c(10, 20,  30,  30,  20,  20),
+        event_durations = c(10, 20,  30,  30,  20,  20)
         # checked: it fails with e.g. length 2
-        include_interval_table = TRUE
     )
+    p6i <- datetimefunc$mk_intervaltable_from_pulsetable(p6)
     if (verbose) {
         mktitle("p6")
         print(p6)
+        print(p6i)
     }
-    q6a <- datetimefunc$query_pulsetable_times(p6, p1_test_times)
-    q6b <- datetimefunc$query_pulsetable_times_slow(p6, p1_test_times)
+    q6a <- datetimefunc$query_pulsetable_times_v1(p6, p1_test_times)
+    q6b <- datetimefunc$query_pulsetable_times_v2(p6, p1_test_times)
     if (verbose) {
         mktitle("q6a")
         print(q6a)
         mktitle("q6b")
         print(q6b)
     }
-    stopifnot(isTRUE(all.equal(q6a, q6b)))
+    datetimefunc$ensure_two_tables_equal(q6a, q6b)
 
     # -------------------------------------------------------------------------
     # 7
@@ -1022,18 +1149,19 @@ datetimefunc$test_pulsetable <- function(verbose = TRUE) {
     p7 <- datetimefunc$mk_pulsetable_dimensionless(
         # as for p6 but with two flipped
         event_times = p7data$event_times,
-        event_durations = p7data$event_durations,
-        include_interval_table = TRUE
+        event_durations = p7data$event_durations
     )
+    p7i <- datetimefunc$mk_intervaltable_from_pulsetable(p7)
     if (verbose) {
         mktitle("p7")
         print(p7)
+        print(p7i)
     }
-    q7a <- datetimefunc$query_pulsetable_times(p7, p1_test_times)
-    q7b <- datetimefunc$query_pulsetable_times_slow(p7, p1_test_times)
+    q7a <- datetimefunc$query_pulsetable_times_v1(p7, p1_test_times)
+    q7b <- datetimefunc$query_pulsetable_times_v2(p7, p1_test_times)
     stopifnot(isTRUE(all.equal(p7$event_times, p7data_sorted$event_times)))
     stopifnot(isTRUE(all.equal(p7$event_durations, p7data_sorted$event_durations)))
-    stopifnot(isTRUE(all.equal(q7a, q7b)))
+    datetimefunc$ensure_two_tables_equal(q7a, q7b)
 }
 
 
@@ -1124,10 +1252,15 @@ datetimefunc$test_pulsecalcs <- function() {
 # Event concatenation
 # =============================================================================
 
-datetimefunc$merge_events_dimensionless <- function(
+# -----------------------------------------------------------------------------
+# Merge events: dimensionless
+# -----------------------------------------------------------------------------
+
+datetimefunc$merge_events_dimensionless_v1 <- function(
     event_times,
     event_ends,
-    max_permitted_gap = 0
+    max_permitted_gap = 0,
+    with_checks = FALSE
 ) {
     # For a series of events, defined by their start/end times, merge
     # contiguous or overlapping events.
@@ -1142,21 +1275,21 @@ datetimefunc$merge_events_dimensionless <- function(
     #       and still consider it one episode. (Typical use: a referral ends on
     #       Tuesday, the next starts on Wednesday to a different team, and we
     #       want to consider that one episode of care.)
+    #   with_checks
+    #       Validate inputs? Faster not to.
     #
     # Returns:
     #       A tibble with columns "start" and "end" representing contiguous,
     #       amalgamated, sorted episodes.
-    #
-    # As for merge_events_dimensionless_slow(), but using a different method.
-    # It turns out this one is faster (perhaps surprisingly), by a factor of
-    # about 4.
 
     n_events <- length(event_times)
-    stopifnot(all(is.finite(event_times)))  # excludes NAs (but 0-length OK)
-    stopifnot(length(event_ends) == n_events)
-    stopifnot(all(is.finite(event_ends)))
-    stopifnot(all(event_times <= event_ends))
-    stopifnot(max_permitted_gap >= 0)
+    if (with_checks) {
+        stopifnot(all(is.finite(event_times)))  # excludes NAs (but 0-length OK)
+        stopifnot(length(event_ends) == n_events)
+        stopifnot(all(is.finite(event_ends)))
+        stopifnot(all(event_times <= event_ends))
+        stopifnot(max_permitted_gap >= 0)
+    }
     if (n_events == 0) {
         return(tibble(
             start = numeric(),
@@ -1173,7 +1306,7 @@ datetimefunc$merge_events_dimensionless <- function(
     accumulated_ends <- NULL
     current_start <- NA
     current_end <- NA
-    for (i in 1:n) {
+    for (i in 1:n) {  # iterate through events
         s <- d$start[i]
         e <- d$end[i]
         if (is.na(current_start)) {
@@ -1216,21 +1349,24 @@ datetimefunc$merge_events_dimensionless <- function(
 }
 
 
-datetimefunc$merge_events_dimensionless_slow <- function(
+datetimefunc$merge_events_dimensionless_v2 <- function(
     event_times,
     event_ends,
-    max_permitted_gap = 0
+    max_permitted_gap = 0,
+    with_checks = FALSE
 ) {
     # As for merge_events_dimensionless(), but via a different method. It turns
     # out this is the SLOWER of two methods; see merge_events_dimensionless().
     # Arguments are as before.
 
     n_events <- length(event_times)
-    stopifnot(all(is.finite(event_times)))  # excludes NAs (but 0-length OK)
-    stopifnot(length(event_ends) == n_events)
-    stopifnot(all(is.finite(event_ends)))
-    stopifnot(all(event_times <= event_ends))
-    stopifnot(max_permitted_gap >= 0)
+    if (with_checks) {
+        stopifnot(all(is.finite(event_times)))  # excludes NAs (but 0-length OK)
+        stopifnot(length(event_ends) == n_events)
+        stopifnot(all(is.finite(event_ends)))
+        stopifnot(all(event_times <= event_ends))
+        stopifnot(max_permitted_gap >= 0)
+    }
     if (n_events == 0) {
         return(tibble(
             start = numeric(),
@@ -1267,11 +1403,62 @@ datetimefunc$merge_events_dimensionless_slow <- function(
 }
 
 
+datetimefunc$merge_events_dimensionless_v3 <- function(
+    event_times,
+    event_ends,
+    max_permitted_gap = 0,
+    with_checks = FALSE
+) {
+    # Currently the fastest version of this function.
+
+    n_events <- length(event_times)
+    if (with_checks) {
+        stopifnot(all(is.finite(event_times)))  # excludes NAs (but 0-length OK)
+        stopifnot(length(event_ends) == n_events)
+        stopifnot(all(is.finite(event_ends)))
+        stopifnot(all(event_times <= event_ends))
+        stopifnot(max_permitted_gap >= 0)
+    }
+    if (n_events == 0) {
+        return(tibble(start = numeric(), end = numeric()))
+    }
+
+    ordering <- order(event_times, event_ends)
+    start <- event_times[ordering]
+    end <- event_ends[ordering]
+
+    if (n_events >= 2) {
+        prev_event_ends <- c(-Inf, end[1 : (n_events - 1)])
+    } else {
+        prev_event_ends <- -Inf
+    }
+
+    prev_event_ends_with_gap <- prev_event_ends + max_permitted_gap
+
+    new_group <- ifelse(start > prev_event_ends_with_gap, 1, 0)
+    episodes <- data.table(
+        start = start,
+        end = end,
+        groupnum = cumsum(new_group)
+    )[, .(start = min(start), end = max(end)), by = .(groupnum)]
+    episodes[, groupnum := NULL]
+    return(as_tibble(episodes))
+}
+
+
+# The fastest:
+datetimefunc$merge_events_dimensionless <- datetimefunc$merge_events_dimensionless_v3
+
+
+# -----------------------------------------------------------------------------
+# Merge events: dates
+# -----------------------------------------------------------------------------
+
 datetimefunc$merge_events_dates <- function(
     event_times,
     event_ends,
     max_permitted_gap = lubridate::days(0),
-    use_slow = FALSE
+    merge_event_fn = datetimefunc$merge_events_dimensionless
 ) {
     # As for merge_events_dimensionless(), but using dates.
 
@@ -1286,19 +1473,11 @@ datetimefunc$merge_events_dates <- function(
     event_times <- as.numeric(as.Date(event_times))  # days
     event_ends <- as.numeric(as.Date(event_ends))  # days
     max_permitted_gap <- lubridate::time_length(max_permitted_gap, unit = "days")
-    if (use_slow) {
-        episodes_dimensionless <- datetimefunc$merge_events_dimensionless_slow(
-            event_times = event_times,
-            event_ends = event_ends,
-            max_permitted_gap = max_permitted_gap
-        )
-    } else {
-        episodes_dimensionless <- datetimefunc$merge_events_dimensionless(
-            event_times = event_times,
-            event_ends = event_ends,
-            max_permitted_gap = max_permitted_gap
-        )
-    }
+    episodes_dimensionless <- merge_event_fn(
+        event_times = event_times,
+        event_ends = event_ends,
+        max_permitted_gap = max_permitted_gap
+    )
     return (
         episodes_dimensionless
         %>% mutate(
@@ -1308,6 +1487,10 @@ datetimefunc$merge_events_dates <- function(
     )
 }
 
+
+# -----------------------------------------------------------------------------
+# Merge events: testing
+# -----------------------------------------------------------------------------
 
 datetimefunc$test_merge_events <- function(verbose = TRUE) {
     line <- paste(rep("=", 79), collapse = "")
@@ -1323,12 +1506,17 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
     e1_ends <-   c(7, 30, 105, 149, 170, 210, 260, 290, 310, 350, 410)
     e1_maxgap <- 1
 
-    e1a <- datetimefunc$merge_events_dimensionless(
+    e1a <- datetimefunc$merge_events_dimensionless_v1(
         event_times = e1_starts,
         event_ends = e1_ends,
         max_permitted_gap = e1_maxgap
     )
-    e1b <- datetimefunc$merge_events_dimensionless_slow(
+    e1b <- datetimefunc$merge_events_dimensionless_v2(
+        event_times = e1_starts,
+        event_ends = e1_ends,
+        max_permitted_gap = e1_maxgap
+    )
+    e1c <- datetimefunc$merge_events_dimensionless_v2(
         event_times = e1_starts,
         event_ends = e1_ends,
         max_permitted_gap = e1_maxgap
@@ -1345,46 +1533,57 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
         print(e1a)
         cat("e1b:\n")
         print(e1b)
+        cat("e1b:\n")
+        print(e1c)
     }
-    stopifnot(isTRUE(all.equal(e1a, e1b)))
+    datetimefunc$ensure_two_tables_equal(e1a, e1b)
+    datetimefunc$ensure_two_tables_equal(e1a, e1c)
 
     # Speed test
-    n_tests <- 1000
-    mktitle("Speed test, merge_events_dimensionless/..._slow")
-    tmp_start <- Sys.time()
-    for (i in 1:n_tests) {
-        dummy <- datetimefunc$merge_events_dimensionless(
-            event_times = e1_starts,
-            event_ends = e1_ends,
-            max_permitted_gap = e1_maxgap
-        )
-    }
-    tmp_end <- Sys.time()
-    cat("- FAST: ", n_tests, " iterations took:\n", sep = "")
-    print(tmp_end - tmp_start)
-    tmp_start <- Sys.time()
-    for (i in 1:n_tests) {
-        dummy <- datetimefunc$merge_events_dimensionless_slow(
-            event_times = e1_starts,
-            event_ends = e1_ends,
-            max_permitted_gap = e1_maxgap
-        )
-    }
-    tmp_end <- Sys.time()
-    cat("- SLOW: ", n_tests, " iterations took:\n", sep = "")
-    print(tmp_end - tmp_start)
+    mktitle("Speed test")
+    bmk <- microbenchmark::microbenchmark(
+        merge_events_dimensionless_v1 = {
+            datetimefunc$merge_events_dimensionless_v1(
+                event_times = e1_starts,
+                event_ends = e1_ends,
+                max_permitted_gap = e1_maxgap
+            )
+        },
+        merge_events_dimensionless_v2 = {
+            datetimefunc$merge_events_dimensionless_v2(
+                event_times = e1_starts,
+                event_ends = e1_ends,
+                max_permitted_gap = e1_maxgap
+            )
+        },
+        merge_events_dimensionless_v3 = {
+            datetimefunc$merge_events_dimensionless_v3(
+                event_times = e1_starts,
+                event_ends = e1_ends,
+                max_permitted_gap = e1_maxgap
+            )
+        },
+        times = 1000
+    )
+    print(bmk)
+    plot(bmk)
 
     # -------------------------------------------------------------------------
     # 2: dimensionless, no gap
     # -------------------------------------------------------------------------
 
     e2_maxgap <- 0
-    e2a <- datetimefunc$merge_events_dimensionless(
+    e2a <- datetimefunc$merge_events_dimensionless_v1(
         event_times = e1_starts,
         event_ends = e1_ends,
         max_permitted_gap = e2_maxgap
     )
-    e2b <- datetimefunc$merge_events_dimensionless_slow(
+    e2b <- datetimefunc$merge_events_dimensionless_v2(
+        event_times = e1_starts,
+        event_ends = e1_ends,
+        max_permitted_gap = e2_maxgap
+    )
+    e2c <- datetimefunc$merge_events_dimensionless_v3(
         event_times = e1_starts,
         event_ends = e1_ends,
         max_permitted_gap = e2_maxgap
@@ -1397,8 +1596,11 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
         print(e2a)
         cat("e2b:\n")
         print(e2b)
+        cat("e2c:\n")
+        print(e2c)
     }
-    stopifnot(isTRUE(all.equal(e2a, e2b)))
+    datetimefunc$ensure_two_tables_equal(e2a, e2b)
+    datetimefunc$ensure_two_tables_equal(e2a, e2c)
 
     # -------------------------------------------------------------------------
     # 3: dates, small gap
@@ -1423,7 +1625,7 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
         event_times = e3_starts,
         event_ends = e3_ends,
         max_permitted_gap = e3_maxgap,
-        use_slow = TRUE
+        merge_event_fn = datetimefunc$merge_events_dimensionless_v2
     )
     if (verbose) {
         mktitle("e3")
@@ -1438,7 +1640,7 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
         cat("e3b:\n")
         print(e3b)
     }
-    stopifnot(isTRUE(all.equal(e3a, e3b)))
+    datetimefunc$ensure_two_tables_equal(e3a, e3b)
 
     # -------------------------------------------------------------------------
     # 4: dates, no gap
@@ -1455,7 +1657,7 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
         event_times = e3_starts,
         event_ends = e3_ends,
         max_permitted_gap = e4_maxgap,
-        use_slow = TRUE
+        merge_event_fn = datetimefunc$merge_events_dimensionless_v2
     )
     if (verbose) {
         mktitle("e4")
@@ -1466,18 +1668,23 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
         cat("e4b:\n")
         print(e4b)
     }
-    stopifnot(isTRUE(all.equal(e4a, e4b)))
+    datetimefunc$ensure_two_tables_equal(e4a, e4b)
 
     # -------------------------------------------------------------------------
     # 5: dimensionless, empty
     # -------------------------------------------------------------------------
 
-    e5a <- datetimefunc$merge_events_dimensionless(
+    e5a <- datetimefunc$merge_events_dimensionless_v1(
         event_times = c(),
         event_ends = c(),
         max_permitted_gap = 0
     )
-    e5b <- datetimefunc$merge_events_dimensionless_slow(
+    e5b <- datetimefunc$merge_events_dimensionless_v2(
+        event_times = c(),
+        event_ends = c(),
+        max_permitted_gap = 0
+    )
+    e5c <- datetimefunc$merge_events_dimensionless_v3(
         event_times = c(),
         event_ends = c(),
         max_permitted_gap = 0
@@ -1488,8 +1695,11 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
         print(e5a)
         cat("e5b:\n")
         print(e5b)
+        cat("e5c:\n")
+        print(e5c)
     }
-    stopifnot(isTRUE(all.equal(e5a, e5b)))
+    datetimefunc$ensure_two_tables_equal(e5a, e5b)
+    datetimefunc$ensure_two_tables_equal(e5a, e5c)
 
     # -------------------------------------------------------------------------
     # 6: dates, empty
@@ -1504,7 +1714,7 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
         event_times = c(),
         event_ends = c(),
         max_permitted_gap = 0,
-        use_slow = TRUE
+        merge_event_fn = datetimefunc$merge_events_dimensionless_v2
     )
     if (verbose) {
         mktitle("e6")
@@ -1513,7 +1723,7 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
         cat("e6b:\n")
         print(e6b)
     }
-    stopifnot(isTRUE(all.equal(e6a, e6b)))
+    datetimefunc$ensure_two_tables_equal(e6a, e6b)
 
     # -------------------------------------------------------------------------
     # 7: dimensionless, single row
@@ -1522,12 +1732,17 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
     e7_starts <- 100
     e7_ends <- 120
     e7_maxgap <- 0
-    e7a <- datetimefunc$merge_events_dimensionless(
+    e7a <- datetimefunc$merge_events_dimensionless_v1(
         event_times = e7_starts,
         event_ends = e7_ends,
         max_permitted_gap = e7_maxgap
     )
-    e7b <- datetimefunc$merge_events_dimensionless_slow(
+    e7b <- datetimefunc$merge_events_dimensionless_v2(
+        event_times = e7_starts,
+        event_ends = e7_ends,
+        max_permitted_gap = e7_maxgap
+    )
+    e7c <- datetimefunc$merge_events_dimensionless_v3(
         event_times = e7_starts,
         event_ends = e7_ends,
         max_permitted_gap = e7_maxgap
@@ -1538,8 +1753,11 @@ datetimefunc$test_merge_events <- function(verbose = TRUE) {
         print(e7a)
         cat("e7b:\n")
         print(e7b)
+        cat("e7b:\n")
+        print(e7c)
     }
-    stopifnot(isTRUE(all.equal(e7a, e7b)))
+    datetimefunc$ensure_two_tables_equal(e7a, e7b)
+    datetimefunc$ensure_two_tables_equal(e7a, e7c)
 }
 
 
