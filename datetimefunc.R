@@ -892,13 +892,37 @@ datetimefunc$ensure_two_tables_equal <- function(x, y) {
         stop(paste0(xlab, " and ", ylab, " have different column names"))
     }
     for (colname in xcols) {
-        if (!isTRUE(all.equal(x[[colname]], y[[colname]]))) {
-            print(x == y)
+        xvals <- x[[colname]]
+        yvals <- y[[colname]]
+        if (!isTRUE(all.equal(xvals, yvals))) {
+            cat("\nx$", colname, ":\n", sep = "")
+            print(xvals)
+            cat("\ny$", colname, ":\n", sep = "")
+            print(yvals)
+            cat("\nx$", colname, " == y$", colname, ":\n", sep = "")
+            print(xvals == yvals)
             stop(paste0(xlab, " and ", ylab, " differ in column ", colname))
         }
     }
     cat(paste0(xlab, " and ", ylab, " are functionally identical\n"))
+    return()
 }
+
+
+if (FALSE) {
+    # Testing datetimefunc$ensure_two_tables_equal().
+    t1 <- tibble(a = 1:5, b = 2:6)
+    t2 <- t1
+    datetimefunc$ensure_two_tables_equal(t1, t2)  # passed (correct)
+
+    t3 <- t1 + 1
+    datetimefunc$ensure_two_tables_equal(t1, t3)  # fails (correct)
+
+    t4 <- t1
+    t4$third <- 1:5
+    datetimefunc$ensure_two_tables_equal(t1, t4)  # fails (correct)
+}
+
 
 datetimefunc$test_pulsetable <- function(verbose = TRUE) {
     # Create and query pulsetable objects.
