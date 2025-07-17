@@ -128,7 +128,8 @@ miscsurv$mk_piecewise_survival_table <- function(
     latch_on_predictor_cols = NULL,
     latch_suffix_hx = "_hx",
     latch_suffix_cumtime = "_cumtime",
-    time_units = "years"
+    time_units = "years",
+    extra_slice_date_cols = NULL
 ) {
     # Create a table for survival analysis by slicing each subject's timeline
     # up based on multiple predictors that change over time (in a "latch"
@@ -188,6 +189,12 @@ miscsurv$mk_piecewise_survival_table <- function(
     #   time_units
     #       The base unit to be used for time, when converting from dates to
     #       time (e.g. "years").
+    #   extra_slice_date_cols
+    #       Optional: column name(s) in "data", of columns containing lists of
+    #       dates for the subject (within a column, one list per row). The
+    #       resulting data will be "sliced" at each of these dates. List
+    #       columns are supported by tibble() and data.table() objects, but not
+    #       by data.frame().
     #
     # Returns:
     #   A table containing one row per time interval (multiple rows per
@@ -241,7 +248,10 @@ miscsurv$mk_piecewise_survival_table <- function(
     #   variables, but using the same concepts as the pulsetable functions
     #   above. Would need to think about the input data structure, since that
     #   needs >1 row per subject.
-    # - Optional additional "slice" date column.
+
+    # -------------------------------------------------------------------------
+    # Local constants
+    # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
     # Ancillary helper functions
@@ -285,6 +295,8 @@ miscsurv$mk_piecewise_survival_table <- function(
         && latch_suffix_cumtime != ""
         && latch_suffix_hx != latch_suffix_cumtime
     )
+
+    n_extra_slice_date_cols <- length(extra_slice_date_cols)
 
     # -------------------------------------------------------------------------
     # Column name checks -- in the outer function, for speed
@@ -351,6 +363,25 @@ miscsurv$mk_piecewise_survival_table <- function(
                 (x_data %>% select(all_of(latch_on_predictor_cols)))
             )
         }
+        if (n_extra_slice_date_cols > 0) {
+            extra_dates <- (
+                x_data
+                %>% select(all_of(extra_slice_date_cols))
+                # ... gives a tibble of dimensions 1 (since x_data has one
+                # row) x n_extra_slice_date_cols.
+                %>% unnest(cols = extra_slice_date_cols)
+                # ... gives a tibble of dimensions n_extra_slice_date_cols
+                # tibble x (max list length); blanks have NULL.
+                %>% unlist()
+                # ... converts all non-NULL elements into a single vector
+                # ... but also converts dates to numbers
+                # ... and sometimes leaves NA values anyway
+                %>% as.Date()
+                # ... back to date.
+            )
+            # NA values will be filtered out in the next step anyway.
+            relevant_dates <- c(relevant_dates, extra_dates)
+        }
         # cat("... relevant_dates START:\n"); print(relevant_dates)
         relevant_dates <- relevant_dates[
             !is.na(relevant_dates)
@@ -363,11 +394,13 @@ miscsurv$mk_piecewise_survival_table <- function(
         # cat("... relevant_dates FINAL:\n"); print(relevant_dates)
         n_dates <- length(relevant_dates)
         stopifnot(n_dates >= 2)
+
         # Those dates then define the intervals for our subject:
         subject_result <- tibble(
             interval_start_date = relevant_dates[1 : (n_dates - 1)],
             interval_end_date = relevant_dates[2: n_dates]
         )
+
         # Now we add some additional predictors:
         if (n_latch_cols > 0) {
             for (latchnum in 1:n_latch_cols) {
@@ -429,7 +462,8 @@ miscsurv$mk_piecewise_survival_table <- function(
         end_date_col,
         terminal_event_date_col,
         static_predictor_cols,
-        latch_on_predictor_cols
+        latch_on_predictor_cols,
+        extra_slice_date_cols
     )
     grouping_cols <- c(
         subject_id_col,
@@ -456,7 +490,7 @@ miscsurv$mk_piecewise_survival_table <- function(
 
 miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
     # Test the creation of piecewise survival tables.
-    d <- tibble(
+    d1 <- tibble(
         subject = c("Alice", "Bob", "Celia", "David", "Elizabeth"),
         dob = as.Date(c(
             "2001-01-01", "2002-02-02", "2003-03-03", "2004-04-04",
@@ -481,15 +515,29 @@ miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
         mi = as.Date(c(
             NA, NA, "2015-09-09", NA, "2019-03-03"
         )),
+        extra_slice_dates_1 = list(
+            NULL,
+            as.Date(c("2020-01-01", "2021-01-01")),
+            as.Date(c("2022-01-01", "2023-01-01")),
+            NULL,
+            NULL
+        ),
+        extra_slice_dates_2 = list(
+            as.Date(c("2020-01-01", "2021-01-01")),
+            NULL,
+            NULL,
+            as.Date(c("2022-01-01", "2023-01-01")),
+            NULL
+        )
     )
     if (verbose) {
-        cat("- test_piecewise_survival_tables: source data:\n")
-        print(d)
+        cat("- test_piecewise_survival_tables: source data d1:\n")
+        print(d1)
     }
 
     # Standard
     x1 <- miscsurv$mk_piecewise_survival_table(
-        data = d,
+        data = d1,
         subject_id_col = "subject",
         dob_col = "dob",
         start_date_col = "start_date",
@@ -501,12 +549,12 @@ miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
             "mi"
         )
     )
-    cat("\n- test_piecewise_survival_tables: result 1:\n")
+    cat("\n- test_piecewise_survival_tables: result 1 (static + latch predictors):\n")
     print(x1)
 
     # No static predictors
     x2 <- miscsurv$mk_piecewise_survival_table(
-        data = d,
+        data = d1,
         subject_id_col = "subject",
         dob_col = "dob",
         start_date_col = "start_date",
@@ -523,7 +571,7 @@ miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
 
     # Standard
     x3 <- miscsurv$mk_piecewise_survival_table(
-        data = d,
+        data = d1,
         subject_id_col = "subject",
         dob_col = "dob",
         start_date_col = "start_date",
@@ -537,7 +585,7 @@ miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
 
     # No static or latch predictors
     x4 <- miscsurv$mk_piecewise_survival_table(
-        data = d,
+        data = d1,
         subject_id_col = "subject",
         dob_col = "dob",
         start_date_col = "start_date",
@@ -548,6 +596,28 @@ miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
     )
     cat("\n- test_piecewise_survival_tables: result 4 (no static or latch predictors):\n")
     print(x4)
+
+    # Add extra slice dates:
+    x5 <- miscsurv$mk_piecewise_survival_table(
+        data = d1,
+        subject_id_col = "subject",
+        dob_col = "dob",
+        start_date_col = "start_date",
+        end_date_col = "end_date",
+        terminal_event_date_col = c("event_eg_died" = "event_date"),
+        static_predictor_cols = c("diabetic", "hypertensive"),
+        latch_on_predictor_cols = c(
+            "cva" = "stroke",
+            "mi"
+        ),
+        # extra_slice_date_cols = c("extra_slice_dates_1")
+        extra_slice_date_cols = c("extra_slice_dates_1", "extra_slice_dates_2")
+    )
+    cat("\n- test_piecewise_survival_tables: result 5 (static + latch predictors + extra slice dates):\n")
+    print(x5)
+
+    # Now onto a more complex situation: time-varying binary predictors.
+    # ***
 }
 
 
