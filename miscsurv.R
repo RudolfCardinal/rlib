@@ -129,7 +129,8 @@ miscsurv$mk_piecewise_survival_table <- function(
     latch_suffix_hx = "_hx",
     latch_suffix_cumtime = "_cumtime",
     time_units = "years",
-    extra_slice_date_cols = NULL
+    extra_slice_date_cols = NULL,
+    additional_slice_dates = NULL
 ) {
     # Create a table for survival analysis by slicing each subject's timeline
     # up based on multiple predictors that change over time (in a "latch"
@@ -195,6 +196,8 @@ miscsurv$mk_piecewise_survival_table <- function(
     #       resulting data will be "sliced" at each of these dates. List
     #       columns are supported by tibble() and data.table() objects, but not
     #       by data.frame().
+    #   additional_slice_dates
+    #       Optional: additional vector of dates at which to slice.
     #
     # Returns:
     #   A table containing one row per time interval (multiple rows per
@@ -345,17 +348,18 @@ miscsurv$mk_piecewise_survival_table <- function(
         subjectstartdate <- x_data %>% pull(start_date_col)
         subjectenddate <- x_data %>% pull(end_date_col)
         eventdate <- x_data %>% pull(terminal_event_date_col)
-        if (!is.na(eventdate)) {
-            subjectenddate <- min(eventdate, subjectenddate)
-        }
+        # The event terminates observation for the subject.
+        # But if eventdate is NA, ignore it.
+        subjectenddate <- min(eventdate, subjectenddate, na.rm = TRUE)
         stopifnot(subjectstartdate < subjectenddate)
 
         # Now, we create (potentially) multiple rows, each representing a time
         # interval. We start by determining dates of relevance: the start/end
         # dates, and the dates of any event of interest in between.
         relevant_dates <- c(
-            subjectstartdate = subjectstartdate,
-            subjectenddate = subjectenddate
+            subjectstartdate,
+            subjectenddate,
+            additional_slice_dates
         )
         if (n_latch_cols > 0) {
             relevant_dates <- c(
@@ -369,7 +373,7 @@ miscsurv$mk_piecewise_survival_table <- function(
                 %>% select(all_of(extra_slice_date_cols))
                 # ... gives a tibble of dimensions 1 (since x_data has one
                 # row) x n_extra_slice_date_cols.
-                %>% unnest(cols = extra_slice_date_cols)
+                %>% unnest(cols = all_of(extra_slice_date_cols))
                 # ... gives a tibble of dimensions n_extra_slice_date_cols
                 # tibble x (max list length); blanks have NULL.
                 %>% unlist()
@@ -393,9 +397,9 @@ miscsurv$mk_piecewise_survival_table <- function(
         #   https://stackoverflow.com/questions/36953026
         # cat("... relevant_dates FINAL:\n"); print(relevant_dates)
         n_dates <- length(relevant_dates)
-        stopifnot(n_dates >= 2)
 
-        # Those dates then define the intervals for our subject:
+        # Those dates then define the intervals for our subject.
+        # There must be at least two, since subjectstartdate < subjectenddate.
         subject_result <- tibble(
             interval_start_date = relevant_dates[1 : (n_dates - 1)],
             interval_end_date = relevant_dates[2: n_dates]
@@ -491,34 +495,35 @@ miscsurv$mk_piecewise_survival_table <- function(
 miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
     # Test the creation of piecewise survival tables.
     d1 <- tibble(
-        subject = c("Alice", "Bob", "Celia", "David", "Elizabeth"),
+        subject = c("Alice", "Bob", "Celia", "David", "Elizabeth", "Fred"),
         dob = as.Date(c(
             "2001-01-01", "2002-02-02", "2003-03-03", "2004-04-04",
-            "2005-05-05"
+            "2005-05-05", "2001-01-01"
         )),
         start_date = as.Date(c(
             "2011-01-01", "2012-02-02", "2013-03-03", "2014-04-04",
-            "2015-05-05"
+            "2015-05-05", "2020-01-01"
         )),
         end_date = as.Date(c(
             "2023-12-31", "2023-12-31", "2023-12-31", "2023-12-31",
-            "2023-12-31"
+            "2023-12-31", "2020-01-02"
         )),
         event_date = as.Date(c(
-            "2019-06-06", NA, NA, NA, "2020-03-04"
+            "2019-06-06", NA, NA, NA, "2020-03-04", "2020-01-02"
         )),
-        diabetic = c(TRUE, FALSE, FALSE, TRUE, FALSE),
-        hypertensive = c(FALSE, FALSE, FALSE, TRUE, FALSE),
+        diabetic = c(TRUE, FALSE, FALSE, TRUE, FALSE, FALSE),
+        hypertensive = c(FALSE, FALSE, FALSE, TRUE, FALSE, FALSE),
         stroke = as.Date(c(
-            NA, NA, NA, NA, "2016-05-05"
+            NA, NA, NA, NA, "2016-05-05", NA
         )),
         mi = as.Date(c(
-            NA, NA, "2015-09-09", NA, "2019-03-03"
+            NA, NA, "2015-09-09", NA, "2019-03-03", NA
         )),
         extra_slice_dates_1 = list(
             NULL,
             as.Date(c("2020-01-01", "2021-01-01")),
             as.Date(c("2022-01-01", "2023-01-01")),
+            NULL,
             NULL,
             NULL
         ),
@@ -527,6 +532,7 @@ miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
             NULL,
             NULL,
             as.Date(c("2022-01-01", "2023-01-01")),
+            NULL,
             NULL
         )
     )
@@ -611,9 +617,12 @@ miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
             "mi"
         ),
         # extra_slice_date_cols = c("extra_slice_dates_1")
-        extra_slice_date_cols = c("extra_slice_dates_1", "extra_slice_dates_2")
+        extra_slice_date_cols = c("extra_slice_dates_1", "extra_slice_dates_2"),
+        additional_slice_dates = as.Date(c(
+            "2015-01-01", "2016-01-01"
+        ))
     )
-    cat("\n- test_piecewise_survival_tables: result 5 (static + latch predictors + extra slice dates):\n")
+    cat("\n- test_piecewise_survival_tables: result 5 (static + latch predictors + extra slice dates in two ways):\n")
     print(x5)
 
     # Now onto a more complex situation: time-varying binary predictors.
