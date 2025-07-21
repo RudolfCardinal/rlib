@@ -386,7 +386,6 @@ miscsurv$mk_piecewise_survival_table <- function(
             # NA values will be filtered out in the next step anyway.
             relevant_dates <- c(relevant_dates, extra_dates)
         }
-        # cat("... relevant_dates START:\n"); print(relevant_dates)
         relevant_dates <- relevant_dates[
             !is.na(relevant_dates)
             & relevant_dates >= subjectstartdate
@@ -395,7 +394,6 @@ miscsurv$mk_piecewise_survival_table <- function(
         relevant_dates <- sort(unique(relevant_dates))
         # - sort(unique()) is faster than unique(sort());
         #   https://stackoverflow.com/questions/36953026
-        # cat("... relevant_dates FINAL:\n"); print(relevant_dates)
         n_dates <- length(relevant_dates)
 
         # Those dates then define the intervals for our subject.
@@ -625,8 +623,11 @@ miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
     cat("\n- test_piecewise_survival_tables: result 5 (static + latch predictors + extra slice dates in two ways):\n")
     print(x5)
 
+
     # Now onto a more complex situation: time-varying binary predictors.
     # ***
+
+    # *** also: add parallel processing via tidyverse futures
 }
 
 
