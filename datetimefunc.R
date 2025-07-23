@@ -39,40 +39,40 @@ datetimefunc <- new.env()
 # Speed notes
 # =============================================================================
 
-if (FALSE) {
-    # Speed of sorting two vectors by one of them:
-    # This is a clear win for base_order (e.g. 8 ms) over data.table (64 ms).
-    # See also https://stackoverflow.com/questions/72090199.
-    v1 <- sample(50)  # random numbers from 1:50
-    v2 <- 1:50
-    microbenchmark::microbenchmark(
-        data_table = {
-            d <- data.table(v1 = v1, v2 = v2)
-            data.table::setkeyv(d, c("v1", "v2"))
-            list(
-                v1 = d$v1,
-                v2 = d$v2
-            )
-        },
-        base_order = {
-            ordering <- order(v1, v2)
-            list(
-                v1 = v1[ordering],
-                v2 = v2[ordering]
-            )
-        },
-        times = 1000
-    )
-
-    # base::ifelse() is faster than dplyr::if_else(), e.g. 12 vs 44 ms:
-    v1 <- sample(1:1000);
-    v2 <- sample(1:1000)
-    microbenchmark::microbenchmark(
-        ifelse = ifelse(v1 > v2, 1, 0),
-        if_else = if_else(v1 > v2, 1, 0),
-        times = 10000
-    )
-}
+# if (FALSE) {
+#     # Speed of sorting two vectors by one of them:
+#     # This is a clear win for base_order (e.g. 8 ms) over data.table (64 ms).
+#     # See also https://stackoverflow.com/questions/72090199.
+#     v1 <- sample(50)  # random numbers from 1:50
+#     v2 <- 1:50
+#     microbenchmark::microbenchmark(
+#         data_table = {
+#             d <- data.table(v1 = v1, v2 = v2)
+#             data.table::setkeyv(d, c("v1", "v2"))
+#             list(
+#                 v1 = d$v1,
+#                 v2 = d$v2
+#             )
+#         },
+#         base_order = {
+#             ordering <- order(v1, v2)
+#             list(
+#                 v1 = v1[ordering],
+#                 v2 = v2[ordering]
+#             )
+#         },
+#         times = 1000
+#     )
+#
+#     # base::ifelse() is faster than dplyr::if_else(), e.g. 12 vs 44 ms:
+#     v1 <- sample(1:1000);
+#     v2 <- sample(1:1000)
+#     microbenchmark::microbenchmark(
+#         ifelse = ifelse(v1 > v2, 1, 0),
+#         if_else = if_else(v1 > v2, 1, 0),
+#         times = 10000
+#     )
+# }
 
 
 # =============================================================================
@@ -489,7 +489,11 @@ datetimefunc$query_pulsetable_ever <- function(pt) {
 }
 
 
-datetimefunc$query_pulsetable_times_v1 <- function(pulsetable, query_times) {
+datetimefunc$query_pulsetable_times_v1 <- function(
+    pulsetable,
+    query_times,
+    epsilon = 10 * .Machine$double.eps
+) {
     # Query a pulse table (see above -- relating to a single subject) at
     # various times (in the dimensionless time units used within the
     # pulsetable).
@@ -504,6 +508,8 @@ datetimefunc$query_pulsetable_times_v1 <- function(pulsetable, query_times) {
     #       The pulse table object (list, as above) to query.
     #   query_times
     #       The (dimensionless) times at which to produce a row in the output.
+    #   epsilon
+    #       A tolerance for floating-point comparisons.
     #
     # Returns a data.table with columns:
     #
@@ -511,8 +517,11 @@ datetimefunc$query_pulsetable_times_v1 <- function(pulsetable, query_times) {
     #       The input times, i.e. query_times.
     #   current
     #       Is the event occurring at this time? (Boolean.)
+    #       To be more explicit: does t fall into any of the pulses, defined as
+    #       [start, end); i.e. it true that start <= t < end, for any pulse?
     #   hx
     #       Has the event happened at/before time t? (Boolean.)
+    #       That is: is it true that t >= first_event?
     #   t_since_first
     #       Time since the first occurrence (0 if before or has never
     #       occurred).
@@ -523,7 +532,8 @@ datetimefunc$query_pulsetable_times_v1 <- function(pulsetable, query_times) {
     #       Cumulative time that the subject has had OFF exposure, after the
     #       first exposure. (Will be t_since_first - cum_t_on.)
     #   t_since_last
-    #       Time since the last known exposure.
+    #       Time since the last known exposure. (Only non-zero if exposure is
+    #       not current at t but has occurred in the past.)
     #   ever
     #       Does the event ever occur for the subject (across the lifetime,
     #       including in the future)? Boolean. Obviously, this value will be
@@ -543,6 +553,8 @@ datetimefunc$query_pulsetable_times_v1 <- function(pulsetable, query_times) {
         # ---------------------------------------------------------------------
         # - https://stackoverflow.com/questions/60584096/how-to-check-if-pairs-from-df2-are-in-pairs-of-df1-inclusive-in-r
         # - https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/findInterval
+        # - findInterval(x, vec): "Given a vector of non-decreasing breakpoints
+        #   in vec, find the interval containing each element of x"
         # - findInterval() requires ascending (non-decreasing) values in its
         #   second argument.
         # - use dplyr::if_else() rather than base::ifelse() if types are a
@@ -572,13 +584,32 @@ datetimefunc$query_pulsetable_times_v1 <- function(pulsetable, query_times) {
         indexes_safer <- ifelse(invalid_indexes, 1, indexes_danger)
         relevant_starts <- event_times[indexes_safer]
         relevant_durations <- event_durations[indexes_safer]
+        relevant_ends <- relevant_starts + relevant_durations
 
         current <- ifelse(
             invalid_indexes,  # query time before first start time?
             FALSE,  # if so, then definitely not current
-            query_times < relevant_starts + relevant_durations
+            query_times < relevant_ends - epsilon
             # We use "up to (not including) the end time".
         )
+        # We were using:
+        #       query_times < relevant_starts + relevant_durations
+        # or
+        #       query_times < relevant_ends
+        # However, we have a precision problem here, when we are querying AT
+        # the end of a pulse (which should give current == FALSE). We are
+        # seeing e.g. "12.99383984 < 12.99383984" coming out as TRUE; using
+        # options(digits = 20) shows that this is 12.993839835728952181 <
+        # 12.993839835728953958. The difference is 1.776e-15. This is in the
+        # context of using dates and underlying time units of years, but then
+        # one day is approximately 0.0027 years, so this is likely more about
+        # internal precision representations than off-by-one-day errors. In
+        # general, "tolerance" versions of functions have to be directional,
+        # e.g. "approximately equal" means "actually equal or assume equal if
+        # not very unequal". Here, the important thing is to EXCLUDE EQUALITY;
+        # by "<" we mean "smaller than or not approximately equal to". So we
+        # resolve as
+        #       query_times < relevant_ends - epsilon
 
         # ---------------------------------------------------------------------
         # hx (history)
@@ -686,11 +717,6 @@ datetimefunc$query_pulsetable_times_v2 <- function(pulsetable, query_times) {
         # Booleans
         hx <- nrow(first_prev_current_with_event) > 0
         current <- current_interval$event
-        # Debugging
-        # cat("--- t =", t, "\n")
-        # cat("current_interval:\n"); print(current_interval)
-        # cat("previous_and_current_intervals:\n"); print(previous_and_current_intervals)
-        # cat("first_prev_current_with_event:\n"); print(first_prev_current_with_event)
         # Time calculations
         if (hx) {
             # t_since_first
@@ -723,13 +749,6 @@ datetimefunc$query_pulsetable_times_v2 <- function(pulsetable, query_times) {
                 + t_off_during_this_interval
             )
             t_since_last <- max(0, t - last_exposure)
-            # debugging:
-            # cat("previous_intervals:\n"); print(previous_intervals)
-            # cat("last_previous_interval:\n"); print(last_previous_interval)
-            # cat("t_first:\n"); print(t_first)
-            # cat("t_on_during_this_interval:\n"); print(t_on_during_this_interval)
-            # cat("t_off_during_this_interval:\n"); print(t_off_during_this_interval)
-            # cat("prev_off_intervals_after_first:\n"); print(prev_off_intervals_after_first)
         } else {
             t_since_first <- 0
             cum_t_on <- 0
@@ -835,9 +854,9 @@ datetimefunc$ensure_two_tables_equal <- function(x, y) {
     xcols <- sort(colnames(x))
     ycols <- sort(colnames(y))
     if (!identical(xcols, ycols)) {
-        cat("Sorted columns  for ", xlab, ":\n", sep = "")
+        cat("Sorted columns for ", xlab, ":\n", sep = "")
         print(xcols)
-        cat("Sorted columns  for ", ylab, ":\n", sep = "")
+        cat("Sorted columns for ", ylab, ":\n", sep = "")
         print(ycols)
         stop(paste0(xlab, " and ", ylab, " have different column names"))
     }
@@ -855,22 +874,34 @@ datetimefunc$ensure_two_tables_equal <- function(x, y) {
         }
     }
     cat(paste0(xlab, " and ", ylab, " are functionally identical\n"))
-    return()
 }
 
 
-if (FALSE) {
-    # Testing datetimefunc$ensure_two_tables_equal().
-    t1 <- tibble(a = 1:5, b = 2:6)
-    t2 <- t1
-    datetimefunc$ensure_two_tables_equal(t1, t2)  # passed (correct)
+# if (FALSE) {
+#     # Testing datetimefunc$ensure_two_tables_equal().
+#     t1 <- tibble(a = 1:5, b = 2:6)
+#     t2 <- t1
+#     datetimefunc$ensure_two_tables_equal(t1, t2)  # passed (correct)
+#
+#     t3 <- t1 + 1
+#     datetimefunc$ensure_two_tables_equal(t1, t3)  # fails (correct)
+#
+#     t4 <- t1
+#     t4$third <- 1:5
+#     datetimefunc$ensure_two_tables_equal(t1, t4)  # fails (correct)
+# }
 
-    t3 <- t1 + 1
-    datetimefunc$ensure_two_tables_equal(t1, t3)  # fails (correct)
 
-    t4 <- t1
-    t4$third <- 1:5
-    datetimefunc$ensure_two_tables_equal(t1, t4)  # fails (correct)
+datetimefunc$ensure_two_vectors_equal <- function(x, y) {
+    xlab <- deparse(substitute(x))
+    ylab <- deparse(substitute(y))
+    if (length(x) != length(y) || !all(x == y)) {
+        cat("Vector ", xlab, ":\n", sep = "")
+        print(x)
+        cat("Vector ", ylab, ":\n", sep = "")
+        print(y)
+        stop(paste0(xlab, " and ", ylab, " differ"))
+    }
 }
 
 
@@ -913,7 +944,27 @@ datetimefunc$test_pulsetable <- function(verbose = TRUE) {
     stopifnot(identical(q1a_ever, q1b_ever))
 
     # Times, two ways:
-    p1_test_times <- c(0, 5, 7, 17, 50, 103, 115, 500)
+    p1_test_times <- c(
+        0,
+        5, 7, 10, 17,
+        19, 20, 21, 29, 30, 31,
+        50,
+        100, 103, 110, 115,
+        150, 160,
+        199, 200, 209, 210, 211,
+        500
+    )
+    p1_current_expected <- c(
+        # to match p1_test_times
+        FALSE,
+        TRUE, TRUE, TRUE, FALSE,
+        FALSE, TRUE, TRUE, TRUE, FALSE, FALSE,
+        FALSE,
+        TRUE, TRUE, TRUE, FALSE,
+        TRUE, FALSE,
+        FALSE, TRUE, TRUE, FALSE, FALSE,
+        FALSE
+    )
     q1a <- datetimefunc$query_pulsetable_times_v1(p1a, p1_test_times)
     q1b <- datetimefunc$query_pulsetable_times_v2(p1a, p1_test_times)
     if (verbose) {
@@ -923,6 +974,7 @@ datetimefunc$test_pulsetable <- function(verbose = TRUE) {
         print(q1b)
     }
     datetimefunc$ensure_two_tables_equal(q1a, q1b)
+    datetimefunc$ensure_two_vectors_equal(q1a$current, p1_current_expected)
 
     # Speed test
     n_tests <- 1000
@@ -968,9 +1020,11 @@ datetimefunc$test_pulsetable <- function(verbose = TRUE) {
     p2 <- datetimefunc$mk_pulsetable_dates(
         origin_date = p2_origin_date,
         event_dates = as.Date(c(
-            "1910-01-01", "1915-01-01", "1915-06-01", "1940-01-01"
+            "1910-01-01",
+            "1915-01-01", "1915-01-06",
+            "1940-01-01"
         )),
-        event_durations = lubridate::duration(300, units = "days"),
+        event_durations = lubridate::duration(10, units = "days"),
         time_units = p2_time_units
     )
     p2i <- datetimefunc$mk_intervaltable_from_pulsetable(p2)
@@ -981,8 +1035,28 @@ datetimefunc$test_pulsetable <- function(verbose = TRUE) {
 
     # Dates, two ways:
     p2_query_dates <- as.Date(c(
-        "1905-01-01", "1915-01-03", "1915-06-01", "1970-01-01"
+        # Before anything:
+        "1905-01-01",
+        # Around the 1910-01-01 pulse:
+        "1909-12-31", "1910-01-01", "1910-01-02", "1910-01-09", "1910-01-10",
+            "1910-01-11",
+        # Around the 1915-01-01 + 1915-01-06 pulses. Pulses are 10 days, so (a)
+        # Jan 1 to Jan 10 inclusive; (b) Jan 6 to Jan 15 inclusive; therefore
+        # Jan 16 is "off".
+        "1914-12-31", "1915-01-01", "1915-01-09", "1915-01-10",
+            "1915-01-11", "1915-01-15", "1915-01-16", "1915-01-17",
+        # After everything:
+        "1970-01-01"
     ))
+    p2_current_expected <- c(
+        # to match p2_query_dates
+        FALSE,
+        FALSE, TRUE, TRUE, TRUE, TRUE,
+            FALSE,
+        FALSE, TRUE, TRUE, TRUE,
+            TRUE, TRUE, FALSE, FALSE,
+        FALSE
+    )
     q2a <- datetimefunc$query_pulsetable_dates(
         pulsetable = p2,
         query_dates = p2_query_dates,
@@ -1000,6 +1074,7 @@ datetimefunc$test_pulsetable <- function(verbose = TRUE) {
         print(q2b)
     }
     datetimefunc$ensure_two_tables_equal(q2a, q2b)
+    datetimefunc$ensure_two_vectors_equal(q2a$current, p2_current_expected)
 
     # -------------------------------------------------------------------------
     # 3

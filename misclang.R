@@ -47,6 +47,28 @@ misclang$vector_element_by_index_of_last_element <- function(x)
 
 
 #==============================================================================
+# Vector uniqueness, inclusion/exclusion
+#==============================================================================
+
+misclang$elements_unique <- function(x) {
+    # Are all the elements of x unique?
+    length(x) == length(unique(x))
+}
+
+
+misclang$elements_include <- function(x, values) {
+    # Is any element of "values" present in "x"?
+    any(values %in% x)
+}
+
+
+misclang$elements_unique_and_exclude <- function(x, values) {
+    # Are all the elements of x unique, without any "values" present?
+    !misclang$elements_include(x, values) && misclang$elements_unique(x)
+}
+
+
+#==============================================================================
 # Caching
 #==============================================================================
 

@@ -30,6 +30,58 @@ miscsurv <- new.env()
 
 
 # =============================================================================
+# Testing list columns
+# =============================================================================
+
+# A standard tibble column is a vector. A list column (e.g. tibble, data.table)
+# is itself a list. The column is a list. (Lists are also vectors.) See
+# https://dcl-prog.stanford.edu/list-columns.html.
+
+# if (FALSE) {
+#     testlist1 <- list(x = 3, y = 4)
+#     testlist2 <- list(p = 5, y = 6)
+#     testtibble <- tibble(
+#         numcol = c(1, 2),
+#         textcol = c("a", "b"),
+#         # Can't use c(testlist1, testlist2), because that makes a single list
+#         # before attempting to insert it.
+#         listcol = list(testlist1, testlist2)
+#     )
+#     is.vector(testtibble$numcol)  # TRUE
+#     is.list(testtibble$numcol)  # FALSE
+#     is.vector(testtibble$textcol)  # TRUE
+#     is.list(testtibble$textcol)  # FALSE
+#     is.vector(testtibble$listcol)  # TRUE
+#     is.list(testtibble$listcol)  # TRUE
+#     testtibble$numcol[2]  # 2
+#     testtibble[2, 1]  # a 1x1 tibble containing the value 2
+#     testtibble["numcol"]  # a 2x1 tibble containing 1, 2
+#     testtibble$numcol  # a vector of length 2
+#     testtibble[["numcol"]]  # a vector of length 2
+#     numcolname <- "numcol"
+#     testtibble[[numcolname]]  # a vector of length 2
+#     listcolname <- "listcol"
+#     testtibble[[listcolname]]  # a list of length 2
+#     testtibble[[listcolname]][1]  # a list of length 1
+#     testtibble[[listcolname]][[1]]  # the inner list, testlist1
+# }
+
+# A reminder about R lists:
+#       somelist[number or numbers] -> a subsetted list
+#       somelist[[number]] -> an element of the list
+# But here is some craziness:
+#       x <- vector("list", 1)
+#       length(x)  # 1
+#       x[[1]]  # NULL
+#       x[[1]] <- NULL  # You'd expect no change! But no...
+#       x  # list()
+#       length(x)  # 0
+# See e.g.
+#   https://stackoverflow.com/questions/7944809/assigning-null-to-a-list-element-in-r
+# You can do
+#       x[1] <- list(NULL)  # doesn't modify the original x
+
+# =============================================================================
 # mk_survfit_stratum_table
 # =============================================================================
 
@@ -126,8 +178,10 @@ miscsurv$mk_piecewise_survival_table <- function(
     terminal_event_date_col,
     static_predictor_cols = NULL,
     latch_on_predictor_cols = NULL,
-    latch_suffix_hx = "_hx",
-    latch_suffix_cumtime = "_cumtime",
+    pulse_cols = NULL,
+    suffix_hx = "_hx",
+    suffix_cumtime = "_cumtime",
+    suffix_current = "_current",
     time_units = "years",
     extra_slice_date_cols = NULL,
     additional_slice_dates = NULL
@@ -180,13 +234,25 @@ miscsurv$mk_piecewise_survival_table <- function(
     #       "had_stroke" would be in the final output). (If the destination
     #       names are not specified, the names of the date columns will be
     #       used.) Use NULL if there aren't any such columns.
-    #   latch_suffix_hx
-    #       Latch predictors yield >1 column each. This suffix, for "history"
-    #       (hx), is appended to create columns indicating "occurred in (at the
-    #       start of) this or a preceding time interval" (1) or not (0).
-    #   latch_suffix_cumtime
+    #   pulse_cols
+    #       Optional vector of column names containing pulsetable objects (see
+    #       datetimefunc.R), representing "pulse" predictors (binary predictors
+    #       that can go on/off over time). Each column must be a list column,
+    #       and the list element is expected to be a pulsetable.
+    #   suffix_hx
+    #       Latch and pulse predictors yield >1 column each. This suffix, for
+    #       "history" (hx), is appended to create columns indicating "occurred
+    #       in (at the start of) this or a preceding time interval" (1) or not
+    #       (0).
+    #   suffix_cumtime
     #       Similarly, this suffix is used to indicate cumulative time since
-    #       the onset of the predictor, to the end of the current interval.
+    #       the onset of the predictor (for latch predictors), to the end of
+    #       the current interval. For pulse predictors (see pulsetable_cols),
+    #       it is the cumulative time spend "on" (to the end of the current
+    #       interval).
+    #   suffix_current
+    #       Suffix used to label "current" columns for pulse predictors (see
+    #       below).
     #   time_units
     #       The base unit to be used for time, when converting from dates to
     #       time (e.g. "years").
@@ -209,52 +275,49 @@ miscsurv$mk_piecewise_survival_table <- function(
     #   Columns:
     #       {{ subject_id_col }}            } named as in the original
     #       {{ static_predictor_cols }}     }
-    #       t
+    #       t_start
     #           Time, in time_units (i.e. as a pure number), from the subject's
     #           start_date to the beginning of the relevant time interval. (The
-    #           subject's start_date is thus implicitly coded as t = 0.) An
-    #           INCLUSIVE time for this interval (see t_end).
-    #       t_start
-    #           Synonym for t.
+    #           subject's start_date is thus implicitly coded as t_start = 0.)
+    #           An INCLUSIVE time for this interval (see t_end).
     #       t_mid
     #           Middle of this time interval, in time units.
     #       t_end
-    #           End of this time interval, in time units (= t + d). An
-    #           EXCLUSIVE time, i.e. this interval is [t_start, t_end), or
-    #           t_start <= some_time < t_end.
-    #       d
+    #           End of this time interval, in time units (= t_start +
+    #           duration). An EXCLUSIVE time, i.e. this interval is [t_start,
+    #           t_end), or t_start <= some_time < t_end.
+    #       duration
     #           Duration of this time interval, in time_units, as a pure
     #           number. (Equal to t_end - t_start.)
-    #       duration
-    #           Synonym for d
     #       age_start
     #           Age, in time units, at t_start.
     #       age_mid
     #           Age, in time units, at the midpoint of t_start and t_end.
     #       age_end
     #           Age, in time units, at t_end.
-    #       {{latch_on_predictor_cols}}_{{latch_suffix_hx}}
+    #       {{latch_on_predictor_cols}}_{{suffix_hx}}
     #           "Latch" predictor output columns (optionally renamed, as
     #           above), with a suffix according to "latch_suffix_hx",
     #           indicating whether the event has occurred during (at the start
     #           of) or prior to this time interval.
-    #       {{latch_on_predictor_cols}}_{{latch_suffix_cumtime}}
+    #       {{latch_on_predictor_cols}}_{{suffix_cumtime}}
     #           Similarly, but for cumulative time since the onset of this
     #           latch predictor.
+    #       {{pulse_cols}}_{{suffix_current}}
+    #           A "current" column per "pulse" predictor, indicating whether
+    #           the event occurs during (actually: at the start of) this time
+    #           interval. Intervals are defined as [start, end), i.e. start
+    #           inclusive, end exclusive.
+    #       {{pulse_cols}}_{{suffix_hx}}
+    #           A "history" column per "pulse" predictor, indicating whether
+    #           the event has occurred during (at the start of) or prior to
+    #           this time interval.
+    #       {{pulse_cols}}_{{suffix_cumtime}}
+    #           Similarly, but for cumulative time spent with this pulse
+    #           predictor "on", by the END of this interval.
     #       {{ terminal_event_date_col }}
     #           The terminal event binary (0/1) column (optionally renamed, as
     #           above).
-    #
-    # NOT IMPLEMENTED, BUT CONSIDER:
-    #
-    # - Pulse variables, with specified pulse duration: akin to latch
-    #   variables, but using the same concepts as the pulsetable functions
-    #   above. Would need to think about the input data structure, since that
-    #   needs >1 row per subject.
-
-    # -------------------------------------------------------------------------
-    # Local constants
-    # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
     # Ancillary helper functions
@@ -266,80 +329,123 @@ miscsurv$mk_piecewise_survival_table <- function(
     }
 
     # -------------------------------------------------------------------------
-    # Establish some final column names, and check arguments
+    # Argument checks
     # -------------------------------------------------------------------------
-    # Establish destination column names for latch-predictor columns:
-    n_latch_cols <- length(latch_on_predictor_cols)
-    latchnames <- names(latch_on_predictor_cols)
-    # ... NULL if none are specified, e.g. try "names(c(1,2))"
-    # ... a vector containing elements of "" if some are unspecified, e.g.
-    #     try "names(c(1,b=2))"
-    latch_final_col_names <- ifelse(
-        is.null(latchnames) | latchnames == "",
-        latch_on_predictor_cols,
-        latchnames
+    stopifnot(length(terminal_event_date_col) == 1)
+    stopifnot(
+        misclang$elements_unique_and_exclude(
+            c(suffix_hx, suffix_cumtime, suffix_current),
+            ""
+        )
     )
-    rm(latchnames)
+
+    # -------------------------------------------------------------------------
+    # Local constants
+    # -------------------------------------------------------------------------
+    n_extra_slice_date_cols <- length(extra_slice_date_cols)
+    n_latch_cols <- length(latch_on_predictor_cols)
+    n_pulse_cols <- length(pulse_cols)
+
+    # -------------------------------------------------------------------------
+    # Column names, and check arguments
+    # -------------------------------------------------------------------------
+
+    # Establish destination column names for latch-predictor columns:
+    names_or_values <- function(x) {
+        # Takes a vector as input.
+        # Returns a vector whose values are, elementwise, the names of x if
+        # specified, or the values otherwise.
+        #
+        # Notes: if x is a vector,
+        # - If x is a vector, names(x) returns NULL if there are no names, or
+        #   if there are some names, a character vector with elements of "" for
+        #   any missing names.
+        # - If there are no names, the expression names(x) == "" is of length 0.
+        # - So you can't combine this way: is.null(names(x)) | names(x) == "".
+        # - Nested ifelse() statements have the length of the first part, so
+        #   ifelse(TRUE, c(1,2), c(3,4)) returns 1, not c(1, 2).
+        tmp_names <- names(x)
+        if (is.null(tmp_names)) {
+            return(x)
+        }
+        return(ifelse(tmp_names == "", x, tmp_names))
+    }
+
+    latch_dest_col_names <- names_or_values(latch_on_predictor_cols)
     names(latch_on_predictor_cols) <- NULL
     # ... otherwise our select() for "relevant" will also RENAME and confuse us
 
-    stopifnot(length(terminal_event_date_col) == 1)
-    ntedc <- names(terminal_event_date_col)
-    terminal_event_output_col <- ifelse(
-        is.null(ntedc),
-        terminal_event_date_col,
-        ntedc[1]
-    )
-    rm(ntedc)
+    # And for pulse-predictor columns:
+    pulse_dest_col_names <- names_or_values(pulse_cols)
+    names(pulse_cols) <- NULL  # as above
+
+    # And for the output column,
+    terminal_event_dest_col <- names_or_values(terminal_event_date_col)
     names(terminal_event_date_col) <- NULL
-
-    stopifnot(
-        latch_suffix_hx != ""
-        && latch_suffix_cumtime != ""
-        && latch_suffix_hx != latch_suffix_cumtime
-    )
-
-    n_extra_slice_date_cols <- length(extra_slice_date_cols)
 
     # -------------------------------------------------------------------------
     # Column name checks -- in the outer function, for speed
     # -------------------------------------------------------------------------
-    # Establish column names not to conflict with (see splitter_fn):
-    intermediate_extra_colnames <- c(
-        "period_start_date", "period_end_date"
+    # Establish column names not to conflict with (see splitter_fn).
+
+    # Core intermediate and final destination column names.
+    intermediate_colnames <- c(
+        "interval_start_date", "interval_end_date"
     )
-    final_extra_colnames <- c(
-        "t", "t_start", "t_mid", "t_end",
-        "d", "duration",
+    dest_core_colnames <- c(
+        # Also determines final column order
+        "t_start", "t_mid", "t_end",
+        "duration",
         "age_start", "age_mid", "age_end"
     )
-    extra_colnames <- c(intermediate_extra_colnames, final_extra_colnames)
-    # Now check outcome and latch-predictor columns:
-    stopifnot(!(terminal_event_output_col %in% extra_colnames))
-    for (latch_col_name in latch_final_col_names) {
-        stopifnot(!(latch_col_name %in% extra_colnames))
-    }
-    # Establish final fields, including for column sort order:
-    latch_suffixes <- c(latch_suffix_hx, latch_suffix_cumtime)
-    final_colnames <- final_extra_colnames
+
+    # Destination columns names used for predictors
+    dest_predictor_colnames <- NULL
+    # ... add latch columns
+    latch_suffixes <- c(suffix_hx, suffix_cumtime)
     if (n_latch_cols > 0) {
         for (i in 1:n_latch_cols) {
-            final_colnames <- c(
-                final_colnames,
-                paste0(latch_final_col_names[i], latch_suffixes)
+            dest_predictor_colnames <- c(
+                dest_predictor_colnames,
+                paste0(latch_dest_col_names[i], latch_suffixes)
             )
         }
     }
-    rm(latch_suffixes)
-    final_colnames <- c(final_colnames, terminal_event_output_col)
+    # ... add pulse columns
+    pulse_suffixes <- c(suffix_current, suffix_hx, suffix_cumtime)
+    if (n_pulse_cols > 0) {
+        for (i in 1:n_pulse_cols) {
+            dest_predictor_colnames <- c(
+                dest_predictor_colnames,
+                paste0(pulse_dest_col_names[i], pulse_suffixes)
+            )
+        }
+    }
+    # ... add output column
+    dest_predictor_colnames <- c(
+        dest_predictor_colnames,
+        terminal_event_dest_col
+    )
+
+    # Now, check there are no clashes:
+    tmp_all_inner_colnames <- c(
+        intermediate_colnames,
+        dest_core_colnames,
+        dest_predictor_colnames
+    )
+    if (!misclang$elements_unique(tmp_all_inner_colnames)) {
+        cat("! Attempting to use inner function column names:\n")
+        print(tmp_all_inner_colnames)
+        stop("Predictor names supplied make these column names non-unique")
+    }
+
+    # Then we will use this subset for final variable selection:
+    dest_colnames <- c(dest_core_colnames, dest_predictor_colnames)
 
     # -------------------------------------------------------------------------
     # Produce a set of intervals for one subject.
     # -------------------------------------------------------------------------
     splitter_fn <- function(x_data, y_key) {
-        # cat("-- splitter_fn\n")
-        # cat("... y_key:\n"); print(y_key)
-        # cat("... x_data:\n"); print(x_data)
         # Basic checks
         stopifnot(nrow(x_data) == 1 && nrow(y_key) == 1)
 
@@ -367,6 +473,36 @@ miscsurv$mk_piecewise_survival_table <- function(
                 (x_data %>% select(all_of(latch_on_predictor_cols)))
             )
         }
+        if (n_pulse_cols > 0) {
+            pulsetable_list <- vector("list", n_pulse_cols)
+            # ... creates a list of length n_pulse_cols with each element set
+            # to NULL.
+            # https://stackoverflow.com/questions/26508519/how-to-add-elements-to-a-list-in-r-loop
+            for (i in 1:n_pulse_cols) {
+                pulse_col_name <- pulse_cols[i]
+                pulsetable <- x_data[[pulse_col_name]][[1]]
+                # ... the element is a pulsetable (which is a list) (or NULL)
+                # Do not assign the pulsetable to the list element if the
+                # pulsetable is NULL; see notes above. That would erase the
+                # element, rather than setting it to NULL.
+                # Here, the elements of pulsetable_list are already NULL, so
+                # we can just skip it.
+                if (is.null(pulsetable)) {
+                    next
+                }
+                pulsetable_list[[i]] <- pulsetable  # for later
+                intervals <- datetimefunc$mk_intervaltable_from_pulsetable(
+                    pulsetable,
+                    include_non_event_intervals = FALSE
+                )
+                relevant_dates <- c(
+                    relevant_dates,
+                    intervals$t_start_date,
+                    intervals$t_end_date
+                )
+            }
+            # names(pulsetable_list) <- pulse_cols  # unnecessary
+        }
         if (n_extra_slice_date_cols > 0) {
             extra_dates <- (
                 x_data
@@ -375,7 +511,7 @@ miscsurv$mk_piecewise_survival_table <- function(
                 # row) x n_extra_slice_date_cols.
                 %>% unnest(cols = all_of(extra_slice_date_cols))
                 # ... gives a tibble of dimensions n_extra_slice_date_cols
-                # tibble x (max list length); blanks have NULL.
+                # x (max list length); blanks have NULL.
                 %>% unlist()
                 # ... converts all non-NULL elements into a single vector
                 # ... but also converts dates to numbers
@@ -407,21 +543,108 @@ miscsurv$mk_piecewise_survival_table <- function(
         if (n_latch_cols > 0) {
             for (latchnum in 1:n_latch_cols) {
                 src_latch_col <- latch_on_predictor_cols[latchnum]
-                dst_latch_col <- latch_final_col_names[latchnum]
+                dst_latch_col <- latch_dest_col_names[latchnum]
                 predictor_onset_date <- x_data %>% pull(src_latch_col)
                 subject_result <- (
                     subject_result
                     %>% mutate(
-                        "{dst_latch_col}{latch_suffix_hx}" := as.numeric(
+                        "{dst_latch_col}{suffix_hx}" := as.numeric(
                             !is.na(predictor_onset_date)
                             & predictor_onset_date <= interval_start_date
                             # Once an interval goes to/past the latch predictor
                             # date, that predictor is latched ON.
                         ),
-                        "{dst_latch_col}{latch_suffix_cumtime}" := (
+                        "{dst_latch_col}{suffix_cumtime}" := pmax(
+                            0,
                             mktimediff(predictor_onset_date, interval_end_date)
-                            %>% replace_na(0)
+                                %>% replace_na(0)
                         )
+                    )
+                )
+            }
+        }
+        if (n_pulse_cols > 0) {
+            for (i in 1:n_pulse_cols) {
+                # Note at this point that if there are i intervals in
+                # subject_result, there are i + 1 dates in relevant_dates.
+                # The first date does not have to be the DOB.
+                #
+                # The output columns of datetimefunc$query_pulsetable_dates()
+                # are explained in datetimefunc$query_pulsetable_times().
+                # Briefly:
+                #   hx
+                #       Is it true that t >= first_event?
+                #   current
+                #       Is there an event such that start <= t_event < end?
+                #   cum_t_on
+                #       Cumulative exposure time at time t.
+                #
+                # We want:
+                #   hx
+                #       Has the event occurred prior to, or during, the
+                #       interval? Since the intervals are split at all relevant
+                #       events, and the intervals are [start, end), "during"
+                #       means "at the start of".
+                #   current
+                #       Does the event occur during (throughout) the interval,
+                #       i.e. (here) occur at the start of the interval?
+                #   cumtime
+                #       Cumulative time "on", to the end of the interval.
+                #
+                # Therefore:
+                #   hx
+                #       Take the FIRST i values, representing the START times
+                #       of the intervals. Omit the last value, because that is
+                #       a non-inclusive date occurring at the very end.
+                #       The R shorthand for "all but the last" is x[-length(x)].
+                #   current
+                #       Similarly: relates to the starts.
+                #   cumtime
+                #       Take the LAST i values, representing the END times of
+                #       the intervals. Omit the very first. The R shorthand for
+                #       "all but the first" is x[-1].
+
+                pulsetable <- pulsetable_list[[i]]
+                if (is.null(pulsetable)) {
+                    # We have to create the columns anyway, even if this
+                    # subject doesn't have any relevant instances of this
+                    # predictor.
+                    hx <- 0
+                    cum_t_on <- 0
+                    current <- 0
+                } else {
+                    pq <- datetimefunc$query_pulsetable_dates(
+                        pulsetable = pulsetable,
+                        query_dates = relevant_dates
+                    )
+
+                    # Since length(pq$hx) == n_dates,
+                    hx <- pq$hx[-n_dates]  # see above
+                    current <- pq$current[-n_dates]  # see above
+                    cum_t_on <- pq$cum_t_on[-1]  # see above
+                    # if (TRUE) {
+                    #     cat(
+                    #         "*** ADDING NON-NULL PULSE PREDICTOR: i = ", i,
+                    #         "; ", pulse_dest_col_names[i], "\n",
+                    #         sep = ""
+                    #     )
+                    #     cat("--- initial subject_result:\n")
+                    #     print(subject_result)
+                    #     cat("--- pulsetable:\n")
+                    #     print(pulsetable)
+                    #     cat("--- relevant_dates:\n")
+                    #     print(relevant_dates)
+                    #     cat("--- pq:\n")
+                    #     print(pq)
+                    # }
+                }
+                dst_pulse_col <- pulse_cols[i]
+                subject_result <- (
+                    subject_result
+                    %>% mutate(
+                        "{dst_pulse_col}{suffix_hx}" := hx,
+                        "{dst_pulse_col}{suffix_cumtime}" := cum_t_on,
+                        "{dst_pulse_col}{suffix_current}" := current,
                     )
                 )
             }
@@ -437,19 +660,17 @@ miscsurv$mk_piecewise_survival_table <- function(
                 t_start = mktimediff(subjectstartdate, interval_start_date),
                 duration = mktimediff(interval_start_date, interval_end_date),
                 age_start = mktimediff(dob, interval_start_date),
-                t = t_start,  # synonym
-                d = duration,
-                t_end = t_start + d,
-                t_mid = t_start + d / 2,
-                age_mid = age_start + d / 2,
-                age_end = age_start + d,
-                "{terminal_event_output_col}" := as.numeric(
+                t_end = t_start + duration,
+                t_mid = t_start + duration / 2,
+                age_mid = age_start + duration / 2,
+                age_end = age_start + duration,
+                "{terminal_event_dest_col}" := as.numeric(
                     !is.na(eventdate)
                     & interval_end_date == eventdate
                     # An interval may END with an event.
                 )
             )
-            %>% select(all_of(c(final_colnames)))  # Restrict/sort
+            %>% select(all_of(c(dest_colnames)))  # Restrict/sort
         )
         return(subject_result)
     }
@@ -465,6 +686,7 @@ miscsurv$mk_piecewise_survival_table <- function(
         terminal_event_date_col,
         static_predictor_cols,
         latch_on_predictor_cols,
+        pulse_cols,
         extra_slice_date_cols
     )
     grouping_cols <- c(
@@ -476,7 +698,6 @@ miscsurv$mk_piecewise_survival_table <- function(
     #   - ?dplyr::select -- select() uses a <tidy-select> expression
     #   - ?dplyr::group_by -- group_by() doesn't
     relevant <- data %>% select(all_of(relevant_cols))
-    # cat("... relevant:\n"); print(relevant)
     pieces <- (
         relevant
         %>% group_by(across(all_of(grouping_cols)))
@@ -485,17 +706,17 @@ miscsurv$mk_piecewise_survival_table <- function(
         %>% group_modify(~ splitter_fn(x_data = .x, y_key = .y))
         %>% ungroup()
     )
-    # cat("... pieces:\n"); print(pieces)
     return(pieces)
 }
 
 
 miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
     # Test the creation of piecewise survival tables.
+    bob_dob_txt <- "2002-02-02"
     d1 <- tibble(
         subject = c("Alice", "Bob", "Celia", "David", "Elizabeth", "Fred"),
         dob = as.Date(c(
-            "2001-01-01", "2002-02-02", "2003-03-03", "2004-04-04",
+            "2001-01-01", bob_dob_txt, "2003-03-03", "2004-04-04",
             "2005-05-05", "2001-01-01"
         )),
         start_date = as.Date(c(
@@ -530,6 +751,21 @@ miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
             NULL,
             NULL,
             as.Date(c("2022-01-01", "2023-01-01")),
+            NULL,
+            NULL
+        ),
+        lithium = list(
+            NULL,
+            datetimefunc$mk_pulsetable_dates(
+                origin_date = as.Date(bob_dob_txt),
+                event_dates = as.Date(c(
+                    "2015-01-01", "2015-04-01", "2015-07-01"
+                )),
+                event_durations = lubridate::duration(30, units = "days"),
+                time_units = "years"
+            ),
+            NULL,
+            NULL,
             NULL,
             NULL
         )
@@ -623,8 +859,26 @@ miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
     cat("\n- test_piecewise_survival_tables: result 5 (static + latch predictors + extra slice dates in two ways):\n")
     print(x5)
 
-
     # Now onto a more complex situation: time-varying binary predictors.
+    x6 <- miscsurv$mk_piecewise_survival_table(
+        data = d1,
+        subject_id_col = "subject",
+        dob_col = "dob",
+        start_date_col = "start_date",
+        end_date_col = "end_date",
+        terminal_event_date_col = c("event_eg_died" = "event_date"),
+        static_predictor_cols = c("diabetic", "hypertensive"),
+        latch_on_predictor_cols = c(
+            "cva" = "stroke",
+            "mi"
+        ),
+        pulse_cols = c("lithium"),
+        extra_slice_date_cols = c("extra_slice_dates_1", "extra_slice_dates_2")
+    )
+    cat("\n- test_piecewise_survival_tables: result 6 (static + latch predictors + time-varying binary predictors):\n")
+    print(x6, n = Inf)
+
+
     # ***
 
     # *** also: add parallel processing via tidyverse futures
