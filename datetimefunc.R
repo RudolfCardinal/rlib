@@ -282,7 +282,7 @@ datetimefunc$mk_pulsetable_dimensionless <- function(
     # - And see datetimefunc$merge_events_dimensionless() tests below.
     event_ends <- event_times + event_durations
     if (n_events >= 2) {
-        prev_event_ends <- c(-Inf, event_ends[1 : (n_events - 1)])
+        prev_event_ends <- c(-Inf, event_ends[-n_events])
     } else {
         prev_event_ends <- -Inf
     }
@@ -530,19 +530,35 @@ datetimefunc$query_pulsetable_times_v1 <- function(
     #       time t.
     #   cum_t_after
     #       Cumulative time that the subject has had OFF exposure, after the
-    #       first exposure. (Will be t_since_first - cum_t_on.)
-    #   t_since_last
-    #       Time since the last known exposure. (Only non-zero if exposure is
-    #       not current at t but has occurred in the past.)
+    #       first exposure. (Equal to t_since_first - cum_t_on.)
+    #   t_on_since_last_off
+    #       Time spent "on" since the end of the last period of non-exposure
+    #       (and there must have been been one, because events cannot start at
+    #       negative infinity). If currently "off", returns 0.
+    #   t_off_since_last_on
+    #       Time spent "off" since the last time of exposure (since the end of
+    #       the most recent pulse). If currently "on", returns 0. If never
+    #       previously "on", returns 0 (check the value of "hx" if this is a
+    #       concern, e.g. if you want to replace with NA or Inf).
     #   ever
     #       Does the event ever occur for the subject (across the lifetime,
     #       including in the future)? Boolean. Obviously, this value will be
     #       the same for all values of t.
+    #
+    # Considered but not kept:
+    #   "time since last ever exposure"
+    #       Requires seeing into the future (as does "ever", but this would be
+    #       in a time-varying way). Also, presupposes that the last ever known
+    #       in the data is in fact the last ever. Was implemented as
+    #           last_exposure <- max(event_ends)
+    #           t_since_last <- pmax(0, query_times - last_exposure)
+
 
     stopifnot(all(is.numeric(query_times)))
     # ... prevents NA values; also fails for empty input
     event_times <- pulsetable$merged_event_times  # sorted, but may be empty
     event_durations <- pulsetable$merged_event_durations
+    # Note that merged events DO NOT overlap, simplifying this code.
     n_events <- length(event_times)
 
     ever <- n_events > 0
@@ -627,21 +643,14 @@ datetimefunc$query_pulsetable_times_v1 <- function(
         t_since_first <- pmax(0, query_times - first_event)
 
         # ---------------------------------------------------------------------
-        # cum_t_on, cum_t_after, t_since_last
+        # cum_t_on, cum_t_after
         # ---------------------------------------------------------------------
         if (n_events >= 2) {
-            event_ends <- pmin(  # until the first of:
-                event_times + event_durations,  # this event ends...
-                c(event_times[2 : n_events], Inf)  # ... or the next one starts
-            )
-            event_durations <- event_ends - event_times
             cum_durations <- cumsum(event_durations)  # at the end of events
-            cum_duration_at_start <- c(0, cum_durations[1 : n_events - 1])
-            last_exposure <- max(event_ends)
+            cum_duration_at_start <- c(0, cum_durations[-n_events])
         } else {
             # n_events is 1
             cum_duration_at_start <- 0
-            last_exposure <- event_times + event_durations
         }
         cum_t_on <- ifelse(
             invalid_indexes,  # is the query time before the first start time?
@@ -658,16 +667,35 @@ datetimefunc$query_pulsetable_times_v1 <- function(
             )
         )
         cum_t_after <- t_since_first - cum_t_on
-        t_since_last <- pmax(0, query_times - last_exposure)
+
+        # ---------------------------------------------------------------------
+        # t_on_since_last_off, t_off_since_last_on
+        # ---------------------------------------------------------------------
+        t_on_since_last_off <- ifelse(
+            current,
+            query_times - relevant_starts,  # currently on; invalid_indexes cannot be true
+            0  # currently off
+        )
+        t_off_since_last_on <- ifelse(
+            current,
+            0,  # currently on
+            ifelse(  # currently off
+                invalid_indexes,  # is the query time before the first start time?
+                0,  # never previously on
+                query_times - relevant_ends
+            )
+        )
 
     } else {
-        # never!
+        # Never any event. Provide single values (they'll be duplicated for
+        # every query date when we make a table).
         current <- FALSE
         hx <- FALSE
         t_since_first <- 0
         cum_t_on <- 0
         cum_t_after <- 0
-        t_since_last <- 0
+        t_on_since_last_off <- 0
+        t_off_since_last_on <- 0
     }
 
     return(data.table(
@@ -677,7 +705,8 @@ datetimefunc$query_pulsetable_times_v1 <- function(
         t_since_first = t_since_first,
         cum_t_on = cum_t_on,
         cum_t_after = cum_t_after,
-        t_since_last = t_since_last,
+        t_on_since_last_off = t_on_since_last_off,
+        t_off_since_last_on = t_off_since_last_on,
         ever = ever
     ))
 }
@@ -691,11 +720,11 @@ datetimefunc$query_pulsetable_times_v2 <- function(pulsetable, query_times) {
     stopifnot(all(is.numeric(query_times)))  # also fails for empty input
     intervals <- datetimefunc$mk_intervaltable_from_pulsetable(pulsetable)
     ever <- any(intervals$event)
-    last_exposure <- ifelse(
-        ever,
-        max(intervals %>% filter(event == TRUE) %>% pull(t_end)),
-        NA_real_
-    )
+    # last_exposure <- ifelse(
+    #     ever,
+    #     max(intervals %>% filter(event == TRUE) %>% pull(t_end)),
+    #     NA_real_
+    # )
     query_fn <- function(t) {  # t is a SINGLE VALUE, the query time.
         # Slices
         previous_and_current_intervals <- (
@@ -722,14 +751,18 @@ datetimefunc$query_pulsetable_times_v2 <- function(pulsetable, query_times) {
             # t_since_first
             t_first <- first_prev_current_with_event$t_start
             t_since_first <- t - t_first
-            # cum_t_on
+            # cum_t_on, t_on_since_last_off, t_off_since_last_on
             t_during_this_interval <- t - current_interval$t_start
             if (current) {
                 t_on_during_this_interval <- t_during_this_interval
                 t_off_during_this_interval <- 0
+                t_on_since_last_off <- t_during_this_interval
+                t_off_since_last_on <- 0
             } else {
                 t_on_during_this_interval <- 0
                 t_off_during_this_interval <- t_during_this_interval
+                t_on_since_last_off <- 0
+                t_off_since_last_on <- t_during_this_interval
             }
             previous_intervals <- (
                 previous_and_current_intervals %>% slice_head(n = -1)
@@ -748,12 +781,14 @@ datetimefunc$query_pulsetable_times_v2 <- function(pulsetable, query_times) {
                 sum(prev_off_intervals_after_first$duration)
                 + t_off_during_this_interval
             )
-            t_since_last <- max(0, t - last_exposure)
+            # t_on_since_last_off
+            # t_off_since_last_on
         } else {
             t_since_first <- 0
             cum_t_on <- 0
             cum_t_after <- 0
-            t_since_last <- 0
+            t_on_since_last_off <- 0
+            t_off_since_last_on <- 0
         }
         return(data.table(
             t = t,
@@ -762,7 +797,8 @@ datetimefunc$query_pulsetable_times_v2 <- function(pulsetable, query_times) {
             t_since_first = t_since_first,
             cum_t_on = cum_t_on,
             cum_t_after = cum_t_after,
-            t_since_last = t_since_last
+            t_on_since_last_off = t_on_since_last_off,
+            t_off_since_last_on = t_off_since_last_on
         ))
     }
     result <- (
@@ -799,11 +835,10 @@ datetimefunc$query_pulsetable_dates <- function(
     #       Only varied for cross-checking during testing.
     #
     # Returns:
-    #   As for query_pulsetable_times(), but now the column "t" is a date
-    #   column, and there is an additional column:
+    #   As for query_pulsetable_times(), but with an additional column:
     #
-    #       t_raw
-    #           The underlying "t" column.
+    #       t_date
+    #           The date corresponding to the "t" column.
 
     stopifnot(all(lubridate::is.Date(query_dates)))
     if (is.na(pulsetable$origin_date) || is.na(pulsetable$time_units)) {
@@ -822,8 +857,7 @@ datetimefunc$query_pulsetable_dates <- function(
         pulsetable = pulsetable,
         query_times = query_times
     )
-    q[, t_raw := t]
-    q[, t := query_dates]
+    q[, t_date := query_dates]
     return(q)
 }
 
@@ -976,37 +1010,19 @@ datetimefunc$test_pulsetable <- function(verbose = TRUE) {
     datetimefunc$ensure_two_tables_equal(q1a, q1b)
     datetimefunc$ensure_two_vectors_equal(q1a$current, p1_current_expected)
 
-    # Speed test
+    # Speed tests
+
     n_tests <- 1000
     mktitle("Speed test, query_pulsetable_times")
-    tmp_start <- Sys.time()
-    for (i in 1:n_tests) {
-        datetimefunc$query_pulsetable_times(p1a, p1_test_times)
-    }
-    tmp_end <- Sys.time()
-    cat("- ", n_tests, " iterations took:\n", sep = "")
-    print(tmp_end - tmp_start)
-    # 19.3 seconds for query_pulsetable_times_slow (otter)
-    # ~0.5 seconds for query_pulsetable_times (otter) [or ~1.3s on shrike]
-    # ... though up to ~1.2 s when fiddling around with conditionality
+    microbenchmark::microbenchmark(
+        query_pulsetable_times_v1 = query_pulsetable_times_v1(p1a, p1_test_times),
+        query_pulsetable_times_v2 = query_pulsetable_times_v2(p1a, p1_test_times),
+        times = 25
+    )
+    # No contest! query_pulsetable_times_v1 is about 491 times faster.
 
-    # cat("Speed test, query_pulsetable_times with few columns (hx only):\n")
-    # tmp_start <- Sys.time()
-    # for (i in 1:n_tests) {
-    #     datetimefunc$query_pulsetable_times(
-    #         p1,
-    #         p1_test_times,
-    #         with_current = FALSE,
-    #         with_hx = TRUE,
-    #         with_t_since_first = FALSE,
-    #         with_cum_t_on = FALSE,
-    #         with_cum_t_after = FALSE
-    #     )
-    # }
-    # tmp_end <- Sys.time()
-    # cat("- ", n_tests, " iterations took:\n", sep = "")
-    # print(tmp_end - tmp_start)
-    # # ... about 1.14 s (otter); so conditionality on variables NOT helpful.
+    # In separate speed tests, making the provision of some variables (e.g.
+    # options like "with_cum_t_on") did NOT provide material benefit.
 
     # -------------------------------------------------------------------------
     # 2
@@ -1290,7 +1306,7 @@ datetimefunc$test_pulsecalcs <- function() {
                 hx = as.numeric(hx)
             )
             %>% pivot_longer(
-                cols = !any_of(c("t", "t_raw")),
+                cols = !any_of(c("t", "t_date")),
                 # ... any_of() doesn't complain about nonexistent columns,
                 # unlike all_of().
                 names_to = "quantity",
@@ -1471,7 +1487,7 @@ datetimefunc$merge_events_dimensionless_v2 <- function(
         %>% arrange(start, end)
     )
     if (n_events >= 2) {
-        prev_event_ends <- c(-Inf, episodes$end[1 : (n_events - 1)])
+        prev_event_ends <- c(-Inf, episodes$end[-n_events])
     } else {
         prev_event_ends <- -Inf
     }
@@ -1520,7 +1536,7 @@ datetimefunc$merge_events_dimensionless_v3 <- function(
     end <- event_ends[ordering]
 
     if (n_events >= 2) {
-        prev_event_ends <- c(-Inf, end[1 : (n_events - 1)])
+        prev_event_ends <- c(-Inf, end[-n_events])
     } else {
         prev_event_ends <- -Inf
     }

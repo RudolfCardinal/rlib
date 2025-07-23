@@ -37,34 +37,35 @@ miscsurv <- new.env()
 # is itself a list. The column is a list. (Lists are also vectors.) See
 # https://dcl-prog.stanford.edu/list-columns.html.
 
-# if (FALSE) {
-#     testlist1 <- list(x = 3, y = 4)
-#     testlist2 <- list(p = 5, y = 6)
-#     testtibble <- tibble(
-#         numcol = c(1, 2),
-#         textcol = c("a", "b"),
-#         # Can't use c(testlist1, testlist2), because that makes a single list
-#         # before attempting to insert it.
-#         listcol = list(testlist1, testlist2)
-#     )
-#     is.vector(testtibble$numcol)  # TRUE
-#     is.list(testtibble$numcol)  # FALSE
-#     is.vector(testtibble$textcol)  # TRUE
-#     is.list(testtibble$textcol)  # FALSE
-#     is.vector(testtibble$listcol)  # TRUE
-#     is.list(testtibble$listcol)  # TRUE
-#     testtibble$numcol[2]  # 2
-#     testtibble[2, 1]  # a 1x1 tibble containing the value 2
-#     testtibble["numcol"]  # a 2x1 tibble containing 1, 2
-#     testtibble$numcol  # a vector of length 2
-#     testtibble[["numcol"]]  # a vector of length 2
-#     numcolname <- "numcol"
-#     testtibble[[numcolname]]  # a vector of length 2
-#     listcolname <- "listcol"
-#     testtibble[[listcolname]]  # a list of length 2
-#     testtibble[[listcolname]][1]  # a list of length 1
-#     testtibble[[listcolname]][[1]]  # the inner list, testlist1
-# }
+if (FALSE) {
+    testlist1 <- list(x = 3, y = 4)
+    testlist2 <- list(p = 5, y = 6)
+    testtibble <- tibble(
+        numcol = c(1, 2),
+        textcol = c("a", "b"),
+        # Can't use c(testlist1, testlist2), because that makes a single list
+        # before attempting to insert it.
+        listcol = list(testlist1, testlist2)
+    )
+    is.vector(testtibble$numcol)  # TRUE
+    is.list(testtibble$numcol)  # FALSE
+    is.vector(testtibble$textcol)  # TRUE
+    is.list(testtibble$textcol)  # FALSE
+    is.vector(testtibble$listcol)  # TRUE
+    is.list(testtibble$listcol)  # TRUE
+    testtibble$numcol[2]  # 2
+    testtibble[2, 1]  # a 1x1 tibble containing the value 2
+    testtibble["numcol"]  # a 2x1 tibble containing 1, 2
+    testtibble$numcol  # a vector of length 2
+    testtibble[["numcol"]]  # a vector of length 2
+    numcolname <- "numcol"
+    testtibble[[numcolname]]  # a vector of length 2
+    testtibble$listcol  # a list of length 2
+    listcolname <- "listcol"
+    testtibble[[listcolname]]  # a list of length 2
+    testtibble[[listcolname]][1]  # a list of length 1
+    testtibble[[listcolname]][[1]]  # the inner list, testlist1
+}
 
 # A reminder about R lists:
 #       somelist[number or numbers] -> a subsetted list
@@ -275,6 +276,12 @@ miscsurv$mk_piecewise_survival_table <- function(
     #   Columns:
     #       {{ subject_id_col }}            } named as in the original
     #       {{ static_predictor_cols }}     }
+    #       interval_start_date
+    #           Start date of this row; INCLUSIVE. (This might not be required
+    #           analytically, but it materially aids checking the tables.)
+    #       interval_end_date
+    #           Start date of this row; EXCLUSIVE (i.e. the day before is
+    #           included, but this day is not).
     #       t_start
     #           Time, in time_units (i.e. as a pure number), from the subject's
     #           start_date to the beginning of the relevant time interval. (The
@@ -388,25 +395,22 @@ miscsurv$mk_piecewise_survival_table <- function(
     # -------------------------------------------------------------------------
     # Establish column names not to conflict with (see splitter_fn).
 
-    # Core intermediate and final destination column names.
-    intermediate_colnames <- c(
-        "interval_start_date", "interval_end_date"
-    )
-    dest_core_colnames <- c(
+    # Core final destination column names.
+    dest_colnames <- c(
         # Also determines final column order
+        "interval_start_date", "interval_end_date",
         "t_start", "t_mid", "t_end",
         "duration",
         "age_start", "age_mid", "age_end"
     )
 
     # Destination columns names used for predictors
-    dest_predictor_colnames <- NULL
     # ... add latch columns
     latch_suffixes <- c(suffix_hx, suffix_cumtime)
     if (n_latch_cols > 0) {
         for (i in 1:n_latch_cols) {
-            dest_predictor_colnames <- c(
-                dest_predictor_colnames,
+            dest_colnames <- c(
+                dest_colnames,
                 paste0(latch_dest_col_names[i], latch_suffixes)
             )
         }
@@ -415,32 +419,24 @@ miscsurv$mk_piecewise_survival_table <- function(
     pulse_suffixes <- c(suffix_current, suffix_hx, suffix_cumtime)
     if (n_pulse_cols > 0) {
         for (i in 1:n_pulse_cols) {
-            dest_predictor_colnames <- c(
-                dest_predictor_colnames,
+            dest_colnames <- c(
+                dest_colnames,
                 paste0(pulse_dest_col_names[i], pulse_suffixes)
             )
         }
     }
     # ... add output column
-    dest_predictor_colnames <- c(
-        dest_predictor_colnames,
+    dest_colnames <- c(
+        dest_colnames,
         terminal_event_dest_col
     )
 
     # Now, check there are no clashes:
-    tmp_all_inner_colnames <- c(
-        intermediate_colnames,
-        dest_core_colnames,
-        dest_predictor_colnames
-    )
-    if (!misclang$elements_unique(tmp_all_inner_colnames)) {
+    if (!misclang$elements_unique(dest_colnames)) {
         cat("! Attempting to use inner function column names:\n")
-        print(tmp_all_inner_colnames)
+        print(dest_colnames)
         stop("Predictor names supplied make these column names non-unique")
     }
-
-    # Then we will use this subset for final variable selection:
-    dest_colnames <- c(dest_core_colnames, dest_predictor_colnames)
 
     # -------------------------------------------------------------------------
     # Produce a set of intervals for one subject.
@@ -535,8 +531,8 @@ miscsurv$mk_piecewise_survival_table <- function(
         # Those dates then define the intervals for our subject.
         # There must be at least two, since subjectstartdate < subjectenddate.
         subject_result <- tibble(
-            interval_start_date = relevant_dates[1 : (n_dates - 1)],
-            interval_end_date = relevant_dates[2: n_dates]
+            interval_start_date = relevant_dates[-n_dates],  # all but the last
+            interval_end_date = relevant_dates[-1]  # all but the first
         )
 
         # Now we add some additional predictors:
@@ -622,21 +618,6 @@ miscsurv$mk_piecewise_survival_table <- function(
                     hx <- pq$hx[-n_dates]  # see above
                     current <- pq$current[-n_dates]  # see above
                     cum_t_on <- pq$cum_t_on[-1]  # see above
-                    # if (TRUE) {
-                    #     cat(
-                    #         "*** ADDING NON-NULL PULSE PREDICTOR: i = ", i,
-                    #         "; ", pulse_dest_col_names[i], "\n",
-                    #         sep = ""
-                    #     )
-                    #     cat("--- initial subject_result:\n")
-                    #     print(subject_result)
-                    #     cat("--- pulsetable:\n")
-                    #     print(pulsetable)
-                    #     cat("--- relevant_dates:\n")
-                    #     print(relevant_dates)
-                    #     cat("--- pq:\n")
-                    #     print(pq)
-                    # }
                 }
                 dst_pulse_col <- pulse_cols[i]
                 subject_result <- (
@@ -670,7 +651,7 @@ miscsurv$mk_piecewise_survival_table <- function(
                     # An interval may END with an event.
                 )
             )
-            %>% select(all_of(c(dest_colnames)))  # Restrict/sort
+            %>% select(all_of(c(dest_colnames)))  # Sort
         )
         return(subject_result)
     }
@@ -713,6 +694,7 @@ miscsurv$mk_piecewise_survival_table <- function(
 miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
     # Test the creation of piecewise survival tables.
     bob_dob_txt <- "2002-02-02"
+    bob_index <- 2
     d1 <- tibble(
         subject = c("Alice", "Bob", "Celia", "David", "Elizabeth", "Fred"),
         dob = as.Date(c(
@@ -733,30 +715,40 @@ miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
         diabetic = c(TRUE, FALSE, FALSE, TRUE, FALSE, FALSE),
         hypertensive = c(FALSE, FALSE, FALSE, TRUE, FALSE, FALSE),
         stroke = as.Date(c(
-            NA, NA, NA, NA, "2016-05-05", NA
+            NA,
+            NA,
+            NA,
+            NA,
+            "2016-05-05",  # Elizabeth
+            NA
         )),
         mi = as.Date(c(
-            NA, NA, "2015-09-09", NA, "2019-03-03", NA
+            NA,
+            NA,
+            "2015-09-09",  # Celia
+            NA,
+            "2019-03-03",  # Elizabeth
+            NA
         )),
         extra_slice_dates_1 = list(
             NULL,
-            as.Date(c("2020-01-01", "2021-01-01")),
-            as.Date(c("2022-01-01", "2023-01-01")),
+            as.Date(c("2020-01-01", "2021-01-01")),  # Bob
+            as.Date(c("2022-01-01", "2023-01-01")),  # Celia
             NULL,
             NULL,
             NULL
         ),
         extra_slice_dates_2 = list(
-            as.Date(c("2020-01-01", "2021-01-01")),
+            as.Date(c("2020-01-01", "2021-01-01")),  # Alice
             NULL,
             NULL,
-            as.Date(c("2022-01-01", "2023-01-01")),
+            as.Date(c("2022-01-01", "2023-01-01")),  # David
             NULL,
             NULL
         ),
         lithium = list(
             NULL,
-            datetimefunc$mk_pulsetable_dates(
+            datetimefunc$mk_pulsetable_dates(  # Bob
                 origin_date = as.Date(bob_dob_txt),
                 event_dates = as.Date(c(
                     "2015-01-01", "2015-04-01", "2015-07-01"
@@ -773,6 +765,8 @@ miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
     if (verbose) {
         cat("- test_piecewise_survival_tables: source data d1:\n")
         print(d1)
+        cat("  ... and Bob's lithium info:\n")
+        print(d1$lithium[[bob_index]])
     }
 
     # Standard
@@ -878,10 +872,7 @@ miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
     cat("\n- test_piecewise_survival_tables: result 6 (static + latch predictors + time-varying binary predictors):\n")
     print(x6, n = Inf)
 
-
-    # ***
-
-    # *** also: add parallel processing via tidyverse futures
+    # *** add parallel processing via tidyverse futures
 }
 
 
