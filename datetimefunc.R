@@ -802,7 +802,7 @@ datetimefunc$query_pulsetable_times_v2 <- function(pulsetable, query_times) {
         ))
     }
     result <- (
-        tibble(t = query_times)
+        tibble(t = query_times, immutable = FALSE)
         %>% rowwise()
         %>% reframe(query_fn(t))
         %>% mutate(ever = ever)

@@ -16,6 +16,8 @@ local({
         data.table,
         flextable,
         ftExtra,  # for markup within flextable tables
+        microbenchmark,
+        parallel,  # for detectCores
         rcompanion,  # for wilcoxonZ
         rlang,  # for dots_n
         tidyverse
@@ -37,50 +39,69 @@ miscsurv <- new.env()
 # is itself a list. The column is a list. (Lists are also vectors.) See
 # https://dcl-prog.stanford.edu/list-columns.html.
 
-if (FALSE) {
-    testlist1 <- list(x = 3, y = 4)
-    testlist2 <- list(p = 5, y = 6)
-    testtibble <- tibble(
-        numcol = c(1, 2),
-        textcol = c("a", "b"),
-        # Can't use c(testlist1, testlist2), because that makes a single list
-        # before attempting to insert it.
-        listcol = list(testlist1, testlist2)
-    )
-    is.vector(testtibble$numcol)  # TRUE
-    is.list(testtibble$numcol)  # FALSE
-    is.vector(testtibble$textcol)  # TRUE
-    is.list(testtibble$textcol)  # FALSE
-    is.vector(testtibble$listcol)  # TRUE
-    is.list(testtibble$listcol)  # TRUE
-    testtibble$numcol[2]  # 2
-    testtibble[2, 1]  # a 1x1 tibble containing the value 2
-    testtibble["numcol"]  # a 2x1 tibble containing 1, 2
-    testtibble$numcol  # a vector of length 2
-    testtibble[["numcol"]]  # a vector of length 2
-    numcolname <- "numcol"
-    testtibble[[numcolname]]  # a vector of length 2
-    testtibble$listcol  # a list of length 2
-    listcolname <- "listcol"
-    testtibble[[listcolname]]  # a list of length 2
-    testtibble[[listcolname]][1]  # a list of length 1
-    testtibble[[listcolname]][[1]]  # the inner list, testlist1
-}
+# if (FALSE) {
+#     testlist1 <- list(x = 3, y = 4)
+#     testlist2 <- list(p = 5, y = 6)
+#     testtibble <- tibble(
+#         numcol = c(1, 2),
+#         textcol = c("a", "b"),
+#         # Can't use c(testlist1, testlist2), because that makes a single list
+#         # before attempting to insert it.
+#         listcol = list(testlist1, testlist2)
+#     )
+#     is.vector(testtibble$numcol)  # TRUE
+#     is.list(testtibble$numcol)  # FALSE
+#     is.vector(testtibble$textcol)  # TRUE
+#     is.list(testtibble$textcol)  # FALSE
+#     is.vector(testtibble$listcol)  # TRUE
+#     is.list(testtibble$listcol)  # TRUE
+#     testtibble$numcol[2]  # 2
+#     testtibble[2, 1]  # a 1x1 tibble containing the value 2
+#     testtibble["numcol"]  # a 2x1 tibble containing 1, 2
+#     testtibble$numcol  # a vector of length 2
+#     testtibble[["numcol"]]  # a vector of length 2
+#     numcolname <- "numcol"
+#     testtibble[[numcolname]]  # a vector of length 2
+#     testtibble$listcol  # a list of length 2
+#     listcolname <- "listcol"
+#     testtibble[[listcolname]]  # a list of length 2
+#     testtibble[[listcolname]][1]  # a list of length 1
+#     testtibble[[listcolname]][[1]]  # the inner list, testlist1
+# }
 
 # A reminder about R lists:
-#       somelist[number or numbers] -> a subsetted list
+#       somelist[number or numbers] -> a subset of the list (which is a list)
 #       somelist[[number]] -> an element of the list
-# But here is some craziness:
+# But here is some slightly counterintuitive behaviour:
 #       x <- vector("list", 1)
 #       length(x)  # 1
 #       x[[1]]  # NULL
-#       x[[1]] <- NULL  # You'd expect no change! But no...
+#       x[[1]] <- NULL  # You'd expect no change! But it deletes the element.
 #       x  # list()
 #       length(x)  # 0
 # See e.g.
 #   https://stackoverflow.com/questions/7944809/assigning-null-to-a-list-element-in-r
 # You can do
 #       x[1] <- list(NULL)  # doesn't modify the original x
+
+
+# =============================================================================
+# Notes on parallel processing and other speed aspects
+# =============================================================================
+
+# - Using data.table with dplyr: https://dtplyr.tidyverse.org/
+#   Create with dtplyr::lazy_dt(a_data_table_or_similar, immutable = ...).
+#   It doesn't always help; see speed tests below.
+#
+# - Parallel processing with dplyr:
+#   - furrr (https://furrr.futureverse.org/) -- this is for purrr
+#     (https://purrr.tidyverse.org/), using "future"
+#     (https://cran.r-project.org/web/packages/future/index.html; see also
+#     https://www.jottr.org/2017/06/05/many-faced-future/).
+#   - multidplyr (https://multidplyr.tidyverse.org/). HOWEVER, group_modify()
+#     (see https://dplyr.tidyverse.org/reference/group_map.html) is not yet
+#     supported; see https://github.com/tidyverse/multidplyr/issues/102.
+
 
 # =============================================================================
 # mk_survfit_stratum_table
@@ -786,6 +807,27 @@ miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
     cat("\n- test_piecewise_survival_tables: result 1 (static + latch predictors):\n")
     print(x1)
 
+    # Speed test
+    microbenchmark::microbenchmark(
+        mk_piecewise_survival_table = miscsurv$mk_piecewise_survival_table(
+            data = d1,
+            subject_id_col = "subject",
+            dob_col = "dob",
+            start_date_col = "start_date",
+            end_date_col = "end_date",
+            terminal_event_date_col = c("event_eg_died" = "event_date"),
+            static_predictor_cols = c("diabetic", "hypertensive"),
+            latch_on_predictor_cols = c(
+                "cva" = "stroke",
+                "mi"
+            )
+        ),
+        times = 25
+    )
+    # On 2025-07-24:
+    # - basic mean 52.7 ms
+    # - using lazy_dt() for subject_result: worsens to 64.4 ms
+
     # No static predictors
     x2 <- miscsurv$mk_piecewise_survival_table(
         data = d1,
@@ -871,8 +913,6 @@ miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
     )
     cat("\n- test_piecewise_survival_tables: result 6 (static + latch predictors + time-varying binary predictors):\n")
     print(x6, n = Inf)
-
-    # *** add parallel processing via tidyverse futures
 }
 
 

@@ -181,6 +181,8 @@ RUN install2.r --error --deps TRUE \
     # ... E.g. skewness, kurtosis.
     multcomp \
     # ... Multiple comparisons for generalized linear models etc.
+    multidplyr \
+    # ... Parallel processing for dplyr (part of tidyverse).
     nortest \
     # ... Tests for normality.
     officer \
