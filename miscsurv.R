@@ -1,6 +1,10 @@
 # miscsurv.R
 #
 # Miscellaneous functions for survival analysis.
+#
+# REQUIRES, via source():
+#   datetimefunc.R
+#   misclang.R
 
 # =============================================================================
 # Packages
@@ -11,15 +15,25 @@ local({
         packages <- as.character(match.call(expand.dots = FALSE)[[2]])
         for (p in packages) if (!requireNamespace(p)) install.packages(p)
     }
+    tmp_require_package_library <- function(...) {
+        packages <- as.character(match.call(expand.dots = FALSE)[[2]])
+        for (p in packages) {
+            if (!requireNamespace(p)) {
+                install.packages(p)
+            }
+            library(p, character.only = TRUE)
+        }
+    }
     tmp_require_package_namespace(
         car,  # for car::Anova
-        data.table,
         flextable,
         ftExtra,  # for markup within flextable tables
         microbenchmark,
-        parallel,  # for detectCores
         rcompanion,  # for wilcoxonZ
-        rlang,  # for dots_n
+        rlang  # for dots_n
+    )
+    tmp_require_package_library(
+        data.table,
         tidyverse
     )
 })
