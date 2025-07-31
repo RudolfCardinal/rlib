@@ -115,6 +115,37 @@ miscsurv <- new.env()
 #   - multidplyr (https://multidplyr.tidyverse.org/). HOWEVER, group_modify()
 #     (see https://dplyr.tidyverse.org/reference/group_map.html) is not yet
 #     supported; see https://github.com/tidyverse/multidplyr/issues/102.
+#   - On the other hand, summarise() has improved and can now return an
+#     arbitrary rectangle:
+#     https://www.tidyverse.org/blog/2020/03/dplyr-1-0-0-summarise/.
+#     Instead of:
+#           %>% group_by(...)
+#           %>% group_modify(~ splitter_fn(x_data = .x, y_key = .y))
+#           %>% ungroup()
+#     Use:
+#           ?
+#     I'm stuck, so I've asked Hadley Wickham. See
+#     https://github.com/tidyverse/multidplyr/issues/143.
+#
+# Test code (not working):
+
+# if (FALSE) {
+#     t1 <- tibble(
+#         x = c(1, 1, 2, 2, 3, 3),
+#         y = 1:6,
+#         z = c("p", "q", "r", "s", "t", "u")
+#     )
+#     testfunc <- function(chunk) {
+#         cat("- chunk:\n")
+#         print(chunk)
+#         return(tibble(f = 1:3, g = 4:6))
+#     }
+#     r1 <- (
+#         t1
+#         %>% group_by(x)
+#         %>% reframe(~ testfunc(.data))
+#     )
+# }
 
 
 # =============================================================================
