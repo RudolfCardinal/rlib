@@ -98,6 +98,7 @@ RUN mkdir -p $HOME/.R/ \
 #   matrixStats # High-performance matrix functions.
 #   nlme        # Nonlinear mixed effects models.
 #   parallel    # Parallel computing.
+#   RColorBrewer # Colours. Built in?
 #   Rcpp        # R/C++ integration; for RStan.
 #   readxl      # Read Excel files.
 #   reshape     # melt(), cast().
@@ -123,6 +124,8 @@ RUN install2.r --error --deps TRUE \
     # ... Analysis using regression and multilevel/hierarchical models.
     afex \
     # ... Analysis of factorial experiments.
+    anesrake \
+    # ... raking
     arrayhelpers \
     # ... Convenience functions for arrays.
     bridgesampling \
@@ -137,8 +140,12 @@ RUN install2.r --error --deps TRUE \
     # ... Parallel computing.
     doSNOW \
     # ... Use SNOW for parallel computing.
+    easypackages \
+    # ... Easier installation of other packages.
     Epi \
-    # ... epidemiology functions inc. the "poisreg" Poisson regression family.
+    # ... epidemiology functions inc. the "poisreg" Poisson regression family. \
+    extrafont \
+    # ... fonts
     ez \
     # ... ezANOVA; simple analysis of variance.
     flextable \
@@ -147,12 +154,16 @@ RUN install2.r --error --deps TRUE \
     # ... For markup (e.g. superscript) within flextable.
     gdata \
     # ... Miscellaneous data manipulation tools.
+    ggforce \
+    # ... e.g. better faceting \
     ggmcmc \
     # ... Tools for analysing MCMC simulations from Bayesian inference.
     ggtext \
     # ... provides element_markdown() etc.
     gplots \
-    # ... Misc. plotting functions.
+    # ... Misc. plotting functions. \
+    gridtext \
+    # for textbox_grob()
     gtools \
     # ... Programming assistance.
     HDInterval \
@@ -172,7 +183,7 @@ RUN install2.r --error --deps TRUE \
     lsmeans \
     # ... Least-squares means.
     ltm \
-    # ... Latent trait models.
+    # ... Latent trait models. \
     matrixStats \
     # ... High-performance matrix functions.
     MCMCglmm \
@@ -230,7 +241,9 @@ RUN install2.r --error --deps TRUE \
     sqldf \
     # ... Manipulate data frames using SQL.
     survminer \
-    # ... Extras for survival analysis/visualization.
+    # ... Extras for survival analysis/visualization. \
+    svglite \
+    # ... SVG export
     synthpop \
     # ... Produce synthetic data resembling confidential data.
     terra \
@@ -247,6 +260,8 @@ RUN install2.r --error --deps TRUE \
     # ... Read/write/manipulate Excel files.
     && rm -rf /tmp/downloaded_packages/ /tmp/*.rds
 
+RUN R -e "devtools::install_github('NightingaleHealth/ggforestplot')"
+
 # In separate steps because some sort of conflict happens:
 RUN install2.r --error --deps TRUE \
     ftExtra
@@ -258,14 +273,14 @@ RUN installGithub.r \
     bbc/bbplot
     # ... BBC styles for ggplot2
 
-# NOT AVAILABLE FOR R 3.6.3, 4.1.2, or 4.3.1:
+# NOT AVAILABLE FOR CURRENT VERSION OF R (e.g. for some: 3.6.3, 4.1.2, or
+# 4.3.1):
 #
+#   ggforestplot
+#       Forest plots. Use
+#       devtools::install_github("NightingaleHealth/ggforestplot")
 #   Kmisc
 #       Including cat.cb, to write to the clipboard.
-#   xtermStyle
-#       Terminal text formatting.
-#       https://cran.r-project.org/web/packages/xtermStyle/index.html
-#       Removed.
 #   maptools
 #       For spatial maps.
 #       https://cran.r-project.org/web/packages/maptools/index.html
@@ -278,11 +293,18 @@ RUN installGithub.r \
 #       Interface to GEOS (Geometry Engine - Open Source).
 #       https://cran.r-project.org/web/packages/rgeos/index.html
 #       Removed; suggests 'sf' or 'terra' instead.
+#   xtermStyle
+#       Terminal text formatting.
+#       https://cran.r-project.org/web/packages/xtermStyle/index.html
+#       Removed.
 #
-# Don't need:
+# Don't need, but might want:
 #
 #   easypackages
 #       Another route to R package management, but pacman is better.
+#
+# Don't need:
+#
 #   RODBC
 #       ODBC connector; use DBI or odbc instead;
 #       https://www.mainard.co.uk/post/database-connections-in-r/

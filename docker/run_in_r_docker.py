@@ -202,6 +202,9 @@ def docker_run(
     ports_docker_to_host: Dict[int, int] = None,
     user: str = None,
     workdir: str = None,
+    cpus: str = None,
+    memory: str = None,
+    memory_swap: str = None,
 ) -> None:
     """
     Run a command in the Docker environment.
@@ -238,6 +241,12 @@ def docker_run(
         cmdargs += ["--user", user]
     if workdir:
         cmdargs += ["--workdir", workdir]
+    if cpus:
+        cmdargs += ["--cpus", cpus]
+    if memory:
+        cmdargs += ["--memory", memory]
+    if memory_swap:
+        cmdargs += ["--memory-swap", memory_swap]
     cmdargs.append(IMAGE)  # Image to run with
     cmdargs += cmd
     # If the command is missing, the image's default command is run.
@@ -327,6 +336,23 @@ Commands:
         "If not specified, will be prompted for.",
     )
     parser.add_argument(
+        "--cpus",
+        help="If supplied, constrains the number of CPUs used by Docker. See "
+        "https://docs.docker.com/engine/containers/resource_constraints/",
+    )
+    parser.add_argument(
+        "--memory",
+        help="If supplied, constrains Docker container memory. Use e.g. "
+        "32m, 16g. See "
+        "https://docs.docker.com/engine/containers/resource_constraints/",
+    )
+    parser.add_argument(
+        "--memory-swap",
+        help="If supplied (and only applicable if --memory is also used), "
+        "controls use of the swap file by Docker. See "
+        "https://docs.docker.com/engine/containers/resource_constraints/",
+    )
+    parser.add_argument(
         "scriptargs",
         nargs="*",
         help=f"Script name (and any other arguments) for {cmd_rscript} "
@@ -339,20 +365,24 @@ Commands:
     # -------------------------------------------------------------------------
 
     docker_build()
-
     datamount = VolumeMount(
         host_dir=abspath(args.hostdata),
         docker_dir=args.dockerdata,
         rw=args.rw,
     )
-    mounts = [datamount]
+    common_docker_args = dict(
+        cpus=args.cpus,
+        memory=args.memory,
+        memory_swap=args.memory_swap,
+        mounts=[datamount]
+    )
 
     if args.command == cmd_bash:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Bash
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         announce("Running Bash shell (as root user).")
-        docker_run("bash", mounts=mounts)
+        docker_run("bash", **common_docker_args)
     elif args.command == cmd_r:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # R
@@ -363,8 +393,8 @@ Commands:
         warn_if_overriding_rprofile(datamount)
         docker_run(
             ["bash", "-c", f"cd {args.dockerdata!r} && R"],
-            mounts=mounts,
             user=DOCKER_R_USER,
+            **common_docker_args
         )
         # The Docker container must have "root" as its default user for
         # RStudio. However, where not necessary, there is lower risk with bind
@@ -398,8 +428,8 @@ Commands:
         warn_if_overriding_rprofile(datamount)
         docker_run(
             ["bash", "-c", f"cd {args.dockerdata!r} && Rscript " + textargs],
-            mounts=mounts,
             user=DOCKER_R_USER,
+            **common_docker_args
         )
     elif args.command == cmd_rstudio:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -429,9 +459,9 @@ Commands:
         )
         warn_if_overriding_rprofile(datamount)
         docker_run(
-            mounts=mounts,
             envvars=dict(PASSWORD=pw),
             ports_docker_to_host={DOCKER_RSTUDIO_PORT: args.port},
+            **common_docker_args
         )
         # - No command: the rocker/verse image runs RStudio as its default
         #   command.
