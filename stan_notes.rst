@@ -180,7 +180,7 @@ Prefer generated quantities where possible
 The "generated quantities" block is called less often
 (https://mc-stan.org/docs/reference-manual/overview-of-stans-program-blocks.html).
 Therefore, if you can, calculated in "generated quantities". For example, if
-you have to save choice probabilities anyway (e.g. in "transformed parameters",
+you have to save choice probabilities anyway (e.g. in "transformed parameters"),
 and are using them to calculate an area under the receiver operating
 characteristic curve (AUROC) measure, put that AUROC calculation in "generated
 quantities".
@@ -269,7 +269,7 @@ The two-choice situation
 Softmax
 ~~~~~~~
 
-- For softmax, there is no neat mapping of the softmax coefficients to to
+- For softmax, there is no neat mapping of the softmax coefficients to
   "logit space". Stan provides the `softmax()
   <https://mc-stan.org/docs/2_21/functions-reference/softmax.html>`_ function.
   It also provides a ``log_softmax()`` function, returning the natural log of
