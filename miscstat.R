@@ -162,13 +162,50 @@ miscstat$confidence_interval_from_mu_sem_via_Z <- function(
     # - CI = mean +/- Z(CI) * SEM = mean +/- Z(CI) * SD/sqrt(n)
     crit_p <- 1 - ((1 - ci) / 2)  # e.g. 0.975 for 95% CI
     crit_z <- qnorm(crit_p)  # e.g. +1.96 for 95% CI
-    half_ci <- crit_z * sem
+    half_ci <- crit_z * sem  # definitional; see my 2004 lecture handout, p16
     return(data.frame("ci_lower" = mu - half_ci, "ci_upper" = mu + half_ci))
 }
 # TEST:
 #   confidence_interval_from_mu_sem_via_Z(0, 1)
 #   # ... -1.959964, 1.959964
 # This is definitional (working in my 2004 lecture handout, p16).
+
+
+miscstat$p_from_confidence_interval_via_Z <- function(
+    ci_lower, ci_upper, test_value = 0, ci = 0.95, two_tailed = TRUE
+) {
+    # From a CI range, calculate the p-value associated with 0 (no effect) via
+    # a Z test.
+    # - CI = mean +/- Z(CI) * SEM = mean +/- Z(CI) * SD/sqrt(n)
+    crit_p <- 1 - ((1 - ci) / 2)  # e.g. 0.975 for 95% CI
+    crit_z <- qnorm(crit_p)  # e.g. +1.96 for 95% CI
+    mu <- (ci_lower + ci_upper) / 2  # by definition, for a symmetrical CI
+    half_ci <- (ci_upper - ci_lower) / 2
+    sem <- half_ci / crit_z  # by derivation in function above
+    Z_test <- (test_value - mu) / sem  # definition of Z in terms of an SD
+    p_one_tailed <- ifelse(
+        Z_test > 0,
+        pnorm(Z_test, mean = 0, sd = 1, lower.tail = FALSE),
+        pnorm(Z_test, mean = 0, sd = 1, lower.tail = TRUE)
+    )
+    # ... takes the probability "of this far or further away in the same
+    # direction from the mean", i.e. the one-tailed probability
+    p_test <- ifelse(two_tailed, p_one_tailed * 2, p_one_tailed)  # by symmetry
+    return(data.frame(
+        "ci_lower" = ci_lower,
+        "mu" = mu,
+        "ci_upper" = ci_upper,
+        "sem" = sem,
+        "Z_test" = Z_test,
+        "p_one_tailed" = p_one_tailed,
+        "p_test" = p_test
+    ))
+}
+# TEST:
+# miscstat$p_from_confidence_interval_via_Z(-1.959964, 1.959964, 0)  # two-tailed p = 1
+# miscstat$p_from_confidence_interval_via_Z(-1.959964, 1.959964, 1.959964)  # two-tailed p = 0.05
+# miscstat$p_from_confidence_interval_via_Z(-1.959964, 1.959964, -1.959964)  # two-tailed p = 0.05
+# miscstat$p_from_confidence_interval_via_Z(-0.62, -0.50, 0)  # two-tailed p = 9.409623e-75
 
 
 miscstat$logistic_regression_odds_ratios <- function(model,
