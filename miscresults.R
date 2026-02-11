@@ -2164,6 +2164,11 @@ miscresults$mk_model_anova_coeffs <- function(
     #       Version of table_markdown formatted, in basic style, as a flextable
     #       table. You may want to start with table_markdown and process it
     #       yourself, though, for your own table style.
+    #
+    # NOT CURRENTLY PROVIDED:
+    # - Overall R-squared values:
+    #   For lmer(), use MuMIn::r.squaredGLMM(result$anova_model), e.g. as
+    #   MuMIn::r.squaredGLMM(result$anova_model)[1, "R2c"].
 
     type <- match.arg(type)
 
@@ -3299,6 +3304,57 @@ miscresults$insert_row <- function(
         }
     }
     return(rbind(data_before, newrow, data_after, make.row.names = FALSE))
+}
+
+
+miscresults$reorder_rows <- function(
+    .data,
+    move_rows,
+    insert_after_original_row = 0
+) {
+    # Re-orders the rows of a table.
+    # Moves one or several rows, given by row number(s) in move_rows.
+    # As always in R, we use 1-based indexing.
+    #
+    # Arguments:
+    #
+    #   move_rows
+    #       Row number(s) to move. If more than one row is being moved, they
+    #       will be moved in exactly the sequence specified.
+    #   insert_after_original_row
+    #       Insertion destination (row number): insert the rows being moved
+    #       after this one.
+    #       - 0 means "move to the start".
+    #       - If negative, move to the end.
+    #       - If more than the number of rows, move to the end regardless.
+    #       - If move_rows encompasses this location, the outcome is
+    #         deterministic but harder to articulate (but to be specific: they
+    #         are inserted after the first row that is at/after
+    #         insert_after_original_row and is not one being moved).
+
+    stopifnot(!is.null(.data) && nrow(.data) >= 1)  # not a table?
+    n <- nrow(.data)
+    stopifnot(length(move_rows) == length(unique(move_rows)))  # not unique
+    stopifnot(all(move_rows >= 1 & move_rows <= n))  # invalid index values
+    stopifnot(length(insert_after_original_row) == 1)  # one position only
+
+    original_sequence <- 1:n
+    precedes_insertion <- (
+        original_sequence <= insert_after_original_row
+        | insert_after_original_row < 0  # insert all at end
+    )
+    is_moving <- original_sequence %in% move_rows
+    initial_rows <- original_sequence[precedes_insertion & !is_moving]
+    final_rows <- original_sequence[!precedes_insertion & !is_moving]
+    final_sequence <- c(initial_rows, move_rows, final_rows)
+    # cat("original_sequence: ", original_sequence, "\n")
+    # cat("initial_rows: ", initial_rows, "\n")
+    # cat("move_rows: ", move_rows, "\n")
+    # cat("final_rows: ", final_rows, "\n")
+    # cat("final_sequence: ", final_sequence, "\n")
+    n_final <- length(final_sequence)
+    stopifnot(n_final == n && n_final == length(unique(final_sequence)))
+    return(.data[final_sequence, ])
 }
 
 

@@ -7,9 +7,11 @@
 # Start with a base Docker image that's close to our needs.
 # =============================================================================
 
-FROM rocker/verse:4.3.1
-# Contains R and RStudio, at a specific version (R 4.3.1), with Stan likewise
-# (v2.26.21). See:
+FROM rocker/verse:4.4.0
+# Contains R and RStudio, at a specific version.
+# A specific version of Stan is also installed, below.
+#
+# See
 # - https://hub.docker.com/r/rocker/verse
 # - https://rocker-project.org/images/versioned/rstudio.html
 # - https://support.openanalytics.eu/t/using-specific-versions-of-r-packages-in-docker-file/763
@@ -22,7 +24,7 @@ FROM rocker/verse:4.3.1
 # - https://github.com/rocker-org/rocker-versioned2/blob/master/dockerfiles/tidyverse_4.3.1.Dockerfile
 # - https://github.com/rocker-org/rocker-versioned2/blob/master/dockerfiles/verse_4.3.1.Dockerfile
 
-MAINTAINER "Rudolf Cardinal" rudolf@pobox.com
+LABEL org.opencontainers.image.authors="Rudolf Cardinal <rudolf@pobox.com>"
 
 
 # =============================================================================
@@ -194,6 +196,8 @@ RUN install2.r --error --deps TRUE \
     # ... Multiple comparisons for generalized linear models etc.
     multidplyr \
     # ... Parallel processing for dplyr (part of tidyverse).
+    MuMIn \
+    # ... Multi-model inference.
     nortest \
     # ... Tests for normality.
     officer \
