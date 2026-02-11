@@ -158,16 +158,27 @@ miscsurv$mk_survfit_stratum_table <- function(survfit_object) {
     #
     # Creates a table with columns (see ?survfit.object):
     #       stratum
-    #       n (in that stratum)
-    #       time (the time points, t, at which the curve has a step)
-    #       n.risk (number at risk at time t)
-    #       n.censor (number exiting the risk set without an event at time t)
-    #       surv (estimated proportion surviving at time t+0)
-    #       cumhaz (cumulative hazard for each transition = -log(surv))
-    #       std.err (standard error of the cumulative hazard) [2]
-    #       upper (lower confidence interval for the survival curve) [1]
-    #       lower (upper confidence interval for the survival curve) [1]
-    #       conf.int (the level of the confidence intervals) [1]
+    #           (name of each stratum)
+    #       n
+    #           (in that stratum)
+    #       time
+    #           (the time points, t, at which the curve has a step)
+    #       n.risk
+    #           (number at risk at time t)
+    #       n.censor
+    #           (number exiting the risk set without an event at time t)
+    #       surv
+    #           (estimated proportion surviving at time t+0)
+    #       cumhaz
+    #           (cumulative hazard for each transition = -log(surv))
+    #       std.err
+    #           (standard error of the cumulative hazard) [2]
+    #       upper
+    #           (lower confidence interval for the survival curve) [1]
+    #       lower
+    #           (upper confidence interval for the survival curve) [1]
+    #       conf.int
+    #           (the level of the confidence intervals) [1]
     #
     # Notes:
     #
@@ -253,20 +264,26 @@ miscsurv$mk_piecewise_survival_table <- function(
     extra_slice_date_cols = NULL,
     additional_slice_dates = NULL
 ) {
-    # Create a table for survival analysis by slicing each subject's timeline
-    # up based on multiple predictors that change over time (in a "latch"
-    # sense, i.e. once they come they are considered present subsequently),
-    # together with time-invariant (static) predictors. For comparing the risk
-    # of developing an event where exposure varies over time, and/or there are
-    # covariates. See stats_demos/test_survival_methods.R, and especially
-    # [Carstensen2023].
+    # Create a table for survival analysis by slicing each subject's timeline up
+    # based on multiple predictors that can:
+    #
+    # - change over time in a "latch" sense, i.e. once they come they are
+    #   considered present subsequently;
+    # - change over time in a "pulse" sense, i.e. come and go;
+    # - (c) be time-invariant (static) predictors.
+    #
+    # The function is for comparing the risk of developing an event where
+    # exposure varies over time, and/or there are covariates. See
+    # stats_demos/test_survival_methods.R, and especially [Carstensen2023].
     #
     # Arguments:
+    #
     #   data
     #       A table of data, with one row per subject, and other relevant
     #       information in date columns.
     #   subject_id_col
     #       Name of a column (in "data") containing subject IDs of some sort.
+    #
     #   dob_col
     #       Name of a column (in "data") containing date of birth, for age
     #       calculations.
@@ -287,6 +304,7 @@ miscsurv$mk_piecewise_survival_table <- function(
     #       named vector of length 1, e.g. c("event_occurred" = "event_date"),
     #       where the name is the output column name and the value is the input
     #       column name.
+    #
     #   static_predictor_cols
     #       Vector of column names (in "data") containing predictors that are
     #       static (fixed, temporally invariant) for each subject. Column type
@@ -306,6 +324,7 @@ miscsurv$mk_piecewise_survival_table <- function(
     #       datetimefunc.R), representing "pulse" predictors (binary predictors
     #       that can go on/off over time). Each column must be a list column,
     #       and the list element is expected to be a pulsetable.
+    #
     #   suffix_hx
     #       Latch and pulse predictors yield >1 column each. This suffix, for
     #       "history" (hx), is appended to create columns indicating "occurred
@@ -323,6 +342,7 @@ miscsurv$mk_piecewise_survival_table <- function(
     #   time_units
     #       The base unit to be used for time, when converting from dates to
     #       time (e.g. "years").
+    #
     #   extra_slice_date_cols
     #       Optional: column name(s) in "data", of columns containing lists of
     #       dates for the subject (within a column, one list per row). The
@@ -333,6 +353,7 @@ miscsurv$mk_piecewise_survival_table <- function(
     #       Optional: additional vector of dates at which to slice.
     #
     # Returns:
+    #
     #   A table containing one row per time interval (multiple rows per
     #   subject). These intervals are defined by times of interest, which
     #   include the subject's start date (from {{ start_date_col }}), the
@@ -342,11 +363,12 @@ miscsurv$mk_piecewise_survival_table <- function(
     #   Columns:
     #       {{ subject_id_col }}            } named as in the original
     #       {{ static_predictor_cols }}     }
+    #
     #       interval_start_date
     #           Start date of this row; INCLUSIVE. (This might not be required
     #           analytically, but it materially aids checking the tables.)
     #       interval_end_date
-    #           Start date of this row; EXCLUSIVE (i.e. the day before is
+    #           End date of this row; EXCLUSIVE (i.e. the day before is
     #           included, but this day is not).
     #       t_start
     #           Time, in time_units (i.e. as a pure number), from the subject's
@@ -368,6 +390,7 @@ miscsurv$mk_piecewise_survival_table <- function(
     #           Age, in time units, at the midpoint of t_start and t_end.
     #       age_end
     #           Age, in time units, at t_end.
+    #
     #       {{latch_on_predictor_cols}}_{{suffix_hx}}
     #           "Latch" predictor output columns (optionally renamed, as
     #           above), with a suffix according to "latch_suffix_hx",
@@ -375,7 +398,8 @@ miscsurv$mk_piecewise_survival_table <- function(
     #           of) or prior to this time interval.
     #       {{latch_on_predictor_cols}}_{{suffix_cumtime}}
     #           Similarly, but for cumulative time since the onset of this
-    #           latch predictor.
+    #           latch predictor (to the END of the current interval).
+    #
     #       {{pulse_cols}}_{{suffix_current}}
     #           A "current" column per "pulse" predictor, indicating whether
     #           the event occurs during (actually: at the start of) this time
@@ -384,10 +408,12 @@ miscsurv$mk_piecewise_survival_table <- function(
     #       {{pulse_cols}}_{{suffix_hx}}
     #           A "history" column per "pulse" predictor, indicating whether
     #           the event has occurred during (at the start of) or prior to
-    #           this time interval.
+    #           this time interval. This effectively converts a "pulse"-type
+    #           predictor to a "latch"-type predictor.
     #       {{pulse_cols}}_{{suffix_cumtime}}
     #           Similarly, but for cumulative time spent with this pulse
     #           predictor "on", by the END of this interval.
+    #
     #       {{ terminal_event_date_col }}
     #           The terminal event binary (0/1) column (optionally renamed, as
     #           above).
@@ -508,6 +534,12 @@ miscsurv$mk_piecewise_survival_table <- function(
     # Produce a set of intervals for one subject.
     # -------------------------------------------------------------------------
     splitter_fn <- function(x_data, y_key) {
+        # We will have pre-grouped by subject and static predictors (meaning,
+        # by definition, grouped by subject). Then:
+        # - y_key: contains that subject's details and static predictors;
+        # - x_data: contains relevant data for that subject.
+        # Both are single-row tables.
+
         # Basic checks
         stopifnot(nrow(x_data) == 1 && nrow(y_key) == 1)
 
@@ -524,17 +556,20 @@ miscsurv$mk_piecewise_survival_table <- function(
         # Now, we create (potentially) multiple rows, each representing a time
         # interval. We start by determining dates of relevance: the start/end
         # dates, and the dates of any event of interest in between.
+        # (a) BASE DATES: subject start/end and "global" slice dates
         relevant_dates <- c(
             subjectstartdate,
             subjectenddate,
             additional_slice_dates
         )
+        # (b) LATCH PREDICTOR DATES
         if (n_latch_cols > 0) {
             relevant_dates <- c(
                 relevant_dates,
                 (x_data %>% select(all_of(latch_on_predictor_cols)))
             )
         }
+        # (c) PULSE PREDICTOR DATES
         if (n_pulse_cols > 0) {
             pulsetable_list <- vector("list", n_pulse_cols)
             # ... creates a list of length n_pulse_cols with each element set
@@ -553,6 +588,9 @@ miscsurv$mk_piecewise_survival_table <- function(
                     next
                 }
                 pulsetable_list[[i]] <- pulsetable  # for later
+                # NB this is skipped if we used the "next" statement, but the
+                # element was pre-initialised to NULL, and that is what we will
+                # check for later.
                 intervals <- datetimefunc$mk_intervaltable_from_pulsetable(
                     pulsetable,
                     include_non_event_intervals = FALSE
@@ -565,6 +603,7 @@ miscsurv$mk_piecewise_survival_table <- function(
             }
             # names(pulsetable_list) <- pulse_cols  # unnecessary
         }
+        # (d) EXTRA SLICE DATES FOR THIS SUBJECT
         if (n_extra_slice_date_cols > 0) {
             extra_dates <- (
                 x_data
@@ -584,6 +623,7 @@ miscsurv$mk_piecewise_survival_table <- function(
             # NA values will be filtered out in the next step anyway.
             relevant_dates <- c(relevant_dates, extra_dates)
         }
+        # Now filter to dates within the subject's range, and sort.
         relevant_dates <- relevant_dates[
             !is.na(relevant_dates)
             & relevant_dates >= subjectstartdate
@@ -602,6 +642,7 @@ miscsurv$mk_piecewise_survival_table <- function(
         )
 
         # Now we add some additional predictors:
+        # (a) LATCH PREDICTORS. At every date of interest, is the latch on?
         if (n_latch_cols > 0) {
             for (latchnum in 1:n_latch_cols) {
                 src_latch_col <- latch_on_predictor_cols[latchnum]
@@ -625,6 +666,7 @@ miscsurv$mk_piecewise_survival_table <- function(
                 )
             }
         }
+        # (b) PULSE PREDICTORS: likewise, at every date of interest.
         if (n_pulse_cols > 0) {
             for (i in 1:n_pulse_cols) {
                 # Note at this point that if there are i intervals in
@@ -633,7 +675,7 @@ miscsurv$mk_piecewise_survival_table <- function(
                 #
                 # The output columns of datetimefunc$query_pulsetable_dates()
                 # are explained in datetimefunc$query_pulsetable_times().
-                # Briefly:
+                # Briefly, we will receive:
                 #   hx
                 #       Is it true that t >= first_event?
                 #   current
@@ -641,7 +683,7 @@ miscsurv$mk_piecewise_survival_table <- function(
                 #   cum_t_on
                 #       Cumulative exposure time at time t.
                 #
-                # We want:
+                # We want to produce:
                 #   hx
                 #       Has the event occurred prior to, or during, the
                 #       interval? Since the intervals are split at all relevant
@@ -653,15 +695,15 @@ miscsurv$mk_piecewise_survival_table <- function(
                 #   cumtime
                 #       Cumulative time "on", to the end of the interval.
                 #
-                # Therefore:
-                #   hx
+                # Therefore we transform as follows:
+                #   hx -> hx
                 #       Take the FIRST i values, representing the START times
                 #       of the intervals. Omit the last value, because that is
                 #       a non-inclusive date occurring at the very end.
                 #       The R shorthand for "all but the last" is x[-length(x)].
-                #   current
+                #   current -> current
                 #       Similarly: relates to the starts.
-                #   cumtime
+                #   cum_t_on -> cumtime
                 #       Take the LAST i values, representing the END times of
                 #       the intervals. Omit the very first. The R shorthand for
                 #       "all but the first" is x[-1].
