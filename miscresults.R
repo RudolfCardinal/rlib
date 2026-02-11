@@ -2159,7 +2159,15 @@ miscresults$mk_model_anova_coeffs <- function(
     #       Full-working internal table. (Also used by the
     #       miscresults$summarize_multiple_cph() function.)
     #   table_markdown:
-    #       Markdown table, designed to be converted to a flextable.
+    #       Markdown table, designed to be converted to a flextable. Columns:
+    #       - 1/ formatted term/factor, e.g. "Age × Sex"
+    #       - 2/ formatted F statistic, e.g. "F_df1,df2_ = fval" or "F < 1"
+    #       - 3/ p value for F statistic, e.g. "p = 0.0259 *" or "NS"
+    #       - 4/ level (of factor), e.g. "Male", or "–" if continuous
+    #       - 5/ coefficient with conf. int., e.g. "−2.66 (CI −5.96 to +0.628)"
+    #       - 6/ standard error
+    #       - 7/ t statistic, e.g. "t_df = tval"
+    #       - 8/ p value for t statistic, e.g. "p = 4.69 × 10^−5 ****"
     #   table_flex:
     #       Version of table_markdown formatted, in basic style, as a flextable
     #       table. You may want to start with table_markdown and process it
