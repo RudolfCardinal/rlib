@@ -302,8 +302,8 @@ miscsurv$mk_piecewise_survival_table <- function(
     #       indicating whether the event occurs in a given time slice.
     #       Optionally, the column can be renamed in the output by passing a
     #       named vector of length 1, e.g. c("event_occurred" = "event_date"),
-    #       where the name is the output column name and the value is the input
-    #       column name.
+    #       where the name (e.g. "event_occurred") is the output column name
+    #       and the value (e.g. "event_date") is the input column name.
     #
     #   static_predictor_cols
     #       Vector of column names (in "data") containing predictors that are

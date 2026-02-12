@@ -80,6 +80,8 @@ datetimefunc <- new.env()
 # =============================================================================
 
 datetimefunc$calendar_age_lubridate_1 <- function(dob, now) {
+    # Calculate age (in full years) at "now" if the date of birth is "dob".
+
     # Works with POSIXct or Date values
     # http://stackoverflow.com/questions/32312925/time-difference-in-years-with-lubridate
     interval_period <- lubridate::interval(dob, now)
@@ -102,6 +104,8 @@ datetimefunc$calendarAge <- datetimefunc$calendar_age_lubridate_1
 
 datetimefunc$calendar_age <- function(dob, now)
 {
+    # Calculate age (in full years) at "now" if the date of birth is "dob".
+
     # THIS IS BETTER.
     # https://stackoverflow.com/questions/31126726
     # https://stackoverflow.com/questions/3611314/calculate-ages-in-r
@@ -121,6 +125,8 @@ datetimefunc$calendar_age <- function(dob, now)
 
 datetimefunc$age_float_years <- function(dob, now, days_per_year = 365.25)
 {
+    # Calculate age as floating-poing years (e.g. 40.5).
+
     days <- as.numeric(difftime(now, dob, units = "days"))
     return(days / days_per_year)
 }
@@ -131,6 +137,9 @@ datetimefunc$age_float_years <- function(dob, now, days_per_year = 365.25)
 # =============================================================================
 
 datetimefunc$duration_units <- function(start_date, end_date, units) {
+    # Calculate the duration from "start_date" to "end_date" in the units
+    # given.
+
     # https://rawgit.com/rstudio/cheatsheets/main/lubridate.pdf
     # "Divide an interval by a duration to determine its physical length."
     (
@@ -141,11 +150,15 @@ datetimefunc$duration_units <- function(start_date, end_date, units) {
 
 
 datetimefunc$duration_years <- function(start_date, end_date) {
+    # Calculate the duration from "start_date" to "end_date" in years.
+
     datetimefunc$duration_units(start_date, end_date, units = "years")
 }
 
 
 datetimefunc$duration_days <- function(start_date, end_date) {
+    # Calculate the duration from "start_date" to "end_date" in days.
+
     datetimefunc$duration_units(start_date, end_date, units = "days")
 }
 
