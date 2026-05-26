@@ -1,5 +1,28 @@
 # mapfunc.R
 
+# =============================================================================
+# Description
+# =============================================================================
+# Provides basic functions to work with shape files, including UK Office for
+# National Statistics (ONS) Lower Level Super Output Area (LSOA) shapefiles,
+# and the ONS Postcode Database.
+#
+# 2026-05-26:
+# - Improved to use the "sf" package properly. Much faster.
+# - Mapping by LSOA.
+# - Postcode definitions
+#   (https://en.wikipedia.org/wiki/Postcodes_in_the_United_Kingdom):
+#       Outward code	    Inward code
+#       Area	District	Sector	Unit
+#       CV	    34	        6	    EY
+# - Note that an LSOA may span multiple postcode districts.
+# - District is a useful level.
+
+
+# =============================================================================
+# Packages
+# =============================================================================
+
 local({
     # Packages:
     tmp_require_package_namespace <- function(...) {
@@ -22,6 +45,7 @@ library(magrittr)  # for %>%
 
 # Try this, for our local ones:
 # requireNamespace("miscfile")  # nope, fails
+
 
 # =============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
@@ -87,20 +111,24 @@ mapfunc$HEATMAP_LSOA_TESTDATA <- data.frame(
 )
 mapfunc$HEATMAP_OUTWARDPCD_TESTDATA <- data.frame(
     # This is fictional.
-    pcd_outward = c(
+    pcd_district = c(
         "CB1", "CB2", "CB3", "CB4", "CB5",
         # Leave a gap, and then:
         "CB21", "CB22", "CB23"
     ),
-    y = 1:8
+    quantity = 1:8
 )
-
+mapfunc$HEATMAP_OUTWARDPCD_TESTDATA_SIMPLE <- data.frame(
+    # This is fictional.
+    pcd_district = c("PE19", "CB1", "SG8"),
+    quantity = 1:3
+)
 
 # =============================================================================
 # Generic shapefile handling
 # =============================================================================
 
-mapfunc$get_lsoa_map_shapes <- function(
+mapfunc$read_map_shapes <- function(
     geography_shape_file,
     boundaries,
     cache_filename,
@@ -132,7 +160,7 @@ mapfunc$get_lsoa_map_shapes <- function(
     #   An sf::sf shape object.
 
     if (verbose) {
-        cat("get_lsoa_map_shapes()\n")
+        cat("read_map_shapes()\n")
     }
     if (!is.null(cache_filename)
             && file.exists(cache_filename)
@@ -224,7 +252,7 @@ mapfunc$get_cambs_lsoa_map_shapes <- function(
     #   -> Download SHP
     # Alternatives:
     # - https://data.cambridgeshireinsight.org.uk/dataset/output-areas/resource/3bc4faef-38c7-417d-88a9-f302ad845ebe
-    return(mapfunc$get_lsoa_map_shapes(
+    return(mapfunc$read_map_shapes(
         cache_filename = cache_filename,
         geography_shape_file = geography_shape_file,
         boundaries = mapfunc$CAMBRIDGESHIRE_BOUNDARY
@@ -273,13 +301,15 @@ mapfunc$geography_heatmap <- function(
     fill_missing = NA,
     place_colour = "darkgreen",
     place_size = 2,
-    shape_labels = FALSE
+    shape_labels = FALSE,
+    label_size = 3
 ) {
     # Check and fix up "data".
     stopifnot(depvar %in% colnames(data))
     stopifnot(shape_colname_in_data %in% colnames(data))
     # Check "map_shapes".
     stopifnot(shape_colname_in_map_shapes %in% colnames(map_shapes))
+    stopifnot(!(depvar %in% colnames(map_shapes)))  # depvar shouldn't be there
 
     data_with_geography <- merge(  # uses sf::merge.sf (not exported)
         x = map_shapes,
@@ -309,8 +339,15 @@ mapfunc$geography_heatmap <- function(
         ylab(y_label)
     )
     if (shape_labels) {
-        p <- p + geom_sf_label(
-            aes(label = .data[[shape_colname_in_map_shapes]])
+        p <- (
+            p +
+            geom_sf_label(
+                aes(label = .data[[shape_colname_in_map_shapes]]),
+                position = "identity",
+                size = label_size,
+                fun.geometry = sf::st_centroid
+            )
+            # + stat_sf_coordinates(geom = "point", color = "red")
         )
     }
     if (!is.null(points_of_interest)) {
@@ -325,7 +362,7 @@ mapfunc$geography_heatmap <- function(
 
 
 # =============================================================================
-# Postcode-type mapping
+# Postcode-type mapping (BUT: see conceptual problem re LSOA mapping, below).
 # =============================================================================
 
 mapfunc$read_ons_postcode_database <- function(
@@ -348,7 +385,12 @@ mapfunc$read_ons_postcode_database <- function(
     #
     #   onspd_csv_filename
     #       Filename of a CSV file containing the ONSPD data.
-    # 
+    #   cache_filename
+    #   wipe_cache
+    #       Usual cache control.
+    #   verbose
+    #       Be verbose?
+
     if (!is.null(cache_filename)
             && file.exists(cache_filename)
             && !wipe_cache) {
@@ -360,83 +402,126 @@ mapfunc$read_ons_postcode_database <- function(
     if (verbose) {
         cat(sprintf("Reading full ONSPD from %s\n", onspd_csv_filename))
     }
+
     onspd <- data.table::fread(onspd_csv_filename)
+
     if (!is.null(cache_filename)) {
         miscfile$write_rds(onspd, cache_filename)
     }
     return(onspd)
 }
 
+# CONCEPTUALLY BROKEN: one LSOA can map to several top-level postcodes. That is
+# because some LSOAs fall into multiple top-level postcodes; for example,
+# E01017943 maps to 10 top-level postcodes. That is equally true in the main
+# ONSPD and in
+# https://geoportal.statistics.gov.uk/datasets/f9c8996d451f44b79ab97ddd369ad5db/about.
 
-mapfunc$get_lsoa_outward_postcode_map <- function(
-    onspd = mapfunc$read_ons_postcode_database(),
-    lsoa_colname = "lsoa11cd",
-    cache_filename = file.path(TMP_DIR, "onspd_lsoa_to_outwardpcd.rds"),
+# mapfunc$get_lsoa_outward_postcode_map <- function(
+#     onspd = mapfunc$read_ons_postcode_database(),
+#     lsoa_colname = "lsoa11cd",
+#     cache_filename = file.path(TMP_DIR, "onspd_lsoa_to_outwardpcd.rds"),
+#     wipe_cache = TRUE,
+#     verbose = TRUE
+# ) {
+#     # Makes a conversion table between LSOA and "outward" (top-level) postcodes
+#     # (the first half of a postcode).
+#     if (!is.null(cache_filename)
+#             && file.exists(cache_filename)
+#             && !wipe_cache) {
+#         if (verbose) {
+#             cat(sprintf("Loading cached data from %s\n", cache_filename))
+#         }
+#         return(miscfile$read_rds(cache_filename))
+#     }
+#
+#     onspd[, pcd_outward := sub(" .*", "", pcds)]
+#     columns_to_select <- c(lsoa_colname, "pcd_outward")
+#     m <- unique(onspd[, ..columns_to_select])
+#     setkeyv(m, lsoa_colname)
+#
+#     if (!is.null(cache_filename)) {
+#         miscfile$write_rds(m, cache_filename)
+#     }
+#     return(m)
+# }
+
+
+# mapfunc$convert_lsoa_shapes_to_toplevel_postcode_shapes <- function(
+#     lsoa_shapes = mapfunc$get_cambs_lsoa_map_shapes(),
+#     lsoa_outwardpcd_map = mapfunc$get_lsoa_outward_postcode_map(),
+#     lsoa_colname = "lsoa11cd",
+#     cache_filename = file.path(TMP_DIR, "outwardpcd_shapes.rds"),
+#     wipe_cache = TRUE,
+#     verbose = TRUE
+# ) {
+#     # Makes shapes by merging LSOAs into outward postcode shapes.
+#     # CONCEPTUAL PROBLEM: some LSOAs fall into multiple top-level postcodes.
+#
+#     if (!is.null(cache_filename)
+#             && file.exists(cache_filename)
+#             && !wipe_cache) {
+#         if (verbose) {
+#             cat(sprintf("Loading cached data from %s\n", cache_filename))
+#         }
+#         return(miscfile$read_rds(cache_filename))
+#     }
+#
+#     stopifnot(lsoa_colname %in% colnames(lsoa_shapes))
+#     stopifnot(lsoa_colname %in% colnames(lsoa_outwardpcd_map))
+#
+#     lsoa_labelled_pcd <- merge(
+#         x = lsoa_shapes,
+#         y = lsoa_outwardpcd_map,
+#         by.x = lsoa_colname,
+#         by.y = lsoa_colname,
+#         all.x = TRUE  # all the shapes (but not all the postcodes)
+#     )
+#     # https://www.jla-data.net/eng/merging-geometry-of-sf-objects-in-r/
+#     # Quite magical.
+#     outwardpcd_shapes <- (
+#         lsoa_labelled_pcd %>% 
+#         group_by(pcd_outward) %>% 
+#         summarise()
+#     )
+#     # Note: some resolve to POLYGON objects; some remain as MULTIPOLYGON.
+#     # For example, CB1 is MULTIPOLYGON.
+#
+#     if (!is.null(cache_filename)) {
+#         miscfile$write_rds(outwardpcd_shapes, cache_filename)
+#     }
+#     return(outwardpcd_shapes)
+# }
+
+
+mapfunc$read_ons_postcode_district_shapefile <- function(
+    filename = file.path(
+        "/data",  # e.g. home directory mounted via Docker
+        "dev",
+        "onspd",
+        "shapes",
+        "DS_10283_2597",
+        "GB_Postcodes",
+        "PostalDistrict.shp"
+    ),
+    boundaries = mapfunc$CAMBRIDGESHIRE_BOUNDARY,
+    cache_filename = file.path(
+        TMP_DIR,
+        "cambridgeshire_postcode_district_shapes.rds"
+    ),
     wipe_cache = FALSE,
     verbose = TRUE
 ) {
-    # Makes a conversion table between LSOA and "outward" (top-level) postcodes
-    # (the first half of a postcode).
-    if (!is.null(cache_filename)
-            && file.exists(cache_filename)
-            && !wipe_cache) {
-        if (verbose) {
-            cat(sprintf("Loading cached data from %s\n", cache_filename))
-        }
-        return(miscfile$read_rds(cache_filename))
-    }
-
-    onspd[, pcd_outward := sub(" .*", "", pcds)]
-    columns_to_select <- c(lsoa_colname, "pcd_outward")
-    m <- unique(onspd[, ..columns_to_select])
-
-    if (!is.null(cache_filename)) {
-        miscfile$write_rds(m, cache_filename)
-    }
-    return(m)
-}
-
-
-mapfunc$convert_lsoa_shapes_to_toplevel_postcode_shapes <- function(
-    lsoa_shapes = mapfunc$get_cambs_lsoa_map_shapes(),
-    lsoa_outwardpcd_map = mapfunc$get_lsoa_outward_postcode_map(),
-    lsoa_colname = "lsoa11cd",
-    cache_filename = file.path(TMP_DIR, "outwardpcd_shapes.rds"),
-    wipe_cache = TRUE,
-    verbose = TRUE
-) {
-    # Makes shapes by merging LSOAs into outward postcode shapes.
-    if (!is.null(cache_filename)
-            && file.exists(cache_filename)
-            && !wipe_cache) {
-        if (verbose) {
-            cat(sprintf("Loading cached data from %s\n", cache_filename))
-        }
-        return(miscfile$read_rds(cache_filename))
-    }
-
-    stopifnot(lsoa_colname %in% colnames(lsoa_shapes))
-    stopifnot(lsoa_colname %in% colnames(lsoa_outwardpcd_map))
-
-    lsoa_labelled_pcd <- merge(
-        x = lsoa_shapes,
-        y = lsoa_outwardpcd_map,
-        by.x = lsoa_colname,
-        by.y = lsoa_colname,
-        all.x = TRUE  # all the shapes (but not all the postcodes)
-    )
-    # https://www.jla-data.net/eng/merging-geometry-of-sf-objects-in-r/
-    # Quite magical.
-    outwardpcd_shapes <- (
-        lsoa_labelled_pcd %>% 
-        group_by(pcd_outward) %>% 
-        summarise()
-    )
-
-    if (!is.null(cache_filename)) {
-        miscfile$write_rds(outwardpcd_shapes, cache_filename)
-    }
-    return(outwardpcd_shapes)
+    # Download from:
+    # - https://datashare.ed.ac.uk/handle/10283/2597
+    
+    return(mapfunc$read_map_shapes(
+        geography_shape_file = filename,
+        boundaries = boundaries,
+        cache_filename = cache_filename,
+        wipe_cache = wipe_cache,
+        verbose = verbose
+    ))
 }
 
 
@@ -452,10 +537,12 @@ mapfunc$test_geography_heatmap_1 <- function() {
 
 mapfunc$test_geography_heatmap_2 <- function() {
     return(mapfunc$geography_heatmap(
-        data = mapfunc$HEATMAP_OUTWARDPCD_TESTDATA,
-        shape_colname_in_data = "pcd_outward",
-        map_shapes = mapfunc$convert_lsoa_shapes_to_toplevel_postcode_shapes(),
-        shape_colname_in_map_shapes = "pcd_outward",
+        # data = mapfunc$HEATMAP_OUTWARDPCD_TESTDATA,
+        data = mapfunc$HEATMAP_OUTWARDPCD_TESTDATA_SIMPLE,
+        depvar = "quantity",
+        shape_colname_in_data = "pcd_district",
+        map_shapes = mapfunc$read_ons_postcode_district_shapefile(),
+        shape_colname_in_map_shapes = "PostDist",
         shape_labels = TRUE
     ))
 }
