@@ -77,52 +77,73 @@ mapfunc$CRS_LAT_LON_WGS84 <- sf::st_crs(mapfunc$EPSG_CODE_WGS84)
 # Other constants
 # =============================================================================
 
+# Directories:
 TMP_DIR <- "/tmp"
 
+# Cambridgeshire data:
 mapfunc$CAMBRIDGESHIRE_BOUNDARY <- sf::st_bbox(
-    # Approximate! Specified in BNG coordinates.
+    # Approximate! Specified in latitude/longitude.
     c(
-        xmin = 485000,  # West
-        xmax = 585000,  # East
-        ymin = 220000,  # South
-        ymax = 340000   # North
+        xmin = -0.65,  # West
+        xmax = 0.65,  # East
+        ymin = 51.9,  # South
+        ymax = 52.95   # North
     ),
-    crs = mapfunc$CRS_BNG_OSGB36
+    crs = mapfunc$CRS_LAT_LON_WGS84
 )
-mapfunc$CAMBRIDGESHIRE_CITIES <- sf::st_as_sf(
+mapfunc$PLACES_CAMBRIDGESHIRE_ENVIRONS <- sf::st_as_sf(
     data.frame(read.table(textConnection("
-        place           lat         long
-        Cambridge       52.2053     0.1218
-        Peterborough    52.5695     -0.2405
-        Ely             52.3995     0.2624
-        Huntingdon      52.3315     -0.1826
-    "), header = TRUE)),
+        place               lat         long        cpft_catchment
+        Bedford             52.1387    -0.4668      FALSE
+        Cambridge           52.2053     0.1218      TRUE
+        Doddington          52.4954     0.0578      TRUE
+        \"Downham Market\"  52.6009     0.3758      FALSE
+        Ely                 52.3995     0.2624      TRUE
+        Haverhill           52.0809     0.4445      FALSE
+        Huntingdon          52.3315    -0.1826      TRUE
+        \"King's Lynn\"     52.7500     0.3833      FALSE
+        Letchworth          51.9791    -0.2266      FALSE
+        March               52.5517     0.0886      TRUE
+        Newmarket           52.2459     0.4087      FALSE
+        Peterborough        52.5695    -0.2405      TRUE
+        Royston             52.0471    -0.0202      TRUE
+        \"Saffron Walden\"  52.0234     0.2423      FALSE
+        \"St Neots\"        52.2282    -0.279       TRUE
+        Wisbech             52.6644     0.1619      TRUE
+    "), header = TRUE)),  # West negative, East positive
     coords = c("long", "lat"),  # x, y
     crs = mapfunc$CRS_LAT_LON_WGS84
 )
-mapfunc$HEATMAP_LSOA_TESTDATA <- data.frame(
-    # This is fictional.
-    lsoa = c(
-        "E01013787", "E01013788", "E01013789", "E01013790", "E01013791",
-        # Leave a gap, and then:
-        "E01013797", "E01013798", "E01013799", "E01013800", "E01013801"
-    ),
-    y = 1:10
+mapfunc$CPFT_CORE_POSTCODES <- c(
+    # Unverified - from a CPFT R&D figure in ~2024.
+    paste0("CB", c(1:11, 21:25)),
+    paste0("PE", c(1:16, 19, 26:29)),
+    "SG8"
 )
-mapfunc$HEATMAP_OUTWARDPCD_TESTDATA <- data.frame(
-    # This is fictional.
-    pcd_district = c(
-        "CB1", "CB2", "CB3", "CB4", "CB5",
-        # Leave a gap, and then:
-        "CB21", "CB22", "CB23"
-    ),
+
+# Fictional data:
+mapfunc$TEST_LSOA_1 <- paste0(
+    "E0",
+    c(1013788:1013797, 1033451:1033454)
+)
+mapfunc$HEATMAP_LSOA_TESTDATA_1 <- data.frame(
+    # Fictional.
+    lsoa = mapfunc$TEST_LSOA_1,
+    y = 1:length(mapfunc$TEST_LSOA_1)
+)
+mapfunc$HEATMAP_POSTCODEDISTRICT_TESTDATA_1 <- data.frame(
+    pcd_district = paste0("CB", c(1:5, 21:23)),
     quantity = 1:8
 )
-mapfunc$HEATMAP_OUTWARDPCD_TESTDATA_SIMPLE <- data.frame(
-    # This is fictional.
+mapfunc$HEATMAP_POSTCODEDISTRICT_TESTDATA_2 <- data.frame(
     pcd_district = c("PE19", "CB1", "SG8"),
     quantity = 1:3
 )
+mapfunc$HEATMAP_POSTCODEDISTRICT_TESTDATA_3 <- data.frame(
+    pcd_district = mapfunc$CPFT_CORE_POSTCODES,
+    quantity = 1:length(mapfunc$CPFT_CORE_POSTCODES)
+)
+
 
 # =============================================================================
 # Generic shapefile handling
@@ -144,7 +165,7 @@ mapfunc$read_map_shapes <- function(
     #   geography_shape_file
     #       Filename of the shapefile to be read.
     #   boundaries
-    #       sf::st_bbox object, to which to clip the data.
+    #       sf::st_bbox object, to which to clip the data (or NULL).
     #   cache_filename
     #       Name of file to use as a cache.
     #   target_crs
@@ -189,22 +210,27 @@ mapfunc$read_map_shapes <- function(
     # You can transform CRS explicitly with:
     lsoa_shp_target <- sf::st_transform(lsoa_shp_original, crs = target_crs)
 
-    # Crop:
-    if (sf::st_crs(boundaries) != sf::st_crs(target_crs)) {
-        # Note: the comparison does require st_crs() on BOTH sides.
-        # And then the next bit requires bbox -> sf -> bbox:
-        boundaries <- (
-            boundaries
-            %>% sf::st_as_sfc()
-            %>% sf::st_transform(crs = target_crs)
-            %>% sf::st_bbox()
-        )
+    if (is.null(boundaries)) {
+        # No cropping required
+        cropped_shp <- lsoa_shp_target
+    } else {
+        # Crop
+        if (sf::st_crs(boundaries) != sf::st_crs(target_crs)) {
+            # Note: the comparison does require st_crs() on BOTH sides.
+            # And then the next bit requires bbox -> sf -> bbox:
+            boundaries <- (
+                boundaries
+                %>% sf::st_as_sfc()
+                %>% sf::st_transform(crs = target_crs)
+                %>% sf::st_bbox()
+            )
+        }
+        # To get around potential "Loop 0 is not valid" error, use sf_use_s2 to
+        # disable spherical geometry:
+        prev_s2 <- sf::sf_use_s2(FALSE)
+        cropped_shp <- sf::st_crop(lsoa_shp_target, boundaries)
+        sf::sf_use_s2(prev_s2)
     }
-    # To get around potential "Loop 0 is not valid" error, use sf_use_s2 to
-    # disable spherical geometry:
-    prev_s2 <- sf::sf_use_s2(FALSE)
-    cropped_shp <- sf::st_crop(lsoa_shp_target, boundaries)
-    sf::sf_use_s2(prev_s2)
     # plot(cropped_shp, axes = TRUE)  # quick plot
 
     if (!is.null(cache_filename)) {
@@ -215,7 +241,7 @@ mapfunc$read_map_shapes <- function(
     # Columns in the sf object tibble for LSOA data:
     #   objectid
     #   lsoa11cd
-    #       LSOA code, e.g. E01013787; 1792 in our example clipping rectangle
+    #       LSOA code, e.g. E01013787; ~1300 in our example clipping rectangle
     #       (cf. 32,482 LSOAs in England)
     #   lsoa11nm
     #   lsoa11nmw
@@ -285,24 +311,42 @@ mapfunc$test_plot_cambridgeshire_map <- function()
 
 
 mapfunc$geography_heatmap <- function(
+    # Data:
     data,
+    # Dependent variable:
     depvar = "y",
     depvar_label = "y variable",
-    shape_colname_in_data = "lsoa",
-    map_shapes = mapfunc$get_cambs_lsoa_map_shapes(),
-    shape_colname_in_map_shapes = "lsoa11cd",
-    points_of_interest = mapfunc$CAMBRIDGESHIRE_CITIES,
-    pen_colour = "grey",
-    pen_size = 0.1,
-    x_label = "Longitude (°)",
-    y_label = "Latitude (°)",
     fill_low = "blue",
     fill_high = "red",
-    fill_missing = NA,
-    place_colour = "darkgreen",
-    place_size = 2,
+    fill_missing = "white",  # NA shows the grid lines; white shows the sea
+    # Shapes:
+    map_shapes = mapfunc$get_cambs_lsoa_map_shapes(),
+    shape_colname_in_data = "lsoa",
+    shape_colname_in_map_shapes = "lsoa11cd",
+    pen_colour = "grey",
+    pen_size = 0.1,
     shape_labels = FALSE,
-    label_size = 3
+    shape_label_nudge_x = 0,
+    shape_label_nudge_y = -0.02,
+    shape_label_size = 3,
+    shape_label_colour = "black",
+    shape_label_fill = "white",
+    shape_label_alpha = 0.5,
+    # Points of interest:
+    points_of_interest = mapfunc$PLACES_CAMBRIDGESHIRE_ENVIRONS,
+    place_points = TRUE,
+    place_point_colour = "darkgreen",
+    place_point_size = 2,
+    place_labels = TRUE,
+    place_label_nudge_x = 0,
+    place_label_nudge_y = -0.02,
+    place_label_size = 3,
+    place_label_colour = "darkgreen",
+    place_label_fill = "white",
+    place_label_alpha = 0.5,
+    # Figure overall:
+    x_label = "Longitude (°)",
+    y_label = "Latitude (°)"
 ) {
     # Check and fix up "data".
     stopifnot(depvar %in% colnames(data))
@@ -339,23 +383,38 @@ mapfunc$geography_heatmap <- function(
         ylab(y_label)
     )
     if (shape_labels) {
-        p <- (
-            p +
-            geom_sf_label(
-                aes(label = .data[[shape_colname_in_map_shapes]]),
-                position = "identity",
-                size = label_size,
-                fun.geometry = sf::st_centroid
-            )
-            # + stat_sf_coordinates(geom = "point", color = "red")
+        p <- p + geom_sf_label(
+            aes(label = .data[[shape_colname_in_map_shapes]]),
+            fun.geometry = sf::st_centroid,
+            nudge_x = shape_label_nudge_x,
+            nudge_y = shape_label_nudge_y,
+            size = shape_label_size,
+            colour = shape_label_colour,  # text and border
+            fill = shape_label_fill,
+            alpha = shape_label_alpha
         )
     }
     if (!is.null(points_of_interest)) {
-        p <- p + geom_sf(
-            data = points_of_interest,
-            colour = place_colour,
-            size = place_size,
-        )
+        if (place_points) {
+            p <- p + geom_sf(
+                data = points_of_interest,
+                colour = place_point_colour,
+                size = place_point_size
+            )
+        }
+        if (place_labels) {
+            p <- p + geom_sf_label(
+                data = points_of_interest,
+                aes(label = place),
+                fun.geometry = sf::st_centroid,
+                nudge_x = place_label_nudge_x,
+                nudge_y = place_label_nudge_y,
+                size = place_label_size,
+                colour = place_label_colour,  # text and border
+                fill = place_label_fill,
+                alpha = place_label_alpha
+            )
+        }
     }
     return(p)
 }
@@ -421,7 +480,7 @@ mapfunc$read_ons_postcode_database <- function(
 #     onspd = mapfunc$read_ons_postcode_database(),
 #     lsoa_colname = "lsoa11cd",
 #     cache_filename = file.path(TMP_DIR, "onspd_lsoa_to_outwardpcd.rds"),
-#     wipe_cache = TRUE,
+#     wipe_cache = FALSE,
 #     verbose = TRUE
 # ) {
 #     # Makes a conversion table between LSOA and "outward" (top-level) postcodes
@@ -452,7 +511,7 @@ mapfunc$read_ons_postcode_database <- function(
 #     lsoa_outwardpcd_map = mapfunc$get_lsoa_outward_postcode_map(),
 #     lsoa_colname = "lsoa11cd",
 #     cache_filename = file.path(TMP_DIR, "outwardpcd_shapes.rds"),
-#     wipe_cache = TRUE,
+#     wipe_cache = FALSE,
 #     verbose = TRUE
 # ) {
 #     # Makes shapes by merging LSOAs into outward postcode shapes.
@@ -531,14 +590,13 @@ mapfunc$read_ons_postcode_district_shapefile <- function(
 
 mapfunc$test_geography_heatmap_1 <- function() {
     return(mapfunc$geography_heatmap(
-        data = mapfunc$HEATMAP_LSOA_TESTDATA
+        data = mapfunc$HEATMAP_LSOA_TESTDATA_1
     ))
 }
 
 mapfunc$test_geography_heatmap_2 <- function() {
     return(mapfunc$geography_heatmap(
-        # data = mapfunc$HEATMAP_OUTWARDPCD_TESTDATA,
-        data = mapfunc$HEATMAP_OUTWARDPCD_TESTDATA_SIMPLE,
+        data = mapfunc$HEATMAP_POSTCODEDISTRICT_TESTDATA_3,
         depvar = "quantity",
         shape_colname_in_data = "pcd_district",
         map_shapes = mapfunc$read_ons_postcode_district_shapefile(),
