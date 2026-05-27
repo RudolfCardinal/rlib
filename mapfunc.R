@@ -96,6 +96,7 @@ mapfunc$PLACES_CAMBRIDGESHIRE_ENVIRONS <- sf::st_as_sf(
         place               lat         long        cpft_catchment
         Bedford             52.1387    -0.4668      FALSE
         Cambridge           52.2053     0.1218      TRUE
+        Chatteris           52.4560     0.0575      TRUE
         Doddington          52.4954     0.0578      TRUE
         \"Downham Market\"  52.6009     0.3758      FALSE
         Ely                 52.3995     0.2624      TRUE
@@ -108,6 +109,7 @@ mapfunc$PLACES_CAMBRIDGESHIRE_ENVIRONS <- sf::st_as_sf(
         Peterborough        52.5695    -0.2405      TRUE
         Royston             52.0471    -0.0202      TRUE
         \"Saffron Walden\"  52.0234     0.2423      FALSE
+        \"St Ives\"         52.3250    -0.0737      TRUE
         \"St Neots\"        52.2282    -0.279       TRUE
         Wisbech             52.6644     0.1619      TRUE
     "), header = TRUE)),  # West negative, East positive
