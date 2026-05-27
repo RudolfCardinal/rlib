@@ -329,7 +329,7 @@ mapfunc$geography_heatmap <- function(
     pen_size = 0.1,
     shape_labels = FALSE,
     shape_label_nudge_x = 0,
-    shape_label_nudge_y = -0.02,
+    shape_label_nudge_y = 0,
     shape_label_size = 3,
     shape_label_colour = "black",
     shape_label_fill = "white",
@@ -337,14 +337,15 @@ mapfunc$geography_heatmap <- function(
     # Points of interest:
     points_of_interest = mapfunc$PLACES_CAMBRIDGESHIRE_ENVIRONS,
     place_points = TRUE,
-    place_point_colour = "darkgreen",
+    place_point_colour = "black",
     place_point_size = 2,
     place_labels = TRUE,
     place_label_nudge_x = 0,
-    place_label_nudge_y = -0.02,
+    place_label_nudge_y = -0.015,
     place_label_size = 3,
-    place_label_colour = "darkgreen",
-    place_label_fill = "white",
+    place_label_border_size = 0,
+    place_label_colour = "black",
+    place_label_fill = NA,
     place_label_alpha = 0.5,
     # Figure overall:
     x_label = "Longitude (°)",
@@ -384,18 +385,6 @@ mapfunc$geography_heatmap <- function(
         xlab(x_label) +
         ylab(y_label)
     )
-    if (shape_labels) {
-        p <- p + geom_sf_label(
-            aes(label = .data[[shape_colname_in_map_shapes]]),
-            fun.geometry = sf::st_centroid,
-            nudge_x = shape_label_nudge_x,
-            nudge_y = shape_label_nudge_y,
-            size = shape_label_size,
-            colour = shape_label_colour,  # text and border
-            fill = shape_label_fill,
-            alpha = shape_label_alpha
-        )
-    }
     if (!is.null(points_of_interest)) {
         if (place_points) {
             p <- p + geom_sf(
@@ -412,11 +401,24 @@ mapfunc$geography_heatmap <- function(
                 nudge_x = place_label_nudge_x,
                 nudge_y = place_label_nudge_y,
                 size = place_label_size,
+                label.size = place_label_border_size,
                 colour = place_label_colour,  # text and border
                 fill = place_label_fill,
                 alpha = place_label_alpha
             )
         }
+    }
+    if (shape_labels) {
+        p <- p + geom_sf_label(
+            aes(label = .data[[shape_colname_in_map_shapes]]),
+            fun.geometry = sf::st_centroid,
+            nudge_x = shape_label_nudge_x,
+            nudge_y = shape_label_nudge_y,
+            size = shape_label_size,
+            colour = shape_label_colour,  # text and border
+            fill = shape_label_fill,
+            alpha = shape_label_alpha
+        )
     }
     return(p)
 }
@@ -605,6 +607,31 @@ mapfunc$test_geography_heatmap_2 <- function() {
         shape_colname_in_map_shapes = "PostDist",
         shape_labels = TRUE
     ))
+}
+
+mapfunc$run_tests <- function(
+    output_dir = NULL,  # defaults to current working directory
+    width_mm = 300,
+    height_mm = 300
+) {
+    savefig <- function(fname, fig) {
+        if (!is.null(output_dir)) {
+            fname <- file.path(output_dir, fname)
+        }
+        cat(sprintf("Saving to: %s\n", fname))
+        ggsave(
+            fname,
+            fig,
+            width = width_mm,
+            height = height_mm,
+            units = "mm",
+            title = fname
+        )
+    }
+    p1 <- mapfunc$test_geography_heatmap_1()
+    savefig("mapfunc_heatmap_test_1.pdf", p1)
+    p2 <- mapfunc$test_geography_heatmap_2()
+    savefig("mapfunc_heatmap_test_2.pdf", p2)
 }
 
 
