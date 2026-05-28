@@ -105,12 +105,12 @@ mapfunc$PLACES_CAMBRIDGESHIRE_ENVIRONS <- sf::st_as_sf(
         \"King's Lynn\"     52.7500     0.3833      FALSE
         Letchworth          51.9791    -0.2266      FALSE
         March               52.5517     0.0886      TRUE
-        Newmarket           52.2459     0.4087      FALSE
+        Newmarket           52.2504     0.3979      FALSE
         Peterborough        52.5695    -0.2405      TRUE
         Royston             52.0471    -0.0202      TRUE
         \"Saffron Walden\"  52.0234     0.2423      FALSE
-        \"St Ives\"         52.3250    -0.0737      TRUE
-        \"St Neots\"        52.2282    -0.279       TRUE
+        \"St Ives\"         52.3346    -0.0763      TRUE
+        \"St Neots\"        52.2279    -0.2614       TRUE
         Wisbech             52.6644     0.1619      TRUE
     "), header = TRUE)),  # West negative, East positive
     coords = c("long", "lat"),  # x, y
@@ -118,10 +118,28 @@ mapfunc$PLACES_CAMBRIDGESHIRE_ENVIRONS <- sf::st_as_sf(
 )
 mapfunc$CPFT_CORE_POSTCODES <- c(
     # Unverified - from a CPFT R&D figure in ~2024.
-    paste0("CB", c(1:11, 21:25)),
-    paste0("PE", c(1:16, 19, 26:29)),
-    "SG8"
+    paste0("CB", c(1:11, 21:25)),  # Cambridge area
+    paste0("PE", c(1:9, 12:16, 19, 26:29)),  # Peterborough area
+    paste0("SG", c(7:9, 19))  # Stevenage area
 )
+mapfunc$CAMBRIDGESHIRE_PETERBOROUGH_CCG_CODES <- c("E38000026", "E38000260")
+# Various historical versions of NHS "chunks":
+# - LHA, local health authority.
+# - SHA, strategic health authority.
+# - PCT, primary care trust.
+# - CCG, clinical commissioning group.
+# - ICB, integrated care board.
+# - STP, sustainability and transformation partnership.
+# https://findthatpostcode.uk/areatypes/ccg.html
+# grep Camb ccg.csv
+#   E38000026,NHS Cambridgeshire and Peterborough CCG
+#   E38000260,NHS Cambridgeshire and Peterborough ICB - 06H
+# From inspection of a known postcode in the main ONSPD file, the CCG appears
+# in "sicbl24cd", only. From the ONS Postcode Directory (February 2026) User
+# Guide (ONSPD_Feb_2026_User_Guide.zip,
+# https://geoportal.statistics.gov.uk/datasets/481c020d6e824b628b18359d733e8cd5/about),
+# seems to confirm that SICBL24CD is correct, including section 36, "Sub ICB
+# Locations (LOC) - formerly Clinical Commissioning Groups (CCG)".
 
 # Fictional data:
 mapfunc$TEST_LSOA_1 <- paste0(
@@ -129,7 +147,6 @@ mapfunc$TEST_LSOA_1 <- paste0(
     c(1013788:1013797, 1033451:1033454)
 )
 mapfunc$HEATMAP_LSOA_TESTDATA_1 <- data.frame(
-    # Fictional.
     lsoa = mapfunc$TEST_LSOA_1,
     y = 1:length(mapfunc$TEST_LSOA_1)
 )
@@ -334,6 +351,13 @@ mapfunc$geography_heatmap <- function(
     shape_label_colour = "black",
     shape_label_fill = "white",
     shape_label_alpha = 0.5,
+    # Boundary shape:
+    boundary_shape = mapfunc$read_ons_subicb_shapefile(),  # or NULL
+    boundary_above_shapes = TRUE,  # FALSE only works if shapes are transparent
+    boundary_colour = "darkslategrey",
+    boundary_linewidth = 1,
+    boundary_fill = NA,
+    boundary_alpha = 0.1,
     # Points of interest:
     points_of_interest = mapfunc$PLACES_CAMBRIDGESHIRE_ENVIRONS,
     place_points = TRUE,
@@ -368,8 +392,21 @@ mapfunc$geography_heatmap <- function(
     # ... all.x is TRUE: we show all of our map (even if parts have no data)
     # ... but not all.y: we don't show data that's off our map
 
+    p <- ggplot(data_with_geography)
+    if (!is.null(boundary_shape)) {
+        boundary_geom <- geom_sf(
+            data = boundary_shape,
+            linewidth = boundary_linewidth,
+            colour = boundary_colour,  # line colour
+            fill = boundary_fill,
+            alpha = boundary_alpha
+        )
+        if (!boundary_above_shapes) {
+            p <- p + boundary_geom
+        }
+    }
     p <- (
-        ggplot(data_with_geography) +
+        p +
         geom_sf(
             # aes_string(fill = depvar),  # deprecated syntax
             aes(fill = .data[[depvar]]),  # replacement syntax
@@ -385,6 +422,9 @@ mapfunc$geography_heatmap <- function(
         xlab(x_label) +
         ylab(y_label)
     )
+    if (!is.null(boundary_shape) && boundary_above_shapes) {
+        p <- p + boundary_geom
+    }
     if (!is.null(points_of_interest)) {
         if (place_points) {
             p <- p + geom_sf(
@@ -425,7 +465,7 @@ mapfunc$geography_heatmap <- function(
 
 
 # =============================================================================
-# Postcode-type mapping (BUT: see conceptual problem re LSOA mapping, below).
+# Reading ONS postcode data
 # =============================================================================
 
 mapfunc$read_ons_postcode_database <- function(
@@ -442,7 +482,7 @@ mapfunc$read_ons_postcode_database <- function(
     verbose = TRUE
 ) {
     # Reads the main Office for National Statistics Postcode Database (ONSPD)
-    # file.
+    # file. Adds some extra columns.
     #
     # Parameters:
     #
@@ -453,6 +493,11 @@ mapfunc$read_ons_postcode_database <- function(
     #       Usual cache control.
     #   verbose
     #       Be verbose?
+    #
+    # Returns:
+    #   The ONSPD table, as a data.table(), with additional fields:
+    #       pcd_outward
+    #           Outward postcode (postcode district).
 
     if (!is.null(cache_filename)
             && file.exists(cache_filename)
@@ -466,7 +511,11 @@ mapfunc$read_ons_postcode_database <- function(
         cat(sprintf("Reading full ONSPD from %s\n", onspd_csv_filename))
     }
 
+    # Read the data:
     onspd <- data.table::fread(onspd_csv_filename)
+
+    # Add fields:
+    onspd[, pcd_outward := sub(" .*", "", pcds)]
 
     if (!is.null(cache_filename)) {
         miscfile$write_rds(onspd, cache_filename)
@@ -474,72 +523,14 @@ mapfunc$read_ons_postcode_database <- function(
     return(onspd)
 }
 
-# CONCEPTUALLY BROKEN: one LSOA can map to several top-level postcodes. That is
-# because some LSOAs fall into multiple top-level postcodes; for example,
+
+# Don't attempt to map LSOAs to top-level postcodes (postcode districts).
+# Some LSOAs fall into multiple top-level postcodes; for example,
 # E01017943 maps to 10 top-level postcodes. That is equally true in the main
 # ONSPD and in
 # https://geoportal.statistics.gov.uk/datasets/f9c8996d451f44b79ab97ddd369ad5db/about.
-
-# mapfunc$get_lsoa_outward_postcode_map <- function(
-#     onspd = mapfunc$read_ons_postcode_database(),
-#     lsoa_colname = "lsoa11cd",
-#     cache_filename = file.path(TMP_DIR, "onspd_lsoa_to_outwardpcd.rds"),
-#     wipe_cache = FALSE,
-#     verbose = TRUE
-# ) {
-#     # Makes a conversion table between LSOA and "outward" (top-level) postcodes
-#     # (the first half of a postcode).
-#     if (!is.null(cache_filename)
-#             && file.exists(cache_filename)
-#             && !wipe_cache) {
-#         if (verbose) {
-#             cat(sprintf("Loading cached data from %s\n", cache_filename))
-#         }
-#         return(miscfile$read_rds(cache_filename))
-#     }
 #
-#     onspd[, pcd_outward := sub(" .*", "", pcds)]
-#     columns_to_select <- c(lsoa_colname, "pcd_outward")
-#     m <- unique(onspd[, ..columns_to_select])
-#     setkeyv(m, lsoa_colname)
-#
-#     if (!is.null(cache_filename)) {
-#         miscfile$write_rds(m, cache_filename)
-#     }
-#     return(m)
-# }
-
-
-# mapfunc$convert_lsoa_shapes_to_toplevel_postcode_shapes <- function(
-#     lsoa_shapes = mapfunc$get_cambs_lsoa_map_shapes(),
-#     lsoa_outwardpcd_map = mapfunc$get_lsoa_outward_postcode_map(),
-#     lsoa_colname = "lsoa11cd",
-#     cache_filename = file.path(TMP_DIR, "outwardpcd_shapes.rds"),
-#     wipe_cache = FALSE,
-#     verbose = TRUE
-# ) {
-#     # Makes shapes by merging LSOAs into outward postcode shapes.
-#     # CONCEPTUAL PROBLEM: some LSOAs fall into multiple top-level postcodes.
-#
-#     if (!is.null(cache_filename)
-#             && file.exists(cache_filename)
-#             && !wipe_cache) {
-#         if (verbose) {
-#             cat(sprintf("Loading cached data from %s\n", cache_filename))
-#         }
-#         return(miscfile$read_rds(cache_filename))
-#     }
-#
-#     stopifnot(lsoa_colname %in% colnames(lsoa_shapes))
-#     stopifnot(lsoa_colname %in% colnames(lsoa_outwardpcd_map))
-#
-#     lsoa_labelled_pcd <- merge(
-#         x = lsoa_shapes,
-#         y = lsoa_outwardpcd_map,
-#         by.x = lsoa_colname,
-#         by.y = lsoa_colname,
-#         all.x = TRUE  # all the shapes (but not all the postcodes)
-#     )
+# HOWEVER, note in passing that you can merge shapes in an "sf" object thus:
 #     # https://www.jla-data.net/eng/merging-geometry-of-sf-objects-in-r/
 #     # Quite magical.
 #     outwardpcd_shapes <- (
@@ -549,12 +540,6 @@ mapfunc$read_ons_postcode_database <- function(
 #     )
 #     # Note: some resolve to POLYGON objects; some remain as MULTIPOLYGON.
 #     # For example, CB1 is MULTIPOLYGON.
-#
-#     if (!is.null(cache_filename)) {
-#         miscfile$write_rds(outwardpcd_shapes, cache_filename)
-#     }
-#     return(outwardpcd_shapes)
-# }
 
 
 mapfunc$read_ons_postcode_district_shapefile <- function(
@@ -586,6 +571,77 @@ mapfunc$read_ons_postcode_district_shapefile <- function(
         verbose = verbose
     ))
 }
+
+
+mapfunc$read_ons_subicb_shapefile <- function(
+    filename = file.path(
+        "/data",  # e.g. home directory mounted via Docker
+        "dev",
+        "onspd",
+        "shapes",
+        "Sub_Integrated_Care_Board_Locations_April_2026_Boundaries_EN_BFC_-5211212599618763317",
+        "SICBL_APR_2026_EN_BFC.shp"
+    ),
+    cache_filename = file.path(
+        TMP_DIR,
+        "cambridgeshire_subicb_shapes.rds"
+    ),
+    boundaries = mapfunc$CAMBRIDGESHIRE_BOUNDARY,
+    ccg_codes = mapfunc$CAMBRIDGESHIRE_PETERBOROUGH_CCG_CODES,
+    simplify = TRUE,
+    dTolerance = 250,  # in metres
+    wipe_cache = FALSE,
+    verbose = TRUE
+) {
+    # Download from: https://geoportal.statistics.gov.uk/
+    #
+    # The Cambridgeshire/Peterborough CCG has two intruding lines: the River
+    # Nene (e.g. Peterborough -> Wisbech), and the New Bedford River/Old
+    # Bedford River (to Downham Market). To trim that off, we simplify.
+    # The best value of dTolerance is about 250, established empirically:
+    #   ggplot(st_simplify(cchshapes, dTolerance = 250)) + geom_sf()
+    # From ?st_simplify, for latitude/longitude coordinates, the units of
+    # dTolerance are metres.
+
+    shapes <- mapfunc$read_map_shapes(
+        geography_shape_file = filename,
+        boundaries = boundaries,
+        cache_filename = cache_filename,
+        wipe_cache = wipe_cache,
+        verbose = verbose
+    )
+    if (simplify) {
+        shapes <- sf::st_simplify(shapes, dTolerance = dTolerance)
+    }
+    if (is.null(ccg_codes)) {
+        return(shapes)
+    }
+    return(shapes[shapes$SICBL26CD %in% ccg_codes, ])
+}
+
+
+# =============================================================================
+# Processing ONS postcode data
+# =============================================================================
+
+mapfunc$get_postcode_districts_for_ccg <- function(
+    onspd = mapfunc$read_ons_postcode_database(),
+    ccg_codes = mapfunc$CAMBRIDGESHIRE_PETERBOROUGH_CCG_CODES
+) {
+    postcodes <- onspd[sicbl24cd %in% ccg_codes]
+    return(sort(unique(postcodes$pcd_outward)))
+}
+
+
+# There is little point in reading individual postcodes by CCG, because the
+# next stage for mapping requires postcode-level shape files and that is a
+# commercial product: e.g. ONS "Code-Point with Polygons".
+#
+# How about the intermediate step: postcode sectors? Can't find those.
+#
+# Then CCGs themselves, or ICBs: they do exist.
+# Sub-ICB may be helpful: https://geoportal.statistics.gov.uk/
+# See shapefile above.
 
 
 # =============================================================================
