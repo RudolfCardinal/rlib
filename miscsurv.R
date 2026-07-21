@@ -304,6 +304,9 @@ miscsurv$mk_piecewise_survival_table <- function(
     #       named vector of length 1, e.g. c("event_occurred" = "event_date"),
     #       where the name (e.g. "event_occurred") is the output column name
     #       and the value (e.g. "event_date") is the input column name.
+    #       (If a value for this column is later than the subject's end date,
+    #       from end_date_col, the event is of course treated as not occurring
+    #       within the observation of the subject.)
     #
     #   static_predictor_cols
     #       Vector of column names (in "data") containing predictors that are
