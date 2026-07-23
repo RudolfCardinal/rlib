@@ -209,12 +209,12 @@ datetimefunc$duration_days <- function(start_date, end_date) {
 datetimefunc$mk_pulsetable_dimensionless <- function(
     event_times,
     event_durations,
-    with_checks = FALSE
+    with_checks = TRUE
 ) {
-    # Creates a "pulsetable" object, documenting events for a single subject,
-    # with a presumed duration for each. This object can then be queried, e.g.
-    # for dates, via query_pulsetable_ever(), query_pulsetable_times(), and
-    # query_pulsetable_dates().
+    # Creates a "pulsetable" object, which is a list, documenting events for a
+    # single subject, with a presumed duration for each. This object can then
+    # be queried, e.g. for dates, via query_pulsetable_ever(),
+    # query_pulsetable_times(), and query_pulsetable_dates().
     #
     # This version of the function creates a dimensionless pulsetable object.
     # See also mk_pulsetable_dates().
@@ -236,6 +236,10 @@ datetimefunc$mk_pulsetable_dimensionless <- function(
     #
     # Returns a list, with elements:
     #
+    #   n_events
+    #       Number of events. (We have to calculate that internally, and it
+    #       is a shortcut to the caller to be able to check that rather than
+    #       recalculate the length of e.g. event_times.)
     #   event_times
     #       As for the input (event_times), but sorted.
     #   event_durations
@@ -254,20 +258,11 @@ datetimefunc$mk_pulsetable_dimensionless <- function(
     #       But included for compatibility with mk_pulsetable_dates().)
 
     n_events <- length(event_times)
-    n_durations <- length(event_durations)
-
-    # Argument checks
-    if (with_checks) {
-        stopifnot(all(is.finite(event_times)))
-        # ... excludes NA values (but 0-length OK)
-        stopifnot(n_durations == 1 || n_durations == n_events)
-        stopifnot(all(is.finite(event_durations)))
-        stopifnot(all(event_durations > 0))
-    }
 
     if (n_events == 0) {
         # Return a "non-event" result.
         return(list(
+            n_events = 0,
             event_times = NULL,  # NULL is equivalent to c()
             event_durations = NULL,
             merged_event_times = NULL,
@@ -277,6 +272,18 @@ datetimefunc$mk_pulsetable_dimensionless <- function(
         ))
     }
     # From here on, we have at least one event.
+
+    n_durations <- length(event_durations)
+
+    # Argument checks, for the "at least one event" case.
+    if (with_checks) {
+        stopifnot(all(is.finite(event_times)))
+        # ... excludes NA values (but 0-length OK, though that situation
+        #     has already been handled above)
+        stopifnot(n_durations == 1 || n_durations == n_events)
+        stopifnot(all(is.finite(event_durations)))
+        stopifnot(all(event_durations > 0))
+    }
 
     # Sort the inputs (replacing the original values).
     if (n_durations > 1) {
@@ -308,6 +315,7 @@ datetimefunc$mk_pulsetable_dimensionless <- function(
     episodes[, duration := end - start]
 
     return(list(
+        n_events = n_events,
         event_times = event_times,
         event_durations = event_durations,
         merged_event_times = episodes$start,
@@ -324,7 +332,7 @@ datetimefunc$mk_pulsetable_dates <- function(
     event_durations,
     time_units = "years"
 ) {
-    # As for mk_pulsetable_dimensionless(), which it relies on, but using
+    # As for mk_pulsetable_dimensionless(), on which it relies, but using
     # dates.
     #
     # Arguments:
@@ -337,33 +345,49 @@ datetimefunc$mk_pulsetable_dates <- function(
     #   event_durations
     #       Should be a lubridate duration in a sensible (constant) unit, e.g.
     #       lubridate::duration(30, units = "days") -- or a vector of these, of
-    #       the same length as event_dates. Though lubridate does use
-    #       constants, e.g. 365.25 days per year for "years" (see
-    #       ?lubridate::duration), so "years" is fine.
+    #       the same length as event_dates. Acceptable to be empty, i.e. c()
+    #       or NULL, if event_dates is also empty.
     #   time_units
     #       Textual units (e.g. "days", "years") to operate with internally.
-    #       As used by the lubridate package.
+    #       As used by the lubridate package. (Note: lubridate does use
+    #       constants, e.g. 365.25 days per year for "years" [see
+    #       ?lubridate::duration], so "years" is usually fine.)
     #
     # Returns:
     #
     #   As for mk_pulsetable_dimensionless(), but this version of the
-    #   pulsetable object will carry date "anchoring" information too.
+    #   pulsetable list will carry date "anchoring" information too, in
+    #   these elements (copied directly from the input):
+    #       origin_date
+    #       time_units
 
+    # Argument checks
     if (!(length(origin_date) == 1
             && lubridate::is.Date(origin_date))) {
+        # origin_date must be of length 1 and be a date
         stop("Bad origin_date parameter: ", origin_date)
     }
     n_event_dates <- length(event_dates)
     if (!(n_event_dates == 0 || all(lubridate::is.Date(event_dates)))) {
+        # event_dates must be of length 0, or be all dates
         stop("Bad event_dates parameter: ", event_dates)
     }
     n_event_durations <- length(event_durations)
     if (!(
-        (n_event_durations == 1 || n_event_durations == n_event_dates)
-        && all(lubridate::is.duration(event_durations))
+        (n_event_durations == 0 && n_event_dates == 0)
+        || (
+            (n_event_durations == 1 || n_event_durations == n_event_dates)
+            && all(lubridate::is.duration(event_durations))
+        )
     )) {
+        # event_durations must be one of:
+        # (a) empty, only if event_dates is empty;
+        # (b) a single duration;
+        # (c) a vector of durations whose length matches that of event_dates.
         stop("Bad event_durations parameter: ", event_durations)
     }
+
+    # Create pulsetable
     pt <- datetimefunc$mk_pulsetable_dimensionless(
         event_times = datetimefunc$duration_units(
             start_date = origin_date,
@@ -1283,6 +1307,44 @@ datetimefunc$test_pulsetable <- function(verbose = TRUE) {
     p8_test_times <- c(0, 5, 10, 15, 200)
     q8 <- datetimefunc$query_pulsetable_times_v1(p8, p8_test_times)
     stopifnot(q8[t == 15]$current == TRUE)
+
+    # -------------------------------------------------------------------------
+    # 9 (compare 4)
+    # -------------------------------------------------------------------------
+
+    # An empty date one with no duration:
+    if (verbose) {
+        mktitle("p9")
+    }
+    p9 <- datetimefunc$mk_pulsetable_dates(
+        origin_date = p2_origin_date,
+        event_dates = c(),
+        event_durations = NULL,
+        time_units = p2_time_units
+    )
+    p9i <- datetimefunc$mk_intervaltable_from_pulsetable(p9)
+    if (verbose) {
+        print(p9)
+        print(p9i)
+    }
+    # Empty ones:
+    q9a <- datetimefunc$query_pulsetable_dates(
+        p9,
+        p2_query_dates
+    )
+    q9b <- datetimefunc$query_pulsetable_dates(
+        p9,
+        p2_query_dates,
+        query_pulsetable_fn = datetimefunc$query_pulsetable_times_v2
+    )
+    if (verbose) {
+        mktitle("q9a")
+        print(q9a)
+        mktitle("q9b")
+        print(q9b)
+    }
+    datetimefunc$ensure_two_tables_equal(q9a, q9b)
+
 }
 
 

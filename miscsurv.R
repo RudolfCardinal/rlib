@@ -291,7 +291,7 @@ miscsurv$mk_piecewise_survival_table <- function(
     #       Name of a column (in "data") containing dates at which each
     #       subject's observation begins. Must not be blank.
     #   end_date_col
-    #       Name of a column (in "data") containin dates at which each
+    #       Name of a column (in "data") containing dates at which each
     #       subject's observation ends (unless the outcome occurs -- the
     #       outcome will truncate observation earlier). Must not be blank.
     #   terminal_event_date_col
