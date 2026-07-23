@@ -118,7 +118,7 @@ miscfile$write_text <- function(filename, text)
 # Spreadsheet output
 # =============================================================================
 
-write_sheet <- function(data, filename, sheet_name, append = TRUE) {
+miscfile$write_sheet <- function(data, filename, sheet_name, append = TRUE) {
     # Write a sheet (table) to an XLSX spreadsheet file.
     #
     # https://stackoverflow.com/questions/27713310
