@@ -404,10 +404,10 @@ miscsurv$mk_piecewise_survival_table <- function(
     #           latch predictor (to the END of the current interval).
     #
     #       {{pulse_cols}}_{{suffix_current}}
-    #           A "current" column per "pulse" predictor, indicating whether
-    #           the event occurs during (actually: at the start of) this time
-    #           interval. Intervals are defined as [start, end), i.e. start
-    #           inclusive, end exclusive.
+    #           A "current" column per "pulse" predictor (optionally renamed,
+    #           as above), indicating whether the event occurs during
+    #           (actually: at the start of) this time interval. Intervals are
+    #           defined as [start, end), i.e. start inclusive, end exclusive.
     #       {{pulse_cols}}_{{suffix_hx}}
     #           A "history" column per "pulse" predictor, indicating whether
     #           the event has occurred during (at the start of) or prior to
@@ -730,7 +730,7 @@ miscsurv$mk_piecewise_survival_table <- function(
                     current <- pq$current[-n_dates]  # see above
                     cum_t_on <- pq$cum_t_on[-1]  # see above
                 }
-                dst_pulse_col <- pulse_cols[i]
+                dst_pulse_col <- pulse_dest_col_names[i]  # renaming here
                 subject_result <- (
                     subject_result
                     %>% mutate(
@@ -998,7 +998,8 @@ miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
             "cva" = "stroke",
             "mi"
         ),
-        pulse_cols = c("lithium"),
+        # Also: rename this:
+        pulse_cols = c("li" = "lithium"),
         extra_slice_date_cols = c("extra_slice_dates_1", "extra_slice_dates_2")
     )
     cat("\n- test_piecewise_survival_tables: result 6 (static + latch predictors + time-varying binary predictors):\n")
