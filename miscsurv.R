@@ -294,16 +294,12 @@ miscsurv$mk_piecewise_survival_table <- function(
     #       Name of a column (in "data") containing dates at which each
     #       subject's observation ends (unless the outcome occurs -- the
     #       outcome will truncate observation earlier). Must not be blank.
-    #   terminal_event_date_col
+    #   terminal_event_date_col (*)
     #       Name of a column (in "data") containing the date at which the event
     #       of interest occurred, or blank (NA) if it did not occur. If this
     #       event occurs, it terminates the overall observation of the subject.
     #       In the output, this is reflected by a binary (numeric, 0/1) column
     #       indicating whether the event occurs in a given time slice.
-    #       Optionally, the column can be renamed in the output by passing a
-    #       named vector of length 1, e.g. c("event_occurred" = "event_date"),
-    #       where the name (e.g. "event_occurred") is the output column name
-    #       and the value (e.g. "event_date") is the input column name.
     #       (If a value for this column is later than the subject's end date,
     #       from end_date_col, the event is of course treated as not occurring
     #       within the observation of the subject.)
@@ -312,17 +308,12 @@ miscsurv$mk_piecewise_survival_table <- function(
     #       Vector of column names (in "data") containing predictors that are
     #       static (fixed, temporally invariant) for each subject. Column type
     #       could be anything. Use NULL if there aren't any such columns.
-    #   latch_on_predictor_cols
+    #   latch_on_predictor_cols (*)
     #       Vector of column names (in "data") containing dates (or NA values),
     #       representing predictors that are assumed to start "off", and then
     #       if their date (of onset) is not NA, switch "on" at that date, and
-    #       remain on subsequently. Optionally, the vector NAMES can be
-    #       specified, e.g. c("had_stroke" = "stroke_date"), and these names
-    #       will be used for the destination columns (in this example,
-    #       "had_stroke" would be in the final output). (If the destination
-    #       names are not specified, the names of the date columns will be
-    #       used.) Use NULL if there aren't any such columns.
-    #   pulse_cols
+    #       remain on subsequently. Use NULL if there aren't any such columns.
+    #   pulse_cols (*)
     #       Optional vector of column names containing pulsetable objects (see
     #       datetimefunc.R), representing "pulse" predictors (binary predictors
     #       that can go on/off over time). Each column must be a list column,
@@ -354,6 +345,15 @@ miscsurv$mk_piecewise_survival_table <- function(
     #       by data.frame().
     #   additional_slice_dates
     #       Optional: additional vector of dates at which to slice.
+    #
+    # (*) RENAMING. For these column arguments, optionally you can rename the
+    # column or columns by using a named vector, using the syntax c("newname" =
+    # "oldname") for a single column, or, where applicable, c("newname1" =
+    # "oldname1", "newname2" = "oldname2"), etc., for multiple columns. For
+    # example, if you have an input column named "stroke_date", you could
+    # rename it using the argument syntax c("had_stroke" = "stroke_date"); in
+    # this example, "had_stroke" would be used  in the final output). If you
+    # don't use this method, the original column names are used.
     #
     # Returns:
     #
@@ -481,7 +481,7 @@ miscsurv$mk_piecewise_survival_table <- function(
     pulse_dest_col_names <- names_or_values(pulse_cols)
     names(pulse_cols) <- NULL  # as above
 
-    # And for the output column,
+    # And for the output column:
     terminal_event_dest_col <- names_or_values(terminal_event_date_col)
     names(terminal_event_date_col) <- NULL
 
