@@ -2126,7 +2126,7 @@ miscresults$mk_model_anova_coeffs <- function(
     #       Be verbose?
     #
     #   ...:
-    #       Passed to model_fn.
+    #       Passed to model_fn. For example: "family".
     #
     # Returns a list with these elements:
     #
