@@ -415,7 +415,8 @@ fd4 <- (
             y_start + y_age + y_sex + y_drug + y_boolpred
                 + y_wslin + y_wsfac
                 + err
-        )
+        ),
+        succeeded = as.integer(performance > mean(performance))
     )
     %>% as.data.table()
 )
@@ -481,6 +482,7 @@ ft2 <- (
     )
 )
 
+cat("Creating m3a...\n")
 m3a <- mk_model_anova_coeffs(
     model_fn = lm,
     formula = performance ~ age + drug * sex,
@@ -492,6 +494,7 @@ ft3a <- (
     %>% set_caption("[ft3a] Model via lm(); default options")
 )
 
+cat("Creating m3b...\n")
 m3b <- mk_model_anova_coeffs(
     model_fn = glm,
     formula = succeeded ~ age + drug * sex,
@@ -504,6 +507,7 @@ ft3b <- (
     %>% set_caption("[ft3b] glm, logistic regression; default options")
 )
 
+cat("Creating m3c...\n")
 m3c <- mk_model_anova_coeffs(
     model_fn = glm,
     formula = succeeded ~ age + drug * sex,
@@ -519,6 +523,7 @@ ft3c <- (
     %>% set_caption("[ft3c] glm, logistic regression; squish up rows")
 )
 
+cat("Creating m3d...\n")
 m3d <- mk_model_anova_coeffs(
     model_fn = glm,
     formula = succeeded ~ age + drug * sex,
@@ -538,6 +543,7 @@ ft3d <- (
     ))
 )
 
+cat("Creating m3e...\n")
 m3e <- mk_model_anova_coeffs(
     # With continuous predictor * factor interaction:
     model_fn = lm,
@@ -554,6 +560,7 @@ ft3e <- (
         "[ft3e] lm; this time suppress coeffs tests for non-significant F"
     )
 )
+cat("Creating m3m...\n")
 m3m <- mk_model_anova_coeffs(
     # With continuous predictor * factor interaction:
     model_fn = lm,
@@ -571,6 +578,7 @@ ft3m <- (
     )
 )
 
+cat("Creating m3f...\n")
 m3f <- mk_model_anova_coeffs(
     # Also with boolean predictor:
     model_fn = lm,
@@ -603,6 +611,7 @@ ft3f <- (
 )
 
 # Type 1 checks:
+cat("Creating m3g...\n")
 m3g <- mk_model_anova_coeffs(
     model_fn = lm,
     formula = performance ~ age + drug,
@@ -610,6 +619,7 @@ m3g <- mk_model_anova_coeffs(
     type = "I",
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS
 )
+cat("Creating m3h...\n")
 m3h <- mk_model_anova_coeffs(
     model_fn = lm,
     formula = performance ~ drug + age,
@@ -618,6 +628,7 @@ m3h <- mk_model_anova_coeffs(
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS
 )
 # Manual checks: order dependency as expected in m3g versus m3h
+cat("Creating m3i...\n")
 m3i <- mk_model_anova_coeffs(
     model_fn = glm,
     formula = performance ~ age + drug,
@@ -625,6 +636,7 @@ m3i <- mk_model_anova_coeffs(
     type = "I",
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS
 )
+cat("Creating m3j...\n")
 m3j <- mk_model_anova_coeffs(
     model_fn = glm,
     formula = performance ~ drug + age,
@@ -635,6 +647,7 @@ m3j <- mk_model_anova_coeffs(
 # Manual checks: order dependency as expected in m3i versus m3j
 
 # More for model comparison:
+cat("Creating m3k...\n")
 m3k <- mk_model_anova_coeffs(
     # With continuous predictor * factor interaction:
     model_fn = lm,
@@ -642,6 +655,7 @@ m3k <- mk_model_anova_coeffs(
     data = fd3,
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS
 )
+cat("Creating m3l...\n")
 m3l <- mk_model_anova_coeffs(
     # With continuous predictor * factor interaction:
     model_fn = lm,
@@ -651,6 +665,7 @@ m3l <- mk_model_anova_coeffs(
 )
 
 
+cat("Creating m4f...\n")
 m4f <- mk_model_anova_coeffs(
     # Also with boolean predictor:
     model_fn = lmerTest::lmer,
@@ -670,6 +685,27 @@ m4f <- mk_model_anova_coeffs(
 ft4a <- (
     m4f$table_flex
     %>% set_caption("[ft4a] lmerTest::lmer, with within-subjects predictors")
+)
+
+cat("Creating m5f...\n")
+m5f <- mk_model_anova_coeffs(
+    # Poisson, between-subjects:
+    model_fn = glm,
+    family = poisson,
+    formula = (
+        succeeded ~
+            age * drug * sex * boolpred
+            + boolpred:wsfac
+    ),
+    data = fd3,
+    predictor_replacements = M3_PREDICTOR_REPLACEMENTS,
+    squish_up_level_rows = TRUE,
+    suppress_nonsig_coeffs = FALSE,
+    suppress_nonsig_coeff_tests = TRUE
+)
+ft5a <- (
+    m5f$table_flex
+    %>% set_caption("[ft5a] lme4::glmer, Poisson, with within-subjects predictors")
 )
 
 
