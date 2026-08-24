@@ -1,0 +1,10 @@
+# https://stackoverflow.com/questions/68858490/disable-r-linting-in-vscode
+# https://lintr.r-lib.org/articles/lintr.html#configuring-linters
+
+linters: linters_with_defaults(
+    line_length_linter = line_length_linter(80),
+    indentation_linter = indentation_linter(4),
+    commented_code_linter = NULL
+)
+exclusions: list(
+)

@@ -167,8 +167,6 @@ mksurvplot <- function(
 }
 
 
-
-
 build_composite_survival_prediction <- function(
     model,
     newtime,
