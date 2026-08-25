@@ -29,6 +29,7 @@ local({
         flextable,
         ftExtra,  # for markup within flextable tables
         microbenchmark,
+        progress,  # progress bars
         rcompanion,  # for wilcoxonZ
         rlang  # for dots_n
     )
@@ -262,7 +263,14 @@ miscsurv$mk_piecewise_survival_table <- function(
     suffix_current = "_current",
     time_units = "years",
     extra_slice_date_cols = NULL,
-    additional_slice_dates = NULL
+    additional_slice_dates = NULL,
+    show_progress_bar = TRUE,
+    progress_bar_format = paste0(
+        "(:spin) [:bar] :percent ",
+        "[:current/:total | Rate :tick_rate/s | ",
+        "Elapsed :elapsedfull | Estimated time left :eta]"
+    ),
+    progress_bar_clear = FALSE
 ) {
     # Create a table for survival analysis by slicing each subject's timeline up
     # based on multiple predictors that can:
@@ -345,6 +353,14 @@ miscsurv$mk_piecewise_survival_table <- function(
     #       by data.frame().
     #   additional_slice_dates
     #       Optional: additional vector of dates at which to slice.
+    #
+    #   show_progress_bar
+    #       Show a progress bar? NOTE that it will only appear if an operation
+    #       is reasonably slow.
+    #   progress_bar_format
+    #       Progress bar format, for progress::progress_bar
+    #   progress_bar_clear
+    #       Clear the progress bar on completion?
     #
     # (*) RENAMING. For these column arguments, optionally you can rename the
     # column or columns by using a named vector, using the syntax c("newname" =
@@ -531,6 +547,14 @@ miscsurv$mk_piecewise_survival_table <- function(
         cat("! Attempting to use inner function column names:\n")
         print(dest_colnames)
         stop("Predictor names supplied make these column names non-unique")
+    }
+
+    if (show_progress_bar) {
+        progress_bar <- progress::progress_bar$new(
+            total = nrow(data),
+            format = progress_bar_format,
+            clear = progress_bar_clear
+        )
     }
 
     # -------------------------------------------------------------------------
@@ -764,6 +788,9 @@ miscsurv$mk_piecewise_survival_table <- function(
             )
             %>% select(all_of(c(dest_colnames)))  # Sort
         )
+        if (show_progress_bar) {
+            progress_bar$tick()
+        }
         return(subject_result)
     }
 
@@ -802,7 +829,10 @@ miscsurv$mk_piecewise_survival_table <- function(
 }
 
 
-miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
+miscsurv$test_piecewise_survival_tables <- function(
+    verbose = TRUE,
+    test_progress_bar = FALSE
+) {
     # Test the creation of piecewise survival tables.
     bob_dob_txt <- "2002-02-02"
     bob_index <- 2
@@ -1004,6 +1034,33 @@ miscsurv$test_piecewise_survival_tables <- function(verbose = TRUE) {
     )
     cat("\n- test_piecewise_survival_tables: result 6 (static + latch predictors + time-varying binary predictors):\n")
     print(x6, n = Inf)
+
+    if (test_progress_bar) {
+        # A very large one
+        d7 <- purrr::map_dfr(seq_len(1000), ~d1)
+        d7$subject <- paste0(d7$subject, 1:nrow(d7))
+        # ... https://stackoverflow.com/questions/8753531/
+        cat("\n- test_piecewise_survival_tables: starting 7 (bigger table)...\n")
+        x7 <- miscsurv$mk_piecewise_survival_table(
+            data = d7,
+            subject_id_col = "subject",
+            dob_col = "dob",
+            start_date_col = "start_date",
+            end_date_col = "end_date",
+            terminal_event_date_col = c("event_eg_died" = "event_date"),
+            static_predictor_cols = c("diabetic", "hypertensive"),
+            latch_on_predictor_cols = c(
+                "cva" = "stroke",
+                "mi"
+            ),
+            # Also: rename this:
+            pulse_cols = c("li" = "lithium"),
+            extra_slice_date_cols = c("extra_slice_dates_1", "extra_slice_dates_2")
+        )
+        cat("\n- test_piecewise_survival_tables: finished 7 (bigger table).\n")
+    } else {
+        cat("Skipping test 7 (progress bar).\n")
+    }
 }
 
 

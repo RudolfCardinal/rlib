@@ -218,6 +218,8 @@ RUN install2.r --error --deps TRUE \
     # ... Matrix population models.
     popEpi \
     # ... e.g. splitMulti().
+    progress \
+    # ... progress bar: seems to be included anyway
     proto \
     # ... Prototype object-based programming.
     pwr \
