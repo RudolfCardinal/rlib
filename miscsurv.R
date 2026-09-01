@@ -371,6 +371,15 @@ miscsurv$mk_piecewise_survival_table <- function(
     # this example, "had_stroke" would be used  in the final output). If you
     # don't use this method, the original column names are used.
     #
+    # DATE CONSTRAINTS:
+    #
+    #   For every subject, there must be a period (at least one day) to
+    #   observe. That means that the subject's end date must be at least a day
+    #   after the start date (or the duration would be calculated as zero).
+    #   That means that you must ensure:
+    #
+    #   start_date_col < {earliest of: terminal_event_date_col, end_date_col}
+    #
     # Returns:
     #
     #   A table containing one row per time interval (multiple rows per
@@ -578,7 +587,16 @@ miscsurv$mk_piecewise_survival_table <- function(
         # The event terminates observation for the subject.
         # But if eventdate is NA, ignore it.
         subjectenddate <- min(eventdate, subjectenddate, na.rm = TRUE)
-        stopifnot(subjectstartdate < subjectenddate)
+        if (!(subjectstartdate < subjectenddate)) {
+            stop(paste0(
+                "miscsurv$mk_piecewise_survival_table: you must ensure that ",
+                "start_date_col ['", start_date_col, "'] < ",
+                "{earliest of: ",
+                "terminal_event_date_col ['", terminal_event_date_col, "'], ",
+                "end_date_col ['", end_date_col, "']}, ",
+                "for all subjects."
+            ))
+        }
 
         # Now, we create (potentially) multiple rows, each representing a time
         # interval. We start by determining dates of relevance: the start/end
@@ -1061,6 +1079,29 @@ miscsurv$test_piecewise_survival_tables <- function(
     } else {
         cat("Skipping test 7 (progress bar).\n")
     }
+
+    d8 <- (
+        d1
+        %>% mutate(
+            end_date = start_date + lubridate::duration(1, units = "days")
+            # using 0 fails (correctly)
+        )
+    )
+    x8 <- miscsurv$mk_piecewise_survival_table(
+        data = d8,
+        subject_id_col = "subject",
+        dob_col = "dob",
+        start_date_col = "start_date",
+        end_date_col = "end_date",
+        terminal_event_date_col = c("event_eg_died" = "event_date"),
+        static_predictor_cols = c("diabetic", "hypertensive"),
+        latch_on_predictor_cols = c(
+            "cva" = "stroke",
+            "mi"
+        )
+    )
+    cat("\n- test_piecewise_survival_tables: result 8 (end date = start date + 1):\n")
+    print(x8, n = Inf)
 }
 
 
