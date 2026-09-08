@@ -1462,8 +1462,8 @@ datetimefunc$merge_events_dimensionless_v1 <- function(
     #       Validate inputs? Faster not to.
     #
     # Returns:
-    #       A tibble with columns "start" and "end" representing contiguous,
-    #       amalgamated, sorted episodes.
+    #       A data.table with columns "start" and "end" representing
+    #       contiguous, amalgamated, sorted episodes.
 
     n_events <- length(event_times)
     if (with_checks) {
@@ -1474,24 +1474,24 @@ datetimefunc$merge_events_dimensionless_v1 <- function(
         stopifnot(max_permitted_gap >= 0)
     }
     if (n_events == 0) {
-        return(tibble(
+        return(data.table(
             start = numeric(),
             end = numeric()
         ))
     }
 
-    d <- (
-        tibble(start = event_times, end = event_ends)
-        %>% arrange(start)
-    )
+    d <- data.table(start = event_times, end = event_ends)
+    setkey(d, start)
     n <- nrow(d)  # number of events
+    starts <- d$start  # faster to look this up once
+    ends <- d$end
     accumulated_starts <- NULL
     accumulated_ends <- NULL
     current_start <- NA
     current_end <- NA
     for (i in 1:n) {  # iterate through events
-        s <- d$start[i]
-        e <- d$end[i]
+        s <- starts[i]
+        e <- ends[i]
         if (is.na(current_start)) {
             # Starting a new episode.
             current_start <- s
@@ -1525,7 +1525,7 @@ datetimefunc$merge_events_dimensionless_v1 <- function(
     # "break" commands come here
     accumulated_starts <- c(accumulated_starts, current_start)
     accumulated_ends <- c(accumulated_ends, current_end)
-    return(tibble(
+    return(data.table(
         start = accumulated_starts,
         end = accumulated_ends
     ))
@@ -1538,8 +1538,7 @@ datetimefunc$merge_events_dimensionless_v2 <- function(
     max_permitted_gap = 0,
     with_checks = FALSE
 ) {
-    # As for merge_events_dimensionless(), but via a different method. It turns
-    # out this is the SLOWER of two methods; see merge_events_dimensionless().
+    # As for merge_events_dimensionless(), but via a different method.
     # Arguments are as before.
 
     n_events <- length(event_times)
@@ -1551,7 +1550,7 @@ datetimefunc$merge_events_dimensionless_v2 <- function(
         stopifnot(max_permitted_gap >= 0)
     }
     if (n_events == 0) {
-        return(tibble(
+        return(data.table(
             start = numeric(),
             end = numeric()
         ))
@@ -1581,6 +1580,7 @@ datetimefunc$merge_events_dimensionless_v2 <- function(
         )
         %>% ungroup()
         %>% select(start, end)
+        %>% as.data.table()
     )
     return(episodes)
 }
@@ -1592,7 +1592,8 @@ datetimefunc$merge_events_dimensionless_v3 <- function(
     max_permitted_gap = 0,
     with_checks = FALSE
 ) {
-    # Currently the fastest version of this function.
+    # As for merge_events_dimensionless(), but via a different method.
+    # Arguments are as before.
 
     n_events <- length(event_times)
     if (with_checks) {
@@ -1625,12 +1626,15 @@ datetimefunc$merge_events_dimensionless_v3 <- function(
         groupnum = cumsum(new_group)
     )[, .(start = min(start), end = max(end)), by = .(groupnum)]
     episodes[, groupnum := NULL]
-    return(as_tibble(episodes))
+    return(episodes)
 }
 
 
 # The fastest:
-datetimefunc$merge_events_dimensionless <- datetimefunc$merge_events_dimensionless_v3
+datetimefunc$merge_events_dimensionless <- (
+    # In the benchmark below: v1 fastest, v3 next, v2 worst.
+    datetimefunc$merge_events_dimensionless_v1
+)
 
 
 # -----------------------------------------------------------------------------
@@ -1661,13 +1665,11 @@ datetimefunc$merge_events_dates <- function(
         event_ends = event_ends,
         max_permitted_gap = max_permitted_gap
     )
-    return (
-        episodes_dimensionless
-        %>% mutate(
-            start = as.Date(start),
-            end = as.Date(end)
-        )
-    )
+    episodes_dimensionless[, `:=`(
+        start = as.Date(start),
+        end = as.Date(end)
+    )]
+    return(episodes_dimensionless)
 }
 
 

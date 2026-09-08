@@ -29,7 +29,7 @@ local({
         flextable,
         ftExtra,  # for markup within flextable tables
         microbenchmark,
-        progress,  # progress bars
+        # progress,  # progress bars
         rcompanion,  # for wilcoxonZ
         rlang  # for dots_n
     )
@@ -38,6 +38,7 @@ local({
         tidyverse
     )
 })
+
 
 # =============================================================================
 # Namespace-like method: http://stackoverflow.com/questions/1266279/#1319786
@@ -53,7 +54,7 @@ miscsurv <- new.env()
 # A standard tibble column is a vector. A list column (e.g. tibble, data.table)
 # is itself a list. The column is a list. (Lists are also vectors.) See
 # https://dcl-prog.stanford.edu/list-columns.html.
-
+#
 # if (FALSE) {
 #     testlist1 <- list(x = 3, y = 4)
 #     testlist2 <- list(p = 5, y = 6)
@@ -83,7 +84,7 @@ miscsurv <- new.env()
 #     testtibble[[listcolname]][1]  # a list of length 1
 #     testtibble[[listcolname]][[1]]  # the inner list, testlist1
 # }
-
+#
 # A reminder about R lists:
 #       somelist[number or numbers] -> a subset of the list (which is a list)
 #       somelist[[number]] -> an element of the list
@@ -103,7 +104,7 @@ miscsurv <- new.env()
 # =============================================================================
 # Notes on parallel processing and other speed aspects
 # =============================================================================
-
+#
 # - Using data.table with dplyr: https://dtplyr.tidyverse.org/
 #   Create with dtplyr::lazy_dt(a_data_table_or_similar, immutable = ...).
 #   It doesn't always help; see speed tests below.
@@ -129,7 +130,7 @@ miscsurv <- new.env()
 #     https://github.com/tidyverse/multidplyr/issues/143.
 #
 # Test code (not working):
-
+#
 # if (FALSE) {
 #     t1 <- tibble(
 #         x = c(1, 1, 2, 2, 3, 3),
@@ -146,6 +147,86 @@ miscsurv <- new.env()
 #         %>% group_by(x)
 #         %>% reframe(~ testfunc(.data))
 #     )
+# }
+#
+# =============================================================================
+# Group operations: tidyverse/dplyr group_modify() versus data.table
+# =============================================================================
+# The objective here is to produce a multi-row result per group.
+# The alternatives are tidyverse's group_modify() -- not summarize(), which
+# produces one row per group -- or data.table's "by" and ".SD".
+# Both work and give the same results. But:
+# - data.table provides an automatic progress bar for slow operations; you have
+#   to do it manually with tidyverse.
+#   This is a feature of data.table from version 1.16.0 (25 Aug 2024) onwards;
+#   see https://cran.r-project.org/web/packages/data.table/news/news.html.
+# - data.table is much faster, taking about 10% of the time.
+#
+# if (FALSE) {
+#     n_people <- 1000
+#     per_person <- 10
+#     testdata <- data.table(
+#         person = rep(1:n_people, each = per_person),
+#         age = rep(10 + 1:n_people, each = per_person),
+#         a = 1:(n_people * per_person),
+#         b = (n_people * per_person):1
+#     )
+#     tidyverse_splitter <- function(x_data, y_key) {
+#         # cat("y_key:\n"); print(y_key)
+#         # cat("x_data:\n"); print(x_data)
+#         person <- y_key$person[1]
+#         age <- y_key$age[1]
+#         return(tibble(
+#             mean_a_plus_age = mean(age + x_data$a),
+#             other = c(1, 2)
+#         ))
+#     }
+#     datatable_splitter_1 <- function(person, age, SD) {
+#         # cat("person:\n"); print(person)
+#         # cat("age:\n"); print(age)
+#         # cat("SD:\n"); print(SD)
+#         return(data.table(
+#             mean_a_plus_age = mean(age + SD$a),
+#             other = c(1, 2)
+#         ))
+#     }
+#     datatable_splitter_2 <- function(BY, SD) {
+#         # cat("BY:\n"); print(BY)
+#         # cat("SD:\n"); print(SD)
+#         person <- BY$person
+#         age <- BY$age
+#         return(data.table(
+#             mean_a_plus_age = mean(age + SD$a),
+#             other = c(1, 2)
+#         ))
+#     }
+#     groupingcols <- c("person", "age")
+#     bmk <- microbenchmark::microbenchmark(
+#         tidyverse = {(
+#             testdata
+#             %>% group_by(person, age)
+#             %>% group_modify(~ tidyverse_splitter(x_data = .x, y_key = .y))
+#             # Not summarize(); that produces one row per group.
+#             # Use group_modify() for >1 row per group.
+#             %>% ungroup()
+#         )},
+#         datatable1 = {
+#             testdata[
+#                 ,
+#                 datatable_splitter_1(person, age, .SD),
+#                 by = .(person, age)
+#             ]
+#         },
+#         datatable2 = {
+#             testdata[
+#                 ,
+#                 datatable_splitter_2(.BY, .SD),
+#                 by = groupingcols
+#             ]
+#         },
+#         times = 10
+#     )
+#     print(bmk)
 # }
 
 
@@ -263,14 +344,7 @@ miscsurv$mk_piecewise_survival_table <- function(
     suffix_current = "_current",
     time_units = "years",
     extra_slice_date_cols = NULL,
-    additional_slice_dates = NULL,
-    show_progress_bar = TRUE,
-    progress_bar_format = paste0(
-        "(:spin) [:bar] :percent ",
-        "[:current/:total | Rate :tick_rate/s | ",
-        "Elapsed :elapsedfull | Estimated time left :eta]"
-    ),
-    progress_bar_clear = FALSE
+    additional_slice_dates = NULL
 ) {
     # Create a table for survival analysis by slicing each subject's timeline up
     # based on multiple predictors that can:
@@ -330,8 +404,8 @@ miscsurv$mk_piecewise_survival_table <- function(
     #   suffix_hx
     #       Latch and pulse predictors yield >1 column each. This suffix, for
     #       "history" (hx), is appended to create columns indicating "occurred
-    #       in (at the start of) this or a preceding time interval" (1) or not
-    #       (0).
+    #       in (at the start of) this or a preceding time interval" (TRUE) or
+    #       not (FALSE).
     #   suffix_cumtime
     #       Similarly, this suffix is used to indicate cumulative time since
     #       the onset of the predictor (for latch predictors), to the end of
@@ -340,7 +414,7 @@ miscsurv$mk_piecewise_survival_table <- function(
     #       interval).
     #   suffix_current
     #       Suffix used to label "current" columns for pulse predictors (see
-    #       below).
+    #       below). Boolean.
     #   time_units
     #       The base unit to be used for time, when converting from dates to
     #       time (e.g. "years").
@@ -353,14 +427,6 @@ miscsurv$mk_piecewise_survival_table <- function(
     #       by data.frame().
     #   additional_slice_dates
     #       Optional: additional vector of dates at which to slice.
-    #
-    #   show_progress_bar
-    #       Show a progress bar? NOTE that it will only appear if an operation
-    #       is reasonably slow.
-    #   progress_bar_format
-    #       Progress bar format, for progress::progress_bar
-    #   progress_bar_clear
-    #       Clear the progress bar on completion?
     #
     # (*) RENAMING. For these column arguments, optionally you can rename the
     # column or columns by using a named vector, using the syntax c("newname" =
@@ -423,7 +489,7 @@ miscsurv$mk_piecewise_survival_table <- function(
     #           "Latch" predictor output columns (optionally renamed, as
     #           above), with a suffix according to "latch_suffix_hx",
     #           indicating whether the event has occurred during (at the start
-    #           of) or prior to this time interval.
+    #           of) or prior to this time interval. Boolean.
     #       {{latch_on_predictor_cols}}_{{suffix_cumtime}}
     #           Similarly, but for cumulative time since the onset of this
     #           latch predictor (to the END of the current interval).
@@ -433,16 +499,17 @@ miscsurv$mk_piecewise_survival_table <- function(
     #           as above), indicating whether the event occurs during
     #           (actually: at the start of) this time interval. Intervals are
     #           defined as [start, end), i.e. start inclusive, end exclusive.
+    #           (Boolean.)
     #       {{pulse_cols}}_{{suffix_hx}}
     #           A "history" column per "pulse" predictor, indicating whether
     #           the event has occurred during (at the start of) or prior to
     #           this time interval. This effectively converts a "pulse"-type
-    #           predictor to a "latch"-type predictor.
+    #           predictor to a "latch"-type predictor. (Boolean.)
     #       {{pulse_cols}}_{{suffix_cumtime}}
     #           Similarly, but for cumulative time spent with this pulse
     #           predictor "on", by the END of this interval.
     #
-    #       {{ terminal_event_date_col }}
+    #       {{terminal_event_date_col}}
     #           The terminal event binary (0/1) column (optionally renamed, as
     #           above).
 
@@ -558,32 +625,26 @@ miscsurv$mk_piecewise_survival_table <- function(
         stop("Predictor names supplied make these column names non-unique")
     }
 
-    if (show_progress_bar) {
-        progress_bar <- progress::progress_bar$new(
-            total = nrow(data),
-            format = progress_bar_format,
-            clear = progress_bar_clear
-        )
-    }
-
     # -------------------------------------------------------------------------
     # Produce a set of intervals for one subject.
     # -------------------------------------------------------------------------
-    splitter_fn <- function(x_data, y_key) {
+    splitter_fn <- function(BY, SD) {
         # We will have pre-grouped by subject and static predictors (meaning,
         # by definition, grouped by subject). Then:
-        # - y_key: contains that subject's details and static predictors;
-        # - x_data: contains relevant data for that subject.
-        # Both are single-row tables.
+        # - BY: contains that subject's ID and static predictors, as a list;
+        # - SD: contains all other relevant data for that subject, as a
+        #   data.table. Unusually, this is always a single row.
 
         # Basic checks
-        stopifnot(nrow(x_data) == 1 && nrow(y_key) == 1)
+        stopifnot(is.list(BY) && nrow(SD) == 1)
 
-        # Subject dates
-        dob <- x_data %>% pull(dob_col)
-        subjectstartdate <- x_data %>% pull(start_date_col)
-        subjectenddate <- x_data %>% pull(end_date_col)
-        eventdate <- x_data %>% pull(terminal_event_date_col)
+        # Subject dates. (Could append [1]. But with a single row, the result
+        # of SD[[colname]] is a vector of length 1, which is the same as a
+        # scalar.)
+        dob <- SD[[dob_col]]
+        subjectstartdate <- SD[[start_date_col]]
+        subjectenddate <- SD[[end_date_col]]
+        eventdate <- SD[[terminal_event_date_col]]
         # The event terminates observation for the subject.
         # But if eventdate is NA, ignore it.
         subjectenddate <- min(eventdate, subjectenddate, na.rm = TRUE)
@@ -609,10 +670,10 @@ miscsurv$mk_piecewise_survival_table <- function(
         )
         # (b) LATCH PREDICTOR DATES
         if (n_latch_cols > 0) {
-            relevant_dates <- c(
-                relevant_dates,
-                (x_data %>% select(all_of(latch_on_predictor_cols)))
-            )
+            for (i in 1:n_latch_cols) {
+                latch_col_name <- latch_on_predictor_cols[i]
+                relevant_dates <- c(relevant_dates, SD[[latch_col_name]])
+            }
         }
         # (c) PULSE PREDICTOR DATES
         if (n_pulse_cols > 0) {
@@ -622,7 +683,7 @@ miscsurv$mk_piecewise_survival_table <- function(
             # https://stackoverflow.com/questions/26508519/how-to-add-elements-to-a-list-in-r-loop
             for (i in 1:n_pulse_cols) {
                 pulse_col_name <- pulse_cols[i]
-                pulsetable <- x_data[[pulse_col_name]][[1]]
+                pulsetable <- SD[[pulse_col_name]][[1]]
                 # ... the element is a pulsetable (which is a list) (or NULL)
                 # Do not assign the pulsetable to the list element if the
                 # pulsetable is NULL; see notes above. That would erase the
@@ -650,23 +711,16 @@ miscsurv$mk_piecewise_survival_table <- function(
         }
         # (d) EXTRA SLICE DATES FOR THIS SUBJECT
         if (n_extra_slice_date_cols > 0) {
-            extra_dates <- (
-                x_data
-                %>% select(all_of(extra_slice_date_cols))
-                # ... gives a tibble of dimensions 1 (since x_data has one
-                # row) x n_extra_slice_date_cols.
-                %>% unnest(cols = all_of(extra_slice_date_cols))
-                # ... gives a tibble of dimensions n_extra_slice_date_cols
-                # x (max list length); blanks have NULL.
-                %>% unlist()
-                # ... converts all non-NULL elements into a single vector
-                # ... but also converts dates to numbers
-                # ... and sometimes leaves NA values anyway
-                %>% as.Date()
-                # ... back to date.
-            )
-            # NA values will be filtered out in the next step anyway.
-            relevant_dates <- c(relevant_dates, extra_dates)
+            for (i in 1:n_extra_slice_date_cols) {
+                extra_slice_colname <- n_extra_slice_date_cols[i]
+                extra_dates_list <- SD[[extra_slice_colname]]
+                extra_dates_vec <- as.Date(unlist(extra_dates_list))
+                # ... unlist() converts all non-NULL elements into a single
+                #     vector, but also converts dates to numbers (and sometimes
+                #     leaves NA values anyway).
+                # NA values will be filtered out in the next step anyway.
+                relevant_dates <- c(relevant_dates, extra_dates_vec)
+            }
         }
         # Now filter to dates within the subject's range, and sort.
         relevant_dates <- relevant_dates[
@@ -681,7 +735,7 @@ miscsurv$mk_piecewise_survival_table <- function(
 
         # Those dates then define the intervals for our subject.
         # There must be at least two, since subjectstartdate < subjectenddate.
-        subject_result <- tibble(
+        subject_result <- data.table(
             interval_start_date = relevant_dates[-n_dates],  # all but the last
             interval_end_date = relevant_dates[-1]  # all but the first
         )
@@ -692,23 +746,30 @@ miscsurv$mk_piecewise_survival_table <- function(
             for (latchnum in 1:n_latch_cols) {
                 src_latch_col <- latch_on_predictor_cols[latchnum]
                 dst_latch_col <- latch_dest_col_names[latchnum]
-                predictor_onset_date <- x_data %>% pull(src_latch_col)
-                subject_result <- (
-                    subject_result
-                    %>% mutate(
-                        "{dst_latch_col}{suffix_hx}" := as.numeric(
+                predictor_onset_date <- SD[[src_latch_col]]
+                # Assignment by name:
+                # https://rdatatable-community.github.io/The-Raft/posts/2024-02-18-dt_particularities-toby_hocking/
+                # Can use d[, (colnamevec) := list(..., ...)].
+                # Can also use d[, c(colname1, colname2) := list(..., ...)].
+                subject_result[
+                    ,
+                    c(
+                        paste0(dst_latch_col, suffix_hx),
+                        paste0(dst_latch_col, suffix_cumtime)
+                    ) := list(
+                        as.logical(
                             !is.na(predictor_onset_date)
                             & predictor_onset_date <= interval_start_date
                             # Once an interval goes to/past the latch predictor
                             # date, that predictor is latched ON.
                         ),
-                        "{dst_latch_col}{suffix_cumtime}" := pmax(
+                        pmax(
                             0,
                             mktimediff(predictor_onset_date, interval_end_date)
                                 %>% replace_na(0)
                         )
                     )
-                )
+                ]
             }
         }
         # (b) PULSE PREDICTORS: likewise, at every date of interest.
@@ -722,9 +783,10 @@ miscsurv$mk_piecewise_survival_table <- function(
                 # are explained in datetimefunc$query_pulsetable_times().
                 # Briefly, we will receive:
                 #   hx
-                #       Is it true that t >= first_event?
+                #       Is it true that t >= first_event? Boolean.
                 #   current
                 #       Is there an event such that start <= t_event < end?
+                #       Boolean.
                 #   cum_t_on
                 #       Cumulative exposure time at time t.
                 #
@@ -733,10 +795,11 @@ miscsurv$mk_piecewise_survival_table <- function(
                 #       Has the event occurred prior to, or during, the
                 #       interval? Since the intervals are split at all relevant
                 #       events, and the intervals are [start, end), "during"
-                #       means "at the start of".
+                #       means "at the start of". Boolean.
                 #   current
                 #       Does the event occur during (throughout) the interval,
                 #       i.e. (here) occur at the start of the interval?
+                #       Boolean.
                 #   cumtime
                 #       Cumulative time "on", to the end of the interval.
                 #
@@ -758,9 +821,9 @@ miscsurv$mk_piecewise_survival_table <- function(
                     # We have to create the columns anyway, even if this
                     # subject doesn't have any relevant instances of this
                     # predictor.
-                    hx <- 0
+                    hx <- FALSE
                     cum_t_on <- 0
-                    current <- 0
+                    current <- FALSE
                 } else {
                     pq <- datetimefunc$query_pulsetable_dates(
                         pulsetable = pulsetable,
@@ -773,14 +836,17 @@ miscsurv$mk_piecewise_survival_table <- function(
                     cum_t_on <- pq$cum_t_on[-1]  # see above
                 }
                 dst_pulse_col <- pulse_dest_col_names[i]  # renaming here
-                subject_result <- (
-                    subject_result
-                    %>% mutate(
-                        "{dst_pulse_col}{suffix_hx}" := hx,
-                        "{dst_pulse_col}{suffix_cumtime}" := cum_t_on,
-                        "{dst_pulse_col}{suffix_current}" := current,
+                subject_result[,
+                    c(
+                        paste0(dst_pulse_col, suffix_hx),
+                        paste0(dst_pulse_col, suffix_cumtime),
+                        paste0(dst_pulse_col, suffix_current)
+                    ) := list(
+                        hx,
+                        cum_t_on,
+                        current
                     )
-                )
+                ]
             }
         }
 
@@ -788,33 +854,35 @@ miscsurv$mk_piecewise_survival_table <- function(
         # - Possible that there is a speed advantage to doing the trivial
         #   calculations in the outer loop. But also nice to have these columns
         #   first. Not fully performance-tested.
-        subject_result <- (
-            subject_result
-            %>% mutate(
-                t_start = mktimediff(subjectstartdate, interval_start_date),
-                duration = mktimediff(interval_start_date, interval_end_date),
-                age_start = mktimediff(dob, interval_start_date),
-                t_end = t_start + duration,
-                t_mid = t_start + duration / 2,
-                age_mid = age_start + duration / 2,
-                age_end = age_start + duration,
-                "{terminal_event_dest_col}" := as.numeric(
-                    !is.na(eventdate)
-                    & interval_end_date == eventdate
-                    # An interval may END with an event.
-                )
+        subject_result[, `:=`(
+            t_start = mktimediff(subjectstartdate, interval_start_date),
+            duration = mktimediff(interval_start_date, interval_end_date),
+            age_start = mktimediff(dob, interval_start_date)
+        )]
+        subject_result[, `:=`(
+            t_end = t_start + duration,
+            t_mid = t_start + duration / 2,
+            age_mid = age_start + duration / 2,
+            age_end = age_start + duration
+        )]
+        subject_result[,
+            (terminal_event_dest_col) := as.numeric(
+                !is.na(eventdate)
+                & interval_end_date == eventdate
+                # An interval may END with an event.
             )
-            %>% select(all_of(c(dest_colnames)))  # Sort
-        )
-        if (show_progress_bar) {
-            progress_bar$tick()
-        }
+        ]
+        subject_result <- subject_result[, ..dest_colnames]
+        # cat("+++ SUBJECT RESULT FOR", subject_id_col, 
+        #     "=", BY[[subject_id_col]], "\n")
+        # print(subject_result)
         return(subject_result)
     }
 
     # -------------------------------------------------------------------------
     # Produce results for all subjects, by grouping on subjects
     # -------------------------------------------------------------------------
+
     relevant_cols <- c(
         subject_id_col,
         dob_col,
@@ -830,19 +898,17 @@ miscsurv$mk_piecewise_survival_table <- function(
         subject_id_col,
         static_predictor_cols
     )
-    # - dplyr and referring to columns by name via variables:
-    #   - https://dplyr.tidyverse.org/articles/programming.html
-    #   - ?dplyr::select -- select() uses a <tidy-select> expression
-    #   - ?dplyr::group_by -- group_by() doesn't
-    relevant <- data %>% select(all_of(relevant_cols))
-    pieces <- (
-        relevant
-        %>% group_by(across(all_of(grouping_cols)))
-        # Don't use summarize(); that produces one row per group.
-        # Use group_modify here.
-        %>% group_modify(~ splitter_fn(x_data = .x, y_key = .y))
-        %>% ungroup()
-    )
+    # Note: the grouping could in principle be much smaller (just
+    # subject_id_col) or much larger (including e.g. dob_col,
+    # latch_on_predictor_cols) as all are "one row per subject".
+    # But the purpose of grouping_cols is to determine what is in the output
+    # without further effort (i.e. not needing to be returned by the inner
+    # function).
+
+    data <- as.data.table(data)
+    relevant <- data[, ..relevant_cols]
+    pieces <- relevant[, splitter_fn(.BY, .SD), by = grouping_cols]
+    # ... that's the line that takes the time!
     return(pieces)
 }
 
@@ -1051,9 +1117,11 @@ miscsurv$test_piecewise_survival_tables <- function(
         extra_slice_date_cols = c("extra_slice_dates_1", "extra_slice_dates_2")
     )
     cat("\n- test_piecewise_survival_tables: result 6 (static + latch predictors + time-varying binary predictors):\n")
-    print(x6, n = Inf)
+    print(x6, nrows = Inf)
+    # ... "n" worked for earlier versions of data.table; see ?print.data.table
 
     if (test_progress_bar) {
+        options(datatable.showProgress = interactive())
         # A very large one
         d7 <- purrr::map_dfr(seq_len(1000), ~d1)
         d7$subject <- paste0(d7$subject, 1:nrow(d7))
@@ -1101,7 +1169,7 @@ miscsurv$test_piecewise_survival_tables <- function(
         )
     )
     cat("\n- test_piecewise_survival_tables: result 8 (end date = start date + 1):\n")
-    print(x8, n = Inf)
+    print(x8, nrows = Inf)
 }
 
 

@@ -143,7 +143,7 @@ RUN install2.r --error --deps TRUE \
     doSNOW \
     # ... Use SNOW for parallel computing.
     easypackages \
-    # ... Easier installation of other packages.
+    # ... Easier installation of other packages. PREFER: pacman.
     Epi \
     # ... epidemiology functions inc. the "poisreg" Poisson regression family. \
     extrafont \
