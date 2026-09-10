@@ -1149,15 +1149,31 @@ miscresults$mk_chisq_contingency <- function(
 
     # Perform chi-square test
     if (!is.null(y_counts)) {
+        # Do not use this:
+        #   result <- chisq.test(x = x_counts, y = y_counts, ...)
+        # It coerces x and y to factors. For example,
+        #    chisq.test(c(153, 24), c(105, 76))
+        #       [prototype: my 2004-5 stats handout, p75]
+        # gives chisq(1) = 0, p = 1.
+        # This is because there is conversion to FACTORS internally.
+        # So convert to a matrix.
+        #
+        # Avoid this:
+        #   d <- matrix(c(x_counts, y_counts), byrow = FALSE, ncol = 2)
+        # And prefer this:
+        d <- as.matrix(data.frame(x = x_counts, y = y_counts))
+        # Using as.matrix() is safer! The plain matrix version shown above is
+        # correct, but the danger is of mapping it wrong (with byrow, ncol,
+        # etc.).
+        if (debug) {
+            print(d)
+        }
+        result <- chisq.test(x = d, ...)
+
         # Coercing to a matrix carries the risk of getting it wrong!
         # Mainly: try x_counts == y_counts == c(0, 100).
         # If you transpose the matrix, you get chisq = NaN.
         # If correct, you get chisq = 0.
-        if (debug) {
-            cat("x_counts:", x_counts, "\n")
-            cat("y_counts:", y_counts, "\n")
-        }
-        result <- chisq.test(x = x_counts, y = y_counts, ...)
     } else {
         if (debug) {
             print(x_counts)
