@@ -1149,15 +1149,15 @@ miscresults$mk_chisq_contingency <- function(
 
     # Perform chi-square test
     if (!is.null(y_counts)) {
-        # d <- matrix(c(x_counts, y_counts), byrow = FALSE, ncol = 2)
-        d <- as.matrix(data.frame(x = x_counts, y = y_counts))
-        # Using as.matrix() is safer! The plain matrix version shown above is
-        # correct, but the danger is of mapping it wrong (with byrow, ncol,
-        # etc.).
+        # Coercing to a matrix carries the risk of getting it wrong!
+        # Mainly: try x_counts == y_counts == c(0, 100).
+        # If you transpose the matrix, you get chisq = NaN.
+        # If correct, you get chisq = 0.
         if (debug) {
-            print(d)
+            cat("x_counts:", x_counts, "\n")
+            cat("y_counts:", y_counts, "\n")
         }
-        result <- chisq.test(x = d, ...)
+        result <- chisq.test(x = x_counts, y = y_counts, ...)
     } else {
         if (debug) {
             print(x_counts)
@@ -3581,6 +3581,22 @@ miscresults$compare_models_via_anova <- function(
         table_markdown = table_markdown,
         table_flex = table_flex
     ))
+}
+
+
+# =============================================================================
+# Some tests
+# =============================================================================
+
+miscresults$testmisc <- function() {
+    cat("> Tests. SEE ALSO: test_flextable.R, which you can run for tests.\n")
+
+    cat("- A duff chi-square test:\n")
+    miscresults$mk_chisq_contingency(
+        x_counts = c(0, 100),
+        y_counts = c(0, 100),
+        debug = TRUE
+    )
 }
 
 

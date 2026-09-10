@@ -119,6 +119,9 @@ RUN R -e "devtools::install_version('rstan', version = '2.26.21', repos = c('htt
 #   shinystan   # Visualisation for Stan models.
 #   rstantools  # Tools for packages interfacing with Stan.
 
+# Update dplyr
+RUN R -e "devtools::install_version('dplyr', version = '1.2.1', repos = c('https://cloud.r-project.org', getOption('repos')), dependencies = TRUE)"
+
 # Install other things from CRAN.
 # - "install2.r" is from littler, installed via rocker/verse
 RUN install2.r --error --deps TRUE \
@@ -138,6 +141,8 @@ RUN install2.r --error --deps TRUE \
     # ... Visualize simple graphs/networks.
     directlabels \
     # ... Used by our PubMedTrends.R.
+    dplyr \
+    # ... upgrade dplyr version, within tidyverse  # DIDN'T WORK.
     doParallel \
     # ... Parallel computing.
     doSNOW \
