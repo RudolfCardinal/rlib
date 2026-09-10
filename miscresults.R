@@ -801,7 +801,9 @@ miscresults$fmt_chisq <- function(
     #     for higher df. We might want to report things that didn't
     #     make it, but 1 seems like a reasonable "definitely do not care"
     #     threshold.
-    df_format = miscresults$DF_FORMAT_OPTIONS
+    df_format = miscresults$DF_FORMAT_OPTIONS,
+    na_str = get_flextable_defaults()$na_str,
+    nan_str = get_flextable_defaults()$nan_str
 ) {
     # Format a chi-square statistic (without a p value).
     # - Note that chi-square can only be positive.
@@ -814,10 +816,12 @@ miscresults$fmt_chisq <- function(
         miscresults$superscript_("2"),
         df_txt
     )
-    return(ifelse(
-        chisq < min_chisq,
-        sprintf("%s < %s", symbol_df_txt, min_chisq),
-        sprintf("%s = %s", symbol_df_txt, miscresults$fmt_float(chisq))
+    return(case_when(
+        is.nan(chisq) ~ sprintf("%s: %s", symbol_df_txt, nan_str),
+        is.na(chisq) ~ sprintf("%s: %s", symbol_df_txt, na_str),
+        chisq < min_chisq ~ sprintf("%s < %s", symbol_df_txt, min_chisq),
+        .default =
+            sprintf("%s = %s", symbol_df_txt, miscresults$fmt_float(chisq))
     ))
 }
 
@@ -827,24 +831,16 @@ miscresults$fmt_chisq_p <- function(
     min_chisq = 1,  # see miscresults$fmt_chisq()
     ns_text = miscresults$NOT_SIGNIFICANT,
     check_alpha = DEFAULT_ALPHA,
-    df_format = miscresults$DF_FORMAT_OPTIONS
+    ...
 ) {
     # Format a chi-square statistic with a p value).
-    chisq_txt <- miscresults$fmt_chisq(
-        chisq, df,
-        min_chisq = min_chisq, df_format = df_format
-    )
+    chisq_txt <- miscresults$fmt_chisq(chisq, df, min_chisq = min_chisq, ...)
     p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
-    if (any(chisq < min_chisq & p < check_alpha)) {
-        stop(sprintf(
-            "chisq (%f) < %f but p = %f so disallowing visual shortcut",
-            chisq, min_chisq, p
-        ))
-    }
-    return(ifelse(
-        chisq < min_chisq,
-        sprintf("%s, %s", chisq_txt, ns_text),
-        sprintf("%s, %s", chisq_txt, p_txt)
+    return(case_when(
+        is.nan(chisq) | is.na(chisq) ~ chisq_txt,
+        chisq < min_chisq & p >= check_alpha ~
+            sprintf("%s, %s", chisq_txt, ns_text),
+        .default = sprintf("%s, %s", chisq_txt, p_txt)
     ))
 }
 
@@ -1108,6 +1104,8 @@ miscresults$mk_chisq_contingency <- function(
     p = rep(1 / length(x_counts), length(x_counts)),
     min_chisq = 1,  # see miscresults$fmt_chisq()
     ns_text = miscresults$NOT_SIGNIFICANT,
+    na_str = get_flextable_defaults()$na_str,
+    nan_str = get_flextable_defaults()$nan_str,
     debug = FALSE,
     ...
 ) {
