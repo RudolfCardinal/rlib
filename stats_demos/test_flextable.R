@@ -695,7 +695,6 @@ m5f <- mk_model_anova_coeffs(
     formula = (
         succeeded ~
             age * drug * sex * boolpred
-            + boolpred:wsfac
     ),
     data = fd3,
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS,
@@ -705,7 +704,7 @@ m5f <- mk_model_anova_coeffs(
 )
 ft5a <- (
     m5f$table_flex
-    %>% set_caption("[ft5a] lme4::glmer, Poisson, with within-subjects predictors")
+    %>% set_caption("[ft5a] lme4::glmer, Poisson")
 )
 
 
@@ -739,7 +738,7 @@ mcomp1 <- miscresults$compare_models_via_anova(list(
         description = "Description of E again",
         compare_to = "Model E"
     ),
-    "Model E yet again, backwards comparison" = list(
+    "Model E [yet again, for backwards comparison]" = list(
         model = m3e$anova_model,
         description = "Description of E yet again",
         compare_to = "Model F"

@@ -2138,26 +2138,75 @@ miscresults$mk_model_anova_coeffs <- function(
     #         ggpubr::ggdensity(r)  # visual check of density plot
     #         ggpubr::ggqqplot(r)  # Q-Q plot (you can also split by factors)
     #         shapiro.test(r)  # Shapiro-Wilk test; "significant" = "non-normal"
+    #
     #   contrasts_anova_model:
-    #       Contrasts used for anova_model.
+    #       Contrast options used for anova_model.
+    #
     #   anova_table:
-    #       Original ANOVA table object.
+    #       Original ANOVA table object. The output of anova(), car::Anova(),
+    #       or stats::anova().
+    #
     #   anova_detail:
     #       Internal starting-point version of the ANOVA table. The output of
     #       miscresults$summarize_anova_table().
+    #
     #   coeff_model:
     #       Model used to extract coefficients. Use summary() to see the
     #       detail.
+    #
     #   contrasts_coeff_model:
-    #       Contrasts used for coeff_model.
+    #       Contrast options used for coeff_model.
+    #
     #   coeff_summary:
     #       Original R summary() of the coefficient model.
+    #
     #   coeff_detail:
     #       Internal starting-point version of the coefficients table. The
     #       output of miscresults$summarize_model_coefficients().
+    #
     #   working:
     #       Full-working internal table. (Also used by the
-    #       miscresults$summarize_multiple_cph() function.)
+    #       miscresults$summarize_multiple_cph() function.) Columns:
+    #
+    #       RELEVANT TO ALL ROWS:
+    #
+    #       - term_idx [integer]
+    #       - is_intercept [logical]
+    #       - is_term [logical]
+    #       - is_subterm [logical]
+    #
+    #       RELEVANT TO MAIN-FACTOR (TERM) ROWS:
+    #
+    #       - term [character]
+    #       - F [numeric]
+    #       - df [numeric]
+    #       - df_resid [numeric]
+    #       - pF [numeric]
+    #       - formatted_term [character]
+    #       - f_txt [character]
+    #       - pf_txt [character]
+    #
+    #       RELEVANT TO LEVEL/COEFFICIENT (SUBTERM OR LINEAR) ROWS:
+    #
+    #       - subterm_idx [numeric]
+    #       - coeff_name [character]
+    #       - anova_term_name [character]
+    #       - is_linear [logical]
+    #       - is_reference_level [logical]
+    #       - coeff [numeric]
+    #       - se [numeric]
+    #       - ci_lower [numeric]
+    #       - ci_upper [numeric]
+    #       - using_t_not_Z [logical]
+    #       - coeff_stat [numeric]
+    #       - p_coeff_stat [numeric]
+    #       - coeff_df_for_t [numeric]
+    #       - formatted_level [character]
+    #       - coeff_txt [character]
+    #       - se_txt [character]
+    #       - coeff_stat_txt [character]
+    #       - p_coeff_stat_txt [character]
+    #
     #   table_markdown:
     #       Markdown table, designed to be converted to a flextable. Columns:
     #       - 1/ formatted term/factor, e.g. "Age × Sex"
@@ -2168,6 +2217,8 @@ miscresults$mk_model_anova_coeffs <- function(
     #       - 6/ standard error
     #       - 7/ t statistic, e.g. "t_df = tval"
     #       - 8/ p value for t statistic, e.g. "p = 4.69 × 10^−5 ****"
+    #       Row-compatible with "working".
+    #
     #   table_flex:
     #       Version of table_markdown formatted, in basic style, as a flextable
     #       table. You may want to start with table_markdown and process it
