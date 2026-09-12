@@ -90,3 +90,9 @@ Therefore, our quasi-library code does this for user convenience:
     # Could also use: packages <- sapply(substitute(...()), deparse)
     # cat("Loaded namespaces:\n"); print(loadedNamespaces())
     # cat("Attached packages:\n"); print(.packages())
+
+
+Other notes
+-----------
+
+See the ``notes/`` directory.
