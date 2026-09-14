@@ -207,6 +207,19 @@ miscresults$R_TRUE_TEXT <- "TRUE"
 # Helper functions
 # =============================================================================
 
+miscresults$set_sensible_flextable_defaults <- function() {
+    # The flextable defaults round heavily. Here are some reasonable defaults.
+
+    flextable::set_flextable_defaults(
+        big.mark = ",",  # thousands separator
+        border.color = "gray",
+        digits = 3,  # usually significant figures
+        font.family = "Arial",
+        font.size = 10
+    )
+}
+
+
 miscresults$is.wholenumber <- function(x, tol = .Machine$double.eps^0.5) {
     # per example in ?base::integer
     abs(x - round(x)) < tol
@@ -1115,12 +1128,12 @@ miscresults$mk_chisq_contingency <- function(
     # rather than the contingency table/matrix form.) The alternative is to
     # specify p (expected probabilities) instead of y_counts.
     # Any additional parameters are passed to chisq.test().
-
+    #
     # -------------------------------------------------------------------------
     # TESTS:
     #
     # - p75 of RNC's 2004 stats handout:
-    # mk_chisq_contingency(x_counts = c(153, 105), y_counts = c(24, 76), correct = FALSE)
+    # mk_chisq_contingency(c(153, 105), c(24, 76), correct = FALSE)
     # ... gives chisq = 35.93, df = 1 as expected, without continuity
     #     correction.
     # ... with correct = TRUE (the default), a slightly different answer.
@@ -1282,6 +1295,56 @@ miscresults$mk_oneway_anova <- function(
         cat("---\n")
     }
     return(miscresults$fmt_F_p(F, df_num, df_denom, p, ...))
+}
+
+
+# =============================================================================
+# Wrappers to label output a little more
+# =============================================================================
+
+miscresults$with_directional_comparison_prefix <- function(
+    comparison_txt,
+    test_qty,
+    ref_qty,
+    no_sig_diff_prefix = "No significant difference: ",
+    higher_prefix = "Higher: ",
+    lower_prefix = "Lower: "
+) {
+    # Takes a statistical test result (as text), e.g. from the output of
+    # miscresults$mk_chisq_contingency(), and applies higher/lower/
+    # not-significantly-different prefix, based on a quantity of interest
+    # and a reference quantity.
+    #
+    # Default phrasings:
+    # - consider proportions, and means (so not, e.g. "less");
+    # - avoid "same" for "no significant difference".
+
+    prefix <- case_when(
+        !miscresults$detect_significant_in_result_str(comparison_txt) ~
+            no_sig_diff_prefix,
+        test_qty < ref_qty ~ lower_prefix,
+        test_qty > ref_qty ~ higher_prefix,
+        .default = "?: "  # should not happen
+    )
+    return(paste0(prefix, comparison_txt))
+}
+
+
+miscresults$with_nondirectional_comparison_prefix <- function(
+    comparison_txt,
+    no_sig_diff_prefix = "No significant difference: ",
+    diff_prefix = "Different: "
+) {
+    # As for with_directional_comparison_prefix(), but for tests where
+    # a statistical difference doesn't have a simple direction, e.g. a
+    # multi-group chi-square contingency test.
+
+    prefix <- case_when(
+        !miscresults$detect_significant_in_result_str(comparison_txt) ~
+            no_sig_diff_prefix,
+        .default = diff_prefix
+    )
+    return(paste0(prefix, comparison_txt))
 }
 
 

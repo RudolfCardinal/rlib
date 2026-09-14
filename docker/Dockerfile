@@ -78,7 +78,8 @@ RUN mkdir -p $HOME/.R/ \
 # Note also that installation as root means that packages are available to all
 # users.
 
-WORKDIR $HOME/
+WORKDIR /root
+# WORKDIR does not respect $HOME; see below.
 COPY docker/install_all_packages.R install_all_packages.R
 RUN Rscript install_all_packages.R
 
