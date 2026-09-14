@@ -22,13 +22,14 @@ conflicts_prefer(dplyr::filter)
 
 # Set up flextable defaults before ANY functions using flextable formatting.
 flextable::set_flextable_defaults(
-    font.family = "Arial",
-    font.size = 10,
+    big.mark = ",",  # thousands separator
     border.color = "gray",
     digits = 3,  # usually significant figures
-    big.mark = ",",  # thousands separator
+    font.family = "Arial",
+    font.size = 7,
     na_str = "NA",
-    nan_str = "NaN"
+    nan_str = "NaN",
+    padding = 0
 )
 
 
@@ -37,7 +38,8 @@ flextable::set_flextable_defaults(
 # =============================================================================
 
 SCRIPT_DIR <- miscfile$current_script_directory()
-OUTPUT_DOCX <- file.path(SCRIPT_DIR, "test_flextable.docx")
+OUTPUT_DIR <- file.path(SCRIPT_DIR, "..", "demo_output")
+OUTPUT_DOCX <- file.path(OUTPUT_DIR, "test_flextable.docx")
 
 FOOTNOTE_SEP <- " "
 FOOTNOTE_OPTIONS <- ftExtra::footnote_options(
@@ -761,6 +763,7 @@ ftcomp1 <- (
 # =============================================================================
 
 cat(paste0("Saving to ", OUTPUT_DOCX, "...\n"))
+CM_PER_INCH <- 1/2.54
 flextable::save_as_docx(
     `Table 1` = ft1,
     `Table 1 again` = ft1,  # a second copy
@@ -772,16 +775,38 @@ flextable::save_as_docx(
     path = OUTPUT_DOCX,  # file will be created or overwritten
     align = "left",  # table (and caption) within page (not text within table)
     pr_section = prop_section(  # from "officer" package
+        # There is no adjustment of column size. If the font is too big, the
+        # table just overspills the margin. Check padding also; see
+        # set_flextable_defaults(), get_flextable_defaults().
         type = "nextPage",  # begin tables on new pages? Not working.
-        # These do not use all the width appropriately, despite correct margin
-        # settings (with flextable 0.9.4 and officer 0.6.3):
-        page_size = page_size(orient = "landscape")  # default is A4 portrait
-        # page_size = page_size(orient = "portrait")  # default is A4 portrait
-        # page_size = page_size(width = 29.7 / 2.54, height = 21 / 2.54, orient = "portrait")  # doesn't work properly
-        # page_size = page_size(width = 29.7 / 2.54, height = 21 / 2.54, orient = "landscape")  # doesn't work properly
-        # page_margins = page_mar(...),  # default is 1" margins
+        page_size = page_size(orient = "landscape"),  # default is A4 portrait
+        page_margins = page_mar(  # units are inches; default is 1"
+            bottom = 1 * CM_PER_INCH,
+            top = 1 * CM_PER_INCH,
+            right = 1 * CM_PER_INCH,
+            left = 1 * CM_PER_INCH,
+            header = 0.5 * CM_PER_INCH,
+            footer = 0.5 * CM_PER_INCH,
+            gutter = 0.5 * CM_PER_INCH
+        )
     )
 )
+
+# SVG output: good quality (possibly very slightly altered fonts); no caption,
+# as per the docs.
+svg1_filename <- file.path(OUTPUT_DIR, "ft1.svg")
+cat(paste0("Saving to ", svg1_filename, "...\n"))
+flextable::save_as_image(ft1, svg1_filename)
+
+# PNG: bitmapped; no caption.
+png1_filename <- file.path(OUTPUT_DIR, "ft1.png")
+cat(paste0("Saving to ", png1_filename, "...\n"))
+flextable::save_as_image(ft1, png1_filename)
+
+# PDF: not via save_as_image() in flextable 0.9.6.
+# pdf1_filename <- file.path(OUTPUT_DIR, "ft1.pdf")
+# cat(paste0("Saving to ", pdf1_filename, "...\n"))
+# flextable::save_as_image(ft1, pdf1_filename)
 
 PROMPT <- "Press [Enter] to see next table..."
 print(ft1)

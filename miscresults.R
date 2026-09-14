@@ -2149,8 +2149,9 @@ miscresults$mk_model_anova_coeffs <- function(
     #       Include reference levels of factors (though without coefficient
     #       detail, of course).
     #   predictor_replacements:
-    #       Vector of replacements to apply to all predictor text, e.g.
-    #       c("from1" = "to1", "from2" = "to2", ...), or NULL.
+    #       Vector of replacements to apply to all predictor text, including
+    #       factors and levels, e.g. c("from1" = "to1", "from2" = "to2", ...),
+    #       or NULL.
     #   coeff_use_plus:
     #       Show "+" for positive coefficients (and confidence intervals, if
     #       shown).
