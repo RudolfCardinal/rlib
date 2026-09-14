@@ -26,7 +26,7 @@ flextable::set_flextable_defaults(
     border.color = "gray",
     digits = 3,  # usually significant figures
     font.family = "Arial",
-    font.size = 7,
+    font.size = 8,  # 7 or 8, typically, i.e. small
     na_str = "NA",
     nan_str = "NaN",
     padding = 0
