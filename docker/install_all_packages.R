@@ -68,16 +68,16 @@ pak::pak(c(
     "doSNOW",  # Use SNOW for parallel computing.
     "dplyr",  # [Update this.]
     # "easypackages",  # Easier installation of other packages. PREFER: pacman, pak.
-    "Epi",  # epidemiology functions inc. the "poisreg" Poisson regression family. \
+    "Epi",  # epidemiology functions inc. the "poisreg" Poisson regression family.
     "extrafont",  # fonts
     "ez",  # ezANOVA; simple analysis of variance.
     "flextable",  # Pretty table creation: https://ardata-fr.github.io/flextable-book/index.html
     "ftExtra",  # For markup (e.g. superscript) within flextable.
     "gdata",  # Miscellaneous data manipulation tools.
-    "ggforce",  # e.g. better faceting \
+    "ggforce",  # e.g. better faceting
     "ggmcmc",  # Tools for analysing MCMC simulations from Bayesian inference.
     "ggtext",  # provides element_markdown() etc.
-    "gplots",  # Misc. plotting functions. \
+    "gplots",  # Misc. plotting functions.
     "gridtext",  # for textbox_grob()
     "gtools",  # Programming assistance.
     "HDInterval",  # Highest density intervals (Kruschke et al.)
@@ -89,7 +89,7 @@ pak::pak(c(
     "lmerTest",  # Provides p values for lme4::lmer().
     "loo",  # Leave-one-out cross-validation and WAIC for Bayesian models.
     "lsmeans",  # Least-squares means.
-    "ltm",  # Latent trait models. \
+    "ltm",  # Latent trait models.
     "matrixStats",  # High-performance matrix functions.
     "MCMCglmm",  # MCMC generalized linear mixed models.
     "moments",  # E.g. skewness, kurtosis.
@@ -124,7 +124,7 @@ pak::pak(c(
     "snow",  # Simple Network of Workstations (parallel computing).
     "sp",  # Spatial package, for maps.
     "sqldf",  # Manipulate data frames using SQL.
-    "survminer",  # Extras for survival analysis/visualization. \
+    "survminer",  # Extras for survival analysis/visualization.
     "svglite",  # SVG export
     "synthpop",  # Produce synthetic data resembling confidential data.
     "terra",  # Spatial data analysis.

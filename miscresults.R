@@ -188,6 +188,7 @@ miscresults$MINIMUM_ABS_T_SHOWN <- 1
     #     make it, but 1 seems like a reasonable "definitely do not care"
     #     threshold.
 miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS <- TRUE
+miscresults$DEFAULT_MAX_SIG_STARS <- 3  # range: 3 to 5
 miscresults$NOT_SIGNIFICANT <- "NS"
 miscresults$DEFAULT_ALPHA <- 0.05  # Per Fisher.
 miscresults$DEFAULT_CI <- 1 - miscresults$DEFAULT_ALPHA
@@ -221,6 +222,8 @@ miscresults$set_sensible_flextable_defaults <- function() {
 
 
 miscresults$is.wholenumber <- function(x, tol = .Machine$double.eps^0.5) {
+    # Is x a whole number?
+
     # per example in ?base::integer
     abs(x - round(x)) < tol
 }
@@ -228,8 +231,17 @@ miscresults$is.wholenumber <- function(x, tol = .Machine$double.eps^0.5) {
 
 # Can't use miscresults$ prefix here.
 contr.sum.keepnames <- function(...) {
-    # See type_III_sums_of_squares.R
-    # https://stackoverflow.com/questions/10808853/why-does-changing-contrast-type-change-row-labels-in-r-lm-summary
+    # The default R contrast matrix "contr.treatment" contrasts each level
+    # with the baseline level (and the baseline level itself is omitted). (See
+    # ?contr.treatment.) The standard "contr.sum" gives the differences between
+    # the first (n - 1) factors and the grand mean, but it labels them
+    # numerically and that is confusing. This computes sum contrasts, but sets
+    # the names according to the relevant factor levels.
+    #
+    # See type_III_sums_of_squares.R and
+    # https://stackoverflow.com/questions/10808853.
+    # For illustration, try miscresults$test_contr_sum_keepnames().
+
     conS <- contr.sum(...)
     colnames(conS) <- rownames(conS)[-length(rownames(conS))]
     # ... For example, if the row names are A-D, this will assign the column
@@ -238,8 +250,63 @@ contr.sum.keepnames <- function(...) {
 }
 
 
+miscresults$test_contr_sum_keepnames <- function() {
+    # Demonstration of "contr.sum.keepnames" (q.v.)
+
+    # Save:
+    saved_options_contrasts <- getOption("contrasts")
+
+    n_levels <- 5
+    per_level <- 10
+    n_total <- n_levels * per_level
+    x <- factor(rep(letters[1:n_levels], each = per_level))
+    y <- rep(1:n_levels, each = per_level) + rnorm(n_total, 0, 0.1)
+
+    # So, in the source data: global mean will be about 3.
+    # Baseline level ("a") is 1.
+    # Each subsequent level of x adds 1.
+
+    cat("-- contr.treatment:\n")
+    options(contrasts = c("contr.treatment", "contr.poly"))  # R default
+    print(summary(lm(y ~ x)))
+    # Approximately:
+    #   (Intercept)     1   # at x == "a"
+    #   xb              1
+    #   xc              2
+    #   xd              3
+    #   xe              4
+
+    cat("-- contr.sum:\n")
+    options(contrasts = c("contr.sum", "contr.poly"))
+    print(summary(lm(y ~ x)))
+    # Approximately:
+    #   (Intercept)      3  # grand mean
+    #   x1              -2  # who knows what these refer to
+    #   x2              -1
+    #   x3               0
+    #   x4               1
+
+    cat("-- contr.sum.keepnames:\n")
+    options(contrasts = c("contr.sum.keepnames", "contr.poly"))
+    print(summary(lm(y ~ x)))
+    # Approximately:
+    #   (Intercept)      3  # grand mean
+    #   xa              -2  # "a" is intercept - 2
+    #   xb              -1  # "b" is intercept - 1
+    #   xc               0  # "c" is intercept + 0
+    #   xd               1  # "d" is intercept + 1
+
+    # Restore:
+    options(contrasts = saved_options_contrasts)
+}
+
+
 miscresults$markdown_ggtext_to_flextable <- function(x) {
-    # Converts between different flavours of non-standard markdown.
+    # Converts between different flavours of non-standard markdown;
+    # specifically from that used by the "ggtext" package, based on Markdown or
+    # HTML, to that used by "flextable", based on Markdown, by converting any
+    # HTML elements to Markdown syntax (see
+    # https://en.wikipedia.org/wiki/Markdown).
 
     # Superscript:
     sup1_html <- stringr::fixed("<sup>")
@@ -270,22 +337,32 @@ miscresults$markdown_ggtext_to_flextable <- function(x) {
 # Use "_" suffix to avoid confusion with e.g. flextable::bold().
 
 miscresults$italic_ <- function(x) {
+    # Marks text as italic using Markdown.
+
     sprintf("*%s*", x)
 }
 
 miscresults$bold_ <- function(x) {
+    # Marks text as bold using Markdown.
+
     sprintf("**%s**", x)
 }
 
 miscresults$superscript_ <- function(x) {
+    # Marks text as superscript using Markdown.
+
     sprintf("^%s^", x)
 }
 
 miscresults$subscript_ <- function(x) {
+    # Marks text as subscript using Markdown.
+
     sprintf("~%s~", x)
 }
 
 miscresults$abs_ <- function(x) {
+    # Marks text as an absolute number (this isn't Markdown, just text).
+
     sprintf("|%s|", x)
 }
 
@@ -300,19 +377,23 @@ miscresults$mk_sig_label <- function(
     sidak_correction_n = 1,
     prefix = " ",
     prefix_ns = ", ",
-    ns_text = miscresults$NOT_SIGNIFICANT
+    ns_text = miscresults$NOT_SIGNIFICANT,
+    max_stars = miscresults$DEFAULT_MAX_SIG_STARS
 ) {
     # From a p value, return a label, e.g. "**" or "NS", to be attached to that
     # p value (in null hypothesis significant testing).
     # Optionally, apply a Sidak correction.
+
+    stopifnot(3 <= max_stars && max_stars <= 5)
+    nstars <- function(n) paste0(prefix, paste(rep(symbol, n), collapse = ""))
     p <- miscstat$sidak_corrected_p(p, sidak_correction_n)
     return(case_when(
-        p < 0.00001 ~ paste0(prefix, paste(rep(symbol, 5), collapse = "")),  # 10^-5
-        p < 0.0001  ~ paste0(prefix, paste(rep(symbol, 4), collapse = "")),  # 10^-4
-        p < 0.001   ~ paste0(prefix, paste(rep(symbol, 3), collapse = "")),  # 10^-3
-        p < 0.01    ~ paste0(prefix, paste(rep(symbol, 2), collapse = "")),  # 10^-2
-        p < 0.05    ~ paste0(prefix, paste(rep(symbol, 1), collapse = "")),  # Fisher!
-        TRUE        ~ paste0(prefix_ns, ns_text)
+        p < 0.00001 & max_stars >= 5 ~ nstars(5),  # 10^-5
+        p < 0.0001  & max_stars >= 4 ~ nstars(4),  # 10^-4
+        p < 0.001                    ~ nstars(3),  # 10^-3
+        p < 0.01                     ~ nstars(2),  # 10^-2
+        p < 0.05                     ~ nstars(1),  # Fisher!
+        .default                     = paste0(prefix_ns, ns_text)
     ))
 }
 
@@ -321,18 +402,31 @@ miscresults$mk_p_asterisk_caption <- function(
     symbol = "*",
     ns_text = miscresults$NOT_SIGNIFICANT,
     ns_explanation = "not significant",
-    suffix = "."
+    suffix = ".",
+    italic_p = TRUE,
+    max_stars = miscresults$DEFAULT_MAX_SIG_STARS
 ) {
     # Makes a helpful caption to match miscresults$mk_sig_label().
-    paste0(
-        paste(rep(symbol, 5), collapse = ""), " p < 0.00001; ",
-        paste(rep(symbol, 4), collapse = ""), " p < 0.0001; ",
-        paste(rep(symbol, 3), collapse = ""), " p < 0.001; ",
-        paste(rep(symbol, 2), collapse = ""), " p < 0.01; ",
-        paste(rep(symbol, 1), collapse = ""), " p < 0.05; ",
+
+    stopifnot(3 <= max_stars && max_stars <= 5)
+    nstars <- function(n) paste(rep(symbol, n), collapse = "")
+    p <- ifelse(italic_p, miscresults$italic_("p"), "p")
+    result <- ""
+    if (max_stars >= 5) {
+        result <- paste0(result, nstars(5), " ", p, " < 0.00001; ")
+    }
+    if (max_stars >= 4) {
+        result <- paste0(result, nstars(4), " ", p, " < 0.00001; ")
+    }
+    result <- paste0(
+        result,
+        nstars(3), " ", p, " < 0.001; ",
+        nstars(2), " ", p, " < 0.01; ",
+        nstars(1), " ", p, " < 0.05; ",
         ns_text, ", ", ns_explanation,
         suffix
     )
+    return(result)
 }
 
 
@@ -344,6 +438,7 @@ miscresults$fmt_int <- function(
     nan_str = get_flextable_defaults()$nan_str
 ) {
     # Replaces flextable::fmt_int().
+
     flag <- ""
     if (use_plus) {
         flag <- paste0(flag, "+")
@@ -381,7 +476,7 @@ miscresults$fmt_float <- function(
     # Format a floating-point (real) number, according to a number of
     # significant figures, allowing scientific notation or not. Return values
     # might look like "0.1", "2.2 × 10^−16^" (the latter using ftExtra markup).
-    # An extension for flextable::fmt_dbl, using its notation.
+    # An extension for flextable::fmt_dbl(), using its notation.
 
     flag <- ""
     if (include_trailing_zero) {
@@ -450,6 +545,7 @@ miscresults$mk_p_text <- function(
 ) {
     # From a p value, return a string such as "*p* = 0.03" or "*p* < 2.2e-16".
     # Uses fmt_float().
+
     return(ifelse(
         p < min_p,
         paste0(
@@ -476,6 +572,7 @@ miscresults$mk_p_text_with_label <- function(
     # From a p value, return an asterisk-labelled string such as "*p* = 0.03 *"
     # or "*p* = 0.5, NS". Optionally, apply a Sidak correction to the labelling
     # (without altering the p value itself).
+
     return(paste0(
         miscresults$mk_p_text(
             p,
@@ -504,6 +601,7 @@ miscresults$mk_df_text <- function(
     #   commas in degrees of freedom would be very confusing for F tests, in
     #   which we will separate the two df numbers by commas anyway.
     # - So for consistency, we'll use "" as the default.
+
     return(ifelse(
         as.integer(df) == df,
         miscresults$fmt_int(df, big.mark = big.mark),  # integer version
@@ -522,6 +620,9 @@ miscresults$fmt_df_text <- function(
     df_txt,
     df_format = miscresults$DF_FORMAT_OPTIONS
 ) {
+    # Format degrees of freedom: as subscript, in brackets, or in square
+    # brackets.
+
     df_format <- match.arg(df_format)
     if (df_format == "subscript") {
         return(miscresults$subscript_(df_txt))
@@ -540,6 +641,7 @@ miscresults$fmt_pct <- function(
     nan_str = get_flextable_defaults()$nan_str
 ) {
     # Format a proportion (e.g. 0.5) as a percentage (e.g. "50%").
+
     pct <- 100 * proportion
     txt <- paste0(
         miscresults$fmt_float(
@@ -568,6 +670,7 @@ miscresults$fmt_n_percent <- function(
     # significant figures rather than decimal places for the percentage.
     #
     # Additional parameters are passed to fmt_pct().
+
     ifelse(
         is.na(n) | is.na(proportion),
         na_str,
@@ -593,6 +696,7 @@ miscresults$mk_n_percent <- function(
     #   by "<[threshold]", and similarly for percentages (small number
     #   suppression)
     # - Additional parameters are passed to fmt_n_percent().
+
     proportion <- n / total
     return(ifelse(
         !is.na(min_threshold) & n < min_threshold,
@@ -623,6 +727,7 @@ miscresults$fmt_n_percent_low_high <- function(
     # 100-109.
     # - The percentages are n_low/total and n_high/total.
     # - Additional parameters are passed to fmt_pct().
+
     prop_low <- n_low / total
     prop_high <- n_high / total
     ifelse(
@@ -656,6 +761,7 @@ miscresults$fmt_value_sd <- function(
     # Given a value x and a standard deviation sigma, show this as "x (± σ)",
     # or similar.
     # See also flextable::fmt_avg_dev(avg, dev), which is less flexible.
+
     x_text <- miscresults$fmt_float(
         x, sf = sf, allow_sci_notation = allow_sci_notation
     )
@@ -672,9 +778,10 @@ miscresults$mk_mean_sd <- function(
     na.rm = TRUE,
     ...
 ) {
-    # Calculate a mean and standard deviation (SD) from the vector provided, and
-    # show this as "μ (± σ)", or similar. Additional parameters are passed to
-    # fmt_value_sd().
+    # Calculate a mean and standard deviation (SD) from the vector provided,
+    # and show this as "μ (± σ)", or similar. Additional parameters are passed
+    # to fmt_value_sd().
+
     return(miscresults$fmt_value_sd(
         x = mean(x, na.rm = na.rm),
         sigma = sd(x, na.rm = na.rm),
@@ -698,6 +805,7 @@ miscresults$fmt_value_ci <- function(
 ) {
     # Given a value x and confidence interval limits ci_lower, ci_upper, show
     # this as e.g. "x (a–b)".
+
     results <- paste0(
         value_prefix,
         miscresults$fmt_float(
@@ -726,8 +834,10 @@ miscresults$mk_mean_ci <- function(
     na.rm = TRUE,
     ...
 ) {
-    # From a vector, show a mean and confidence interval (e.g. 95% CI) as e.g.
-    # "μ (a–b)". Additional parameters are passed to fmt_value_ci().
+    # From a vector of values, calculate and show a mean and t-test confidence
+    # interval (e.g. 95% CI) as e.g. "μ (a–b)". Additional parameters are
+    # passed to fmt_value_ci().
+
     mu <- mean(x, na.rm = na.rm)
     ci_pair <- miscstat$confidence_interval_t(x, ci = ci, na.rm = na.rm)
     ci_lower <- ci_pair["ci_lower"]
@@ -755,7 +865,8 @@ miscresults$fmt_median_range <- function(
     allow_sci_notation = TRUE,
     na_str = get_flextable_defaults()$na_str
 ) {
-    # Given a median and range limits, this as e.g. "m (a–b)".
+    # Given a median and range limits, show this as e.g. "m (a–b)".
+
     # Remember to think in parallel.
     all_three_integer <- (
         miscresults$is.wholenumber(range_lower)
@@ -793,8 +904,9 @@ miscresults$mk_median_range <- function(
     na.rm = TRUE,
     ...
 ) {
-    # From a vector, show a median and range as e.g. "m (a–b)". Additional
-    # parameters are passed to fmt_median_range().
+    # From a vector of values, calculate and show a median and range as e.g.
+    # "m (a–b)". Additional parameters are passed to fmt_median_range().
+
     med <- median(x, na.rm = na.rm)
     range_lower <- min(x, na.rm = na.rm)
     range_upper <- max(x, na.rm = na.rm)
@@ -820,6 +932,7 @@ miscresults$fmt_chisq <- function(
 ) {
     # Format a chi-square statistic (without a p value).
     # - Note that chi-square can only be positive.
+
     df_txt <- miscresults$fmt_df_text(
         miscresults$mk_df_text(df),
         df_format = df_format
@@ -847,6 +960,7 @@ miscresults$fmt_chisq_p <- function(
     ...
 ) {
     # Format a chi-square statistic with a p value).
+
     chisq_txt <- miscresults$fmt_chisq(chisq, df, min_chisq = min_chisq, ...)
     p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
     return(case_when(
@@ -866,6 +980,7 @@ miscresults$fmt_t <- function(
 ) {
     # Format a t statistic (without a p value).
     # - Note that t can be negative or positive.
+
     df_txt <- ifelse(
         is.na(df),
         "",
@@ -901,6 +1016,7 @@ miscresults$fmt_t_p <- function(
     df_format = miscresults$DF_FORMAT_OPTIONS
 ) {
     # Format a t statistic with a p value.
+
     t_txt <- miscresults$fmt_t(
         t, df,
         min_abs_t = min_abs_t,
@@ -932,6 +1048,7 @@ miscresults$fmt_F <- function(
     # - Note that F will always be positive.
     # - No commas in degrees of freedom (big.mark = ""), since they are
     #   separated by commas anyway.
+
     df1_txt <- miscresults$mk_df_text(df1, big.mark = "")
     df2_txt <- miscresults$mk_df_text(df2, big.mark = "")
     df_txt <- miscresults$fmt_df_text(
@@ -960,6 +1077,7 @@ miscresults$fmt_F_p <- function(
     df_format = miscresults$DF_FORMAT_OPTIONS
 ) {
     # Format an F statistic with a p value.
+
     f_txt <- miscresults$fmt_F(
         F, df1, df2,
         min_F = min_F,
@@ -983,6 +1101,7 @@ miscresults$fmt_F_p <- function(
 
 miscresults$fmt_Z <- function(Z, use_plus = TRUE) {
     # Format a Z statistic (without a p value).
+
     z_txt <- miscresults$fmt_float(Z, use_plus = use_plus)
     return(paste0(
         miscresults$italic_("Z"),
@@ -998,6 +1117,7 @@ miscresults$fmt_Z_p <- function(
     ns_text = miscresults$NOT_SIGNIFICANT
 ) {
     # Format a Z statistic with a p value.
+
     z_txt <- miscresults$fmt_Z(Z, use_plus = use_plus)
     p_txt <- miscresults$mk_p_text_with_label(p, ns_text = ns_text)
     return(paste0(z_txt, ", ", p_txt))
@@ -1010,6 +1130,7 @@ miscresults$fmt_predictor <- function(
     interaction_txt = paste0(" ", miscresults$MULTIPLY, " ")
 ) {
     # Format a predictor nicely, e.g. changing "drug:sex" to "Drug x Sex".
+
     predictor_txt <- stringr::str_replace_all(
         predictor_txt,
         pattern = miscresults$R_INTERACTION_MARKER,
@@ -1101,10 +1222,11 @@ miscresults$fmt_single_level <- function(
 
 
 miscresults$fmt_level <- Vectorize(
+    # See miscresults$fmt_single_level(), but vectorized.
+
     miscresults$fmt_single_level,
     vectorize.args = c("level_txt", "anova_term_txt")
 )
-# See miscresults$fmt_single_level(), but vectorized.
 
 
 # =============================================================================
@@ -1122,7 +1244,8 @@ miscresults$mk_chisq_contingency <- function(
     debug = FALSE,
     ...
 ) {
-    # Reports chi-squared to 1 dp.
+    # Calculate and report a chi-square contingency test.
+    #
     # Both x_counts and y_counts should be vectors of integers. (They are not
     # named x and y because of the differing syntax of chisq.test for x-and-y
     # rather than the contingency table/matrix form.) The alternative is to
@@ -1217,8 +1340,10 @@ miscresults$mk_t_test <- function(
     debug = FALSE,
     ...
 ) {
-    # Reports a t test. Any additional parameters are passed to t.test().
-    # The direction of t is "x - y" (i.e. positive if x > y, negative if x < y).
+    # Calculate and reports a t test.
+    # Any additional parameters are passed to t.test().
+    # The direction of t is "x - y" (positive if x > y, negative if x < y).
+
     result <- t.test(x = x, y = y, ...)
     if (debug) {
         print(result)
@@ -1242,13 +1367,16 @@ miscresults$mk_wilcoxon_test <- function(
     debug = FALSE,
     ...
 ) {
-    # Reports a Wilcoxon one- or two-sample test; the two-sample test is the
-    # Mann-Whitney U test, which is the same as the Wilcoxon rank-sum test.
-    # Follows argument convention for wilcox.test(); any additional parameters
-    # are passed to that, and likewise to rcompanion::wilcoxonZ().
-    # The direction of Z is "x - y" (i.e. positive if x > y, negative if x < y).
+    # Calculate and report a Wilcoxon one- or two-sample test; the two-sample
+    # test is the Mann-Whitney U test, which is the same as the Wilcoxon
+    # rank-sum test. Follows argument convention for wilcox.test(); any
+    # additional parameters are passed to that, and likewise to
+    # rcompanion::wilcoxonZ(). The direction of Z is "x - y" (positive if x >
+    # y, negative if x < y).
+    #
     # See also:
     # - https://www.researchgate.net/post/How_do_I_report_a_Two-sample_Wilcoxon_Test
+
     result <- wilcox.test(x = x, y = y, ...)
     w <- result$statistic  # can be non-integer
     z <- rcompanion::wilcoxonZ(x = x, y = y, ...)
@@ -1270,10 +1398,11 @@ miscresults$mk_oneway_anova <- function(
     debug = FALSE,
     ...
 ) {
-    # Reports a one-way ANOVA predicting depvar by factorvar.
+    # Calculate and report a one-way ANOVA, predicting depvar by factorvar.
     # - Note that for one-way ANOVA, the sum of squares "type" is not
     #   applicable, since there is only one predictor.
     # - Additional parameters go to fmt_F_p().
+
     d <- data.frame(dv = depvar, x = factorvar)
     a <- aov(dv ~ x, data = d)
     s <- summary(a)
@@ -1357,6 +1486,10 @@ miscresults$with_nondirectional_comparison_prefix <- function(
 # -----------------------------------------------------------------------------
 
 miscresults$mk_default_flextable_from_markdown <- function(markdown_table) {
+    # In very basic style, create a flextable from a markdown table.
+    # Normally, the user would want to redo this with their own formatting
+    # options, but it's nice for basic interactive display.
+
     return(
         markdown_table
         %>% flextable()
@@ -1374,6 +1507,7 @@ miscresults$which_anova_term_matches_coeff <- function(
     anova_term_idx = NULL,
     debug = FALSE
 ) {
+    # INTERNAL FUNCTION.
     # Arguments:
     #
     #   anova_terms
@@ -1741,6 +1875,7 @@ miscresults$summarize_model_coefficients <- function(
     # Extracts coefficients from a model in a standard internal format.
     #
     # Arguments:
+    #
     #   m
     #       Some kind of linear model, or similar.
     #   anova_table
@@ -1753,64 +1888,67 @@ miscresults$summarize_model_coefficients <- function(
     #       confidence intervals.
     #
     # Returns a list with the following elements:
+    #
     #   coeff_summary
     #       Original version of summary(m).
+    #
     #   using_t_not_Z
     #       Coefficient tests are t tests (not Z tests). If FALSE, they're
     #       Z tests.
+    #
     #   coeff_detail
     #       Table (data frame) with the following columns:
-    #           coeff_name
-    #               Coefficient name, e.g. level of a factor. (May sometimes
-    #               be the same as an ANOVA term name, but not always.)
-    #           term_idx
-    #               Index (row number in anova_table) of the corresponding
-    #               ANOVA term, e.g. the factor of which this is one level, or
-    #               similar. May also be 0 in the case of an intercept term
-    #               when none is explicitly present in the ANOVA table.
-    #           anova_term_name
-    #               Corresponding term name from the ANOVA table.
-    #           is_term
-    #               Always FALSE; provided for integration with the output of
-    #               miscresults$summarize_anova_table().
-    #           is_subterm
-    #               Always TRUE (as coefficients are considered "subterms" of
-    #               their ANOVA term). Provided for integration with the output
-    #               of miscresults$summarize_anova_table().
-    #           subterm_idx:
-    #               Index of this subterm, within the corresponding term.
-    #               Usually numbered from 1 upwards (compare 0 for the main
-    #               term in the ANOVA table, as above), but 0.5 for "reference"
-    #               levels if included, to fit them in conceptually between the
-    #               term heading and the first "real" level (with a
-    #               coefficient).
-    #           is_intercept
-    #               Logical: is this the model's main intercept?
-    #           is_linear
-    #               Logical: is this a linear (continuous) predictor?
-    #           is_reference_level
-    #               Logical: is this a reference level, i.e. a dummy row
-    #               representing a reference level of a factor (against which
-    #               other levels are compared), with no coefficient of its own?
-    #           coeff
-    #               The value of the coefficient.
-    #           se
-    #               The standard error of the coefficient.
-    #           ci_lower
-    #               Lower bound of the confidence interval for the coefficient.
-    #           ci_upper
-    #               Upper bound of the confidence interval for the coefficient.
-    #           using_t_not_Z
-    #               A copy of the using_t_not_Z variable, this one present in
-    #               every table row. Tells you what coeff_stat is.
-    #           coeff_stat
-    #               The statistic (t or Z; see using_t_not_Z) associated with
-    #               the coefficient.
-    #           p_coeff_stat
-    #               The p value associated with the test statistic.
-    #           coeff_df_for_t
-    #               If the test statistic is t, the associated degrees of
-    #               freedom. (NA for Z tests.)
+    #
+    #       coeff_name
+    #           Coefficient name, e.g. level of a factor. (May sometimes be the
+    #           same as an ANOVA term name, but not always.)
+    #       term_idx
+    #           Index (row number in anova_table) of the corresponding ANOVA
+    #           term, e.g. the factor of which this is one level, or similar.
+    #           May also be 0 in the case of an intercept term when none is
+    #           explicitly present in the ANOVA table.
+    #       anova_term_name
+    #           Corresponding term name from the ANOVA table.
+    #       is_term
+    #           Always FALSE; provided for integration with the output of
+    #           miscresults$summarize_anova_table().
+    #       is_subterm
+    #           Always TRUE (as coefficients are considered "subterms" of their
+    #           ANOVA term). Provided for integration with the output
+    #           of miscresults$summarize_anova_table().
+    #       subterm_idx:
+    #           Index of this subterm, within the corresponding term. Usually
+    #           numbered from 1 upwards (compare 0 for the main term in the
+    #           ANOVA table, as above), but 0.5 for "reference" levels if
+    #           included, to fit them in conceptually between the term heading
+    #           and the first "real" level (with a coefficient).
+    #       is_intercept
+    #           Logical: is this the model's main intercept?
+    #       is_linear
+    #           Logical: is this a linear (continuous) predictor?
+    #       is_reference_level
+    #           Logical: is this a reference level, i.e. a dummy row
+    #           representing a reference level of a factor (against which other
+    #           levels are compared), with no coefficient of its own?
+    #       coeff
+    #           The value of the coefficient.
+    #       se
+    #           The standard error of the coefficient.
+    #       ci_lower
+    #           Lower bound of the confidence interval for the coefficient.
+    #       ci_upper
+    #           Upper bound of the confidence interval for the coefficient.
+    #       using_t_not_Z
+    #           A copy of the using_t_not_Z variable, this one present in every
+    #           table row. Tells you what coeff_stat is.
+    #       coeff_stat
+    #           The statistic (t or Z; see using_t_not_Z) associated with the
+    #           coefficient.
+    #       p_coeff_stat
+    #           The p value associated with the test statistic.
+    #       coeff_df_for_t
+    #           If the test statistic is t, the associated degrees of freedom.
+    #           (NA for Z tests.)
 
     # Core data
     s <- summary(m)
@@ -2089,7 +2227,8 @@ miscresults$mk_model_anova_coeffs <- function(
     ...
 ) {
     # Format a linear model as a results table (e.g. per style of Cardinal et
-    # al. (2023), PMID 37147600, Table 5.) Headings:
+    # al. [2023], PMID 37147600, Table 5). The resulting headings are of this
+    # sort of style:
     #
     #   Term, Level, F, p_F, coefficient, standard error, Z/t, p_Z/p_t
     #
@@ -2248,59 +2387,124 @@ miscresults$mk_model_anova_coeffs <- function(
     #
     #       RELEVANT TO ALL ROWS:
     #
-    #       - term_idx [integer]
-    #       - is_intercept [logical]
-    #       - is_term [logical]
-    #       - is_subterm [logical]
+    #       term_idx [integer]
+    #           Index (row number in anova_table) of the corresponding ANOVA
+    #           term, e.g. the factor of which this is one level, or similar.
+    #           May also be 0 in the case of an intercept term when none is
+    #           explicitly present in the ANOVA table.
+    #       is_intercept [logical]
+    #           Logical: is this the model's main intercept?
+    #       is_term [logical]
+    #           Is this a main term row?
+    #       is_subterm [logical]
+    #           Is this a subterm row? (If subterms are collapsed visually,
+    #           via squish_up_level_rows, a subterm row may also be a term
+    #           row.)
     #
     #       RELEVANT TO MAIN-FACTOR (TERM) ROWS:
     #
-    #       - term [character]
-    #       - F [numeric]
-    #       - df [numeric]
-    #       - df_resid [numeric]
-    #       - pF [numeric]
-    #       - formatted_term [character]
-    #       - f_txt [character]
-    #       - pf_txt [character]
+    #       term [character]
+    #           Term name (e.g. "age", "age:drug", "boolpred").
+    #           May be blank, e.g. for rows associated with sub-levels of a
+    #           term that is a factor.
+    #       F [numeric]
+    #           Value of the F statistic.
+    #       df [numeric]
+    #           Numerator degrees of freedom for the F statistic.
+    #       df_resid [numeric]
+    #           Denominator (residual) degrees of freedom for the F statistic.
+    #       pF [numeric]
+    #           Probability (p value) associated with the F statistic.
+    #       formatted_term [character]
+    #           A nice-looking version of the term name, e.g. "Age × Sex".
+    #       f_txt [character]
+    #           A Markdown-formatted version of the F statistic with its
+    #           degrees of freedom.
+    #       pf_txt [character]
+    #           A Markdown-formatted version of the p value and any annotations
+    #           (like "**" or "NS").
     #
     #       RELEVANT TO LEVEL/COEFFICIENT (SUBTERM OR LINEAR) ROWS:
     #
-    #       - subterm_idx [numeric]
-    #       - coeff_name [character]
-    #       - anova_term_name [character]
-    #       - is_linear [logical]
-    #       - is_reference_level [logical]
-    #       - coeff [numeric]
-    #       - se [numeric]
-    #       - ci_lower [numeric]
-    #       - ci_upper [numeric]
-    #       - using_t_not_Z [logical]
-    #       - coeff_stat [numeric]
-    #       - p_coeff_stat [numeric]
-    #       - coeff_df_for_t [numeric]
-    #       - formatted_level [character]
-    #       - coeff_txt [character]
-    #       - se_txt [character]
-    #       - coeff_stat_txt [character]
-    #       - p_coeff_stat_txt [character]
+    #       subterm_idx [numeric]
+    #           Index of this subterm, within the corresponding term. Usually
+    #           numbered from 1 upwards (compare 0 for the main term in the
+    #           ANOVA table, as above), but 0.5 for "reference" levels if
+    #           included, to fit them in conceptually between the term heading
+    #           and the first "real" level (with a coefficient).
+    #       coeff_name [character]
+    #           Name of the coefficient, which may be the term, e.g. for linear
+    #           predictors ("age"), or different, such sa a level of a factor
+    #           (e.g. "boolpredTRUE", "age:drugLowDose").
+    #       anova_term_name [character]
+    #           Corresponding term name from the ANOVA table. (For example,
+    #           all coefficients for a "drug:sex" interaction share "drug:sex"
+    #           as the ANOVA term name.)
+    #       is_linear [logical]
+    #           Logical: is this a linear (continuous) predictor?
+    #       is_reference_level [logical]
+    #           Logical: is this a reference level, i.e. a dummy row
+    #           representing a reference level of a factor (against which other
+    #           levels are compared), with no coefficient of its own?
+    #       coeff [numeric]
+    #           The value of the coefficient.
+    #       se [numeric]
+    #           The standard error of the coefficient.
+    #       ci_lower [numeric]
+    #           Lower bound of the confidence interval for the coefficient.
+    #       ci_upper [numeric]
+    #           Upper bound of the confidence interval for the coefficient.
+    #       using_t_not_Z [logical]
+    #           Tells you what coeff_stat is.
+    #       coeff_stat [numeric]
+    #           The statistic (t or Z; see using_t_not_Z) associated with the
+    #           coefficient.
+    #       p_coeff_stat [numeric]
+    #           The p value associated with the test statistic.
+    #       coeff_df_for_t [numeric]
+    #           If the test statistic is t, the associated degrees of freedom.
+    #           (NA for Z tests.)
+    #       formatted_level [character]
+    #           A nice-looking version of the subterm/level name, e.g. "Low
+    #           dose, Make".
+    #       coeff_txt [character]
+    #           A formatted value of the coefficient (e.g. "−4.16 (CI −10.8 to
+    #           +2.45)", or "Reference").
+    #       se_txt [character]
+    #           A textual version of the standard error, to an appropriate
+    #           number of significant figures.
+    #       coeff_stat_txt [character]
+    #           A Markdown-formatted version of the statistical test of a
+    #           coefficient (e.g. a t statistic with degrees of freedom).
+    #       p_coeff_stat_txt [character]
+    #           A Markdown-formatted version of the p value associated with the
+    #           statistical test of the coefficient.
     #
     #   table_markdown:
     #       Markdown table, designed to be converted to a flextable. Columns:
     #       - 1/ formatted term/factor, e.g. "Age × Sex"
+    #            ... from working$formatted_term
     #       - 2/ formatted F statistic, e.g. "F_df1,df2_ = fval" or "F < 1"
+    #            ... from working$f_txt
     #       - 3/ p value for F statistic, e.g. "p = 0.0259 *" or "NS"
+    #            ... from working$pf_txt
     #       - 4/ level (of factor), e.g. "Male", or "–" if continuous
+    #            ... from working$formatted_level
     #       - 5/ coefficient with conf. int., e.g. "−2.66 (CI −5.96 to +0.628)"
+    #            ... from working$coeff_txt
     #       - 6/ standard error
+    #            ... from working$se_txt
     #       - 7/ t statistic, e.g. "t_df = tval"
+    #            ... from working$coeff_stat_txt
     #       - 8/ p value for t statistic, e.g. "p = 4.69 × 10^−5 ****"
+    #            ... from working$p_coeff_stat_txt
     #       Row-compatible with "working".
     #
     #   table_flex:
     #       Version of table_markdown formatted, in basic style, as a flextable
     #       table. You may want to start with table_markdown and process it
     #       yourself, though, for your own table style.
+    #       Row-compatible with "working".
     #
     # NOT CURRENTLY PROVIDED:
     # - Overall R-squared values:
@@ -3029,15 +3233,103 @@ miscresults$mk_cph_table <- function(
     #       Copied from the input.
     #   working:
     #       Full-working internal table. (Also used by the
-    #       miscresults$summarize_multiple_cph() function.)
+    #       miscresults$summarize_multiple_cph() function.) Columns:
+    #
+    #       TERMS:
+    #
+    #       term_num [integer]
+    #           Term number.
+    #       term [character]
+    #           Term name, e.g. "xlinear", "ybooleanFALSE, "abcfactorA".
+    #           Unique, as it incorporates factor/level information.
+    #
+    #       FACTORS (SIMPLIFIED TERMS):
+    #
+    #       term_plain [character]
+    #           Plain term name, e.g. "xlinear", "yboolean", "abcfactor".
+    #           Several rows may share this.
+    #       txt_term [character]
+    #           Formatted plain term (factor), or blank for sub-level rows.
+    #
+    #       LEVELS (WITHIN FACTORS):
+    #
+    #       level [character]
+    #           Level name, within factor (e.g. "FALSE", "A", or blank for
+    #           a linear predictor).
+    #       txt_level [character]
+    #           Formatted level name.
+    #       pos_within_term [integer]
+    #           Position of this row (1-based) within a term. For example,
+    #           for a three-level factor, there may be 3 rows (numbered 1:3)
+    #           for its three levels.
+    #
+    #       LEVEL INFORMATION:
+    #
+    #       is_reference_level [logical]
+    #           Is this a reference level for the term?
+    #       is_factor_reflevel [logical]
+    #           Is this a reference level, for a factor that is not a simple
+    #           logical factor?
+    #       is_logical_reflevel [logical]
+    #           Is this a reference level, for a simple logical factor?
+    #       involves_interaction [logical]
+    #           Does this term involve an interaction?
+    #
+    #       COEFFICIENT:
+    #
+    #       has_coeff [logical]
+    #           Is a coefficient (and associated information) present?
+    #           (Absent for reference level rows.)
+    #       coeff [numeric]
+    #           Coefficient. (Absent for reference level rows.)
+    #       exp_coeff [numeric]
+    #           exp(coeff)
+    #       se_coeff [numeric]
+    #           Standard error of the coefficient.
+    #       z [numeric]
+    #           Associated Z value.
+    #       p [numeric]
+    #           p value for the Z test; Pr(> |Z|).
+    #       exp_neg_coeff [numeric]
+    #       ci_lower [numeric]
+    #           Lower bound of the confidence interval for the coefficient.
+    #       ci_upper [numeric]
+    #           Upper bound of the confidence interval for the coefficient.
+    #       txt_coeff [character]
+    #           Formatted version of coeff.
+    #       txt_exp_coeff [character]
+    #           Formatted version of exp(coeff).
+    #       txt_se_coeff [character]
+    #           Formatted standard error of the coefficient.
+    #       txt_z [character]
+    #           Formatted Z value.
+    #       txt_p [character]
+    #           Formatted p value for the Z test.
+    #
     #   table_markdown:
     #       Markdown version of the formatted table. Use this one if you want
     #       to create your own custom-formatted flextable, which you probably
-    #       do.
+    #       do. Columns are:
+    #       - 1/ Term
+    #            ... from working$txt_term
+    #       - 2/ Level
+    #            ... from working$txt_level
+    #       - 3/ Coefficient
+    #            ... from working$txt_coeff
+    #       - 4/ e^coeff
+    #            ... from txt_exp_coeff
+    #       - 5/ SE(coeff)
+    #            ... from txt_se_coeff
+    #       - 6/ Z
+    #            ... from txt_z
+    #       - 7/ p(Z)
+    #            ... from txt_p
+    #       Row-compatible with "working".
     #   table_flex:
     #       A flextable version of the output; it assumes some formatting
     #       parameters, so you probably don't want it for publication, but it
     #       provides a quick look at a "pretty" version of the table.
+    #       Row-compatible with "working".
 
     s <- summary(cph_model, conf.int = ci)
 
@@ -3240,6 +3532,53 @@ miscresults$summarize_multiple_cph <- function(
     #       Method for correcting alpha, as above. Use "sidak" for the Sidak
     #       method, which is mathematically correct, or "bonferroni" for the
     #       Bonferroni method, which is incorrect but close.
+    #
+    # Returns:
+    #   target_alpha
+    #       Copy of input.
+    #   correct_alpha_for
+    #       Copy of input.
+    #   alpha_correction_method
+    #       Copy of input.
+    #   n_comparisons
+    #       Number of comparisons made.
+    #   corrected_alpha
+    #       Alpha used, after correction.
+    #   summary_table
+    #       Simple results table, with columns:
+    #
+    #       term
+    #           Term name, incorporating factor/level information (e.g.
+    #           "xlinear", "ybooleanTRUE", "abcfactorA",
+    #           "xlinear:ybooleanTRUE").
+    #           From cph_list[[n]]$working$term.
+    #       txt_term
+    #           Formatted version of the term (e.g. "xlinear", "yboolean",
+    #           "abcfactor", "xlinear × yboolean"), or blank for rows
+    #           associated with levels but not main terms.
+    #           From cph_list[[n]]$working$txt_term.
+    #       txt_level
+    #           Formatted level, e.g. "TRUE", "A".
+    #           From cph_list[[n]]$working$txt_level.
+    #       <MODEL_1_NAME>
+    #       <MODEL_2_NAME>
+    #       ...
+    #           Columns, one per model, containing up_label, down_label, or
+    #           ns_label for each row.
+    #
+    #   table_markdown
+    #       Markdown table, designed to be converted to a flextable. Columns:
+    #       - Term
+    #       - Level (column absent if there are none)
+    #       - and then ONE COLUMN PER MODEL, labelled as requested, containing
+    #         up_label, down_label, or ns_label for each row.
+    #       Row-compatible with "summary_table".
+    #
+    #   table_flex:
+    #       Version of table_markdown formatted, in basic style, as a flextable
+    #       table. You may want to start with table_markdown and process it
+    #       yourself, though, for your own table style.
+    #       Row-compatible with "summary_table".
 
     n_elements <- length(cph_list)
     if (n_elements < 1) {
@@ -3667,7 +4006,9 @@ miscresults$compare_models_via_anova <- function(
 # =============================================================================
 
 miscresults$testmisc <- function() {
-    cat("> Tests. SEE ALSO: test_flextable.R, which you can run for tests.\n")
+    cat("> Some tests.\n")
+    cat("  SEE ALSO: test_flextable.R, which you can run for tests.\n")
+    cat("  SEE ALSO: test_survival_methods.R, which you can run for tests.\n")
 
     cat("- A duff chi-square test:\n")
     miscresults$mk_chisq_contingency(

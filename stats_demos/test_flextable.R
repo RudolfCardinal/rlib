@@ -204,7 +204,7 @@ tsumm1 <- (
                 fd1[group == "drug"   ]$dullness,
                 fd1[group == "placebo"]$dullness
             ),
-            TRUE ~ miscresults$EN_DASH
+            .default = miscresults$EN_DASH
         ),
         # Make variable names prettier
         variable = case_when(
@@ -217,7 +217,7 @@ tsumm1 <- (
             variable == "response_mean" ~ "Response (response units) (mean)",
             variable == "response_median" ~ "Response (response units) (median)",
             variable == "dullness" ~ "Dullness (bishops)",
-            TRUE ~ variable
+            .default = variable
         )
     )
     %>% add_row(
@@ -295,7 +295,7 @@ t2 <- (
                   s2[group == "highdose"]$n_not_collapsed)
             ),
             variable == "sbp" ~ mk_oneway_anova(fd2$sbp, fd2$group),
-            TRUE ~ miscresults$EN_DASH
+            .default = miscresults$EN_DASH
         ),
         # Make variable names prettier
         variable = case_when(
@@ -306,7 +306,7 @@ t2 <- (
                 sep = miscresults$MARKDOWN_NEWLINE
             ),
             variable == "sbp" ~ "Systolic BP (mmHg)",
-            TRUE ~ variable
+            .default = variable
         )
     )
 )
@@ -352,7 +352,7 @@ fd3[, y_age := COEFF_AGE * age]
 fd3[, y_sex := case_when(
     sex == SEX_FEMALE ~ 0,  # must be zero for recovered intercept to be right
     sex == SEX_MALE ~ COEFF_MALE,
-    TRUE ~ NA_real_
+    .default = NA_real_
 )]
 # ... DO NOT USE:
 # as.numeric(plyr::mapvalues(
@@ -363,7 +363,7 @@ fd3[, y_drug := case_when(
     drug == DRUG_PLACEBO ~ 0,  # must be zero as above
     drug == DRUG_LOW ~ COEFF_DRUG_LOW,
     drug == DRUG_HIGH ~ COEFF_DRUG_HIGH,
-    TRUE ~ NA_real_
+    .default = NA_real_
 )]
 fd3[, y_boolpred := (as.numeric(boolpred) - 0.5) * 0.2]
 fd3[, err := rnorm(n = nrow(fd3), mean = 0, sd = 2.0)]
@@ -596,7 +596,8 @@ ft3f <- (
     %>% set_caption(as_paragraph_md(paste0(
         "[ft3f] This is a caption. You can't apply footnotes to captions. ",
         "Use *ftExtra::as_paragraph_md()* for markdown. ",
-        "Model via lm() including Boolean (logical) predictor."
+        "Model via lm() including Boolean (logical) predictor. ",
+        miscresults$mk_p_asterisk_caption()
     )))
     %>% footnote(
         part = "header",
