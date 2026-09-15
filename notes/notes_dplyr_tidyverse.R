@@ -4,6 +4,20 @@
 # dplyr (part of tidyverse)
 # =============================================================================
 
+library(dplyr)
+
+# -----------------------------------------------------------------------------
+# dplyr::first()
+# dplyr::last()
+# -----------------------------------------------------------------------------
+#
+# Both return NA if there is no appropriate value.
+# For example:
+#       x <- 1:5
+#       first(which(x == 3))  # 3
+#       first(which(x == 7))  # NA
+
+
 # -----------------------------------------------------------------------------
 # dplyr::replace_values()
 # dplyr::recode_values()
@@ -22,5 +36,4 @@
 #   Newer versions: .default = ...
 #       ... "TRUE ~" still works, but is deprecated.
 
-library(dplyr)
 stopifnot(packageVersion("dplyr") >= package_version("1.2.0"))
