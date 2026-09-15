@@ -366,6 +366,52 @@ miscresults$abs_ <- function(x) {
     sprintf("|%s|", x)
 }
 
+# =============================================================================
+# Flextable helpers
+# =============================================================================
+
+miscresults$ftextra_inline_footnote <- function(x) {
+    # Makes text to be used as a footnote.
+    #
+    # FOOTNOTE METHOD 1 (THIS, INLINE):
+    #
+    # If you have text in a flextable like "^[text]", and you format the table
+    # via ftExtra using Markdown, via ftExtra::colformat_md(), then:
+    #
+    # - A superscript symbol is added at the place you insert this.
+    #   This might be e.g. "a", "b", but it depends on the .footnote_options
+    #   argument to ftExtra::colformat_md().
+    #
+    # - The text itself is added to the footnote list.
+    #   Later, the footnotes will be collated at the bottom of the table.
+    #
+    # - If you specify the same text more than once, multiple copies of the
+    #   footnote appear; there is no de-duplication.
+    #
+    # FOOTNOTE METHOD 2 (ALTERNATIVE MARKDOWN SYNTAX):
+    #
+    # For multiple footnotes in a cell, and other options, including "standard"
+    # footnote markdown, see
+    # - https://ftextra.atusy.net/articles/format_columns
+    # - https://www.markdownguide.org/extended-syntax/#footnotes
+    #
+    # The standard syntax is:
+    #   In text,[^1] you can insert[^1] footnote markers.[^fref]
+    #   ^[1]: This is the first footnote.
+    #   ^[fref]: This is the second footnote.
+    #
+    # But there is still not de-duplication. Two copies of the same marker get
+    # translated correctly to the footnote text, but two copies of the text
+    # appear as separate footnotes.
+    #
+    # FOOTNOTE METHOD 3:
+    #
+    # You can pipe your table through flextable::footnote(), in which you
+    # can make multiple cells refer to a single footnote.
+
+    sprintf("^[%s]", x)
+}
+
 
 # =============================================================================
 # Formatting results: basic conversion to "pretty" text formats

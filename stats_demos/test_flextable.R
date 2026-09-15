@@ -221,12 +221,26 @@ tsumm1 <- (
         )
     )
     %>% add_row(
-        variable = "Primary outcomes ^[First footnote.]",
+        variable = paste0(
+            "Primary outcomes ",
+            miscresults$ftextra_inline_footnote("First footnote.")
+        ),
         .before = 2
     )
     %>% add_row(
-        variable = "Secondary outcomes ^[Second footnote.]",
+        variable = paste0(
+            "Secondary outcomes ",
+            miscresults$ftextra_inline_footnote("Second footnote.")
+        ),
         .before = 6
+    )
+    %>% add_row(
+        variable = paste0(
+            "Secondary outcomes[^fref] again[^fref]",
+            "\n\n",
+            "[^fref]: Third footnote."
+        ),
+        .before = 7 # ***
     )
 )
 # Get the groups in the right order:
@@ -429,7 +443,7 @@ fd4 <- (
 # =============================================================================
 
 ft1 <- (
-    tsumm1
+    tsumm1  # contains footnotes already; q.v.
     %>% flextable()
     %>% ftExtra::colformat_md(
         .footnote_options = FOOTNOTE_OPTIONS
@@ -452,7 +466,7 @@ ft1 <- (
         # i and j represent row, column pairs
         i = c(3, 3),  # rows
         j = c(2, 3),  # columns
-        value = as_paragraph("Hello, world!"),
+        value = as_paragraph("Hello, footnote world!"),
         ref_symbols = c(" †"),
         part = "body",
         inline = TRUE,
@@ -462,7 +476,7 @@ ft1 <- (
         # i and j represent row, column pairs
         i = c(4, 4),  # rows
         j = c(2, 3),  # columns
-        value = as_paragraph("May be volatile."),
+        value = as_paragraph("Footnote: May be volatile."),
         ref_symbols = c(" ‡"),
         part = "body",
         inline = TRUE,
