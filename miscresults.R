@@ -3885,6 +3885,137 @@ miscresults$reorder_rows <- function(
 
 
 # =============================================================================
+# Saving output
+# =============================================================================
+
+miscresults$CM_PER_INCH <- 1/2.54
+
+miscresults$save_flextables_as_docx <- function(
+    ...,
+    values = NULL,
+    path,
+    align = c("left", "center", "right"),
+    page_size = officer::page_size(orient = "landscape"),  # default is A4 portrait
+    margins = officer::page_mar(
+        bottom = 2 * miscresults$CM_PER_INCH,
+        top = 2 * miscresults$CM_PER_INCH,
+        right = 2 * miscresults$CM_PER_INCH,
+        left = 2 * miscresults$CM_PER_INCH,
+        header = 0.5 * miscresults$CM_PER_INCH,  # not very relevant
+        footer = 0.5 * miscresults$CM_PER_INCH,  # not very relevant
+        gutter = 0 * miscresults$CM_PER_INCH
+            # ... extra at the left (typically), for binding
+    ),
+    topcaption = TRUE,
+    new_page = TRUE,
+    remove_titles = FALSE,
+    end_with_blank_paragraph = TRUE,
+    heading_style = "heading 1",
+    silent = FALSE
+) {
+    # Assistance function for flextable::save_as_docx(), because that does not
+    # start a new page per table, even if you use
+    #       pr_section = officer::prop_section(type = "nextPage")
+    # as suggested in the documentation.
+    #
+    # Arguments:
+    #   ...
+    #       Flextable objects, optionally named, as for
+    #       flextable::save_as_docx(). Where names are given, they are used as
+    #       titles. (The table may also have captions built into it, of
+    #       course -- and footnotes.)
+    #   values
+    #       As for flextable::save_as_docx(). A list (possibly named); each
+    #       element is a flextable object. If named objects, names are used as
+    #       titles. If provided, argument ... will be ignored.
+    #   path
+    #       Name of a .DOCX file to save (including the extension).
+    #   align
+    #       Alignment -- of table/caption within page (not text within table).
+    #       The default for flextable::save_as_docx() is "center", but we
+    #       default to "left" here.
+    #   page_size
+    #       An officer::page_size() object; its default is A4 portrait. Here,
+    #       we default to page_size(orient = "landscape") for A4 landscape. You
+    #       can also specify the width/height explicitly; see
+    #       ?officer::page_size.
+    #   margins
+    #       An officer::page_mar() object, representing margins.
+    #   topcaption
+    #       If TRUE, the caption is added before the table; if FALSE, after.
+    #   new_page
+    #       If TRUE, a page break separates each table; otherwise, a blank
+    #       paragraph.
+    #   end_with_blank_paragraph
+    #       If TRUE, insert a blank paragraph at the end. This is sensible, or
+    #       it may be hard to get the cursor below the bottom table.
+    #   heading_style
+    #       Style for headings.
+    #   silent
+    #       Don't report the save operation.
+    #
+    # Returns:
+    #   The rdocx object (silently).
+    #
+    # Notes:
+    #   The "officer" package is described in full at
+    #   https://davidgohel.github.io/officer/index.html.
+
+    # As for flextable::save_as_docx():
+    if (is.null(values)) {
+        values <- list(...)
+    }
+    values <- Filter(function(x) inherits(x, "flextable"), values)
+    titles <- names(values)
+    show_names <- !is.null(titles) && !remove_titles
+
+    # Then:
+    align <- match.arg(align)
+    n_tables <- length(values)
+    if (n_tables < 1) {
+        warning("No tables passed to miscresults$save_flextables_as_docx()")
+        return()
+    }
+    if (!silent) {
+        cat("- Writing ", n_tables, " tables to ", path, "\n", sep = "")
+    }
+    z <- officer::read_docx()
+    for (i in 1:n_tables) {
+        if (i > 1) {
+            if (new_page) {
+                z <- officer::body_add_break(z)  # page break
+            } else {
+                z <- officer::body_add_par(z, "")  # empty paragraph
+            }
+        }
+        if (show_names) {
+            z <- officer::body_add_par(z, titles[i], style = heading_style)
+        }
+        z <- flextable::body_add_flextable(
+            z,
+            value = values[[i]],  # the table
+            align = align,
+            topcaption = topcaption
+        )
+    }
+    if (end_with_blank_paragraph) {
+        z <- officer::body_add_par(z, "")  # empty paragraph
+    }
+    # The section-setting seems to need to happen at the end:
+    z <- officer::body_set_default_section(
+        z,
+        officer::prop_section(
+            page_size = page_size,
+            page_margins = margins,
+            type = "continuous"
+        )
+    )
+    print(z, target = path)
+    return(invisible(z))
+}
+
+
+# =============================================================================
 # Model comparison via ANOVA
 # =============================================================================
 

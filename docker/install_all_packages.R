@@ -72,6 +72,7 @@ pak::pak(c(
     "extrafont",  # fonts
     "ez",  # ezANOVA; simple analysis of variance.
     "flextable",  # Pretty table creation: https://ardata-fr.github.io/flextable-book/index.html
+    "formula.tools",  # for working with formula objects
     "ftExtra",  # For markup (e.g. superscript) within flextable.
     "gdata",  # Miscellaneous data manipulation tools.
     "ggforce",  # e.g. better faceting
@@ -92,6 +93,7 @@ pak::pak(c(
     "ltm",  # Latent trait models.
     "matrixStats",  # High-performance matrix functions.
     "MCMCglmm",  # MCMC generalized linear mixed models.
+    "merTools",  # e.g. for merTools::predictInterval().
     "moments",  # E.g. skewness, kurtosis.
     "multcomp",  # Multiple comparisons for generalized linear models etc.
     "multidplyr",  # Parallel processing for dplyr (part of tidyverse).

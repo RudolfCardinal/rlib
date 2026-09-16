@@ -779,33 +779,48 @@ ftcomp1 <- (
 
 cat(paste0("Saving to ", OUTPUT_DOCX, "...\n"))
 CM_PER_INCH <- 1/2.54
-flextable::save_as_docx(
+savelist <- list(
     `Table 1` = ft1,
     `Table 1 again` = ft1,  # a second copy
     `Table 2` = ft2,
     `Table 3a (linear)` = ft3a,
     `Table 3b (logistic)` = ft3b,
     `Table 3c (as 3b but squished up)` = ft3c,
-    `Table 3c (as 3c but no reference levels)` = ft3d,
-    path = OUTPUT_DOCX,  # file will be created or overwritten
-    align = "left",  # table (and caption) within page (not text within table)
-    pr_section = prop_section(  # from "officer" package
-        # There is no adjustment of column size. If the font is too big, the
-        # table just overspills the margin. Check padding also; see
-        # set_flextable_defaults(), get_flextable_defaults().
-        type = "nextPage",  # begin tables on new pages? Not working.
-        page_size = page_size(orient = "landscape"),  # default is A4 portrait
-        page_margins = page_mar(  # units are inches; default is 1"
-            bottom = 1 * CM_PER_INCH,
-            top = 1 * CM_PER_INCH,
-            right = 1 * CM_PER_INCH,
-            left = 1 * CM_PER_INCH,
-            header = 0.5 * CM_PER_INCH,
-            footer = 0.5 * CM_PER_INCH,
-            gutter = 0.5 * CM_PER_INCH
+    `Table 3c (as 3c but no reference levels)` = ft3d
+)
+page_size <- officer::page_size(orient = "landscape")  # A4 landscape
+margins <- page_mar(  # units are inches; default is 1"
+    bottom = 1 * CM_PER_INCH,
+    top = 1 * CM_PER_INCH,
+    right = 1 * CM_PER_INCH,
+    left = 1 * CM_PER_INCH,
+    header = 0.5 * CM_PER_INCH,
+    footer = 0.5 * CM_PER_INCH,
+    gutter = 0.5 * CM_PER_INCH
+)
+if (FALSE) {
+    flextable::save_as_docx(
+        values = savelist,
+        path = OUTPUT_DOCX,  # file will be created or overwritten
+        align = "left",  # table (and caption) within page (not text within table)
+        pr_section = officer::prop_section(  # from "officer" package
+            # There is no adjustment of column size. If the font is too big, the
+            # table just overspills the margin. Check padding also; see
+            # set_flextable_defaults(), get_flextable_defaults().
+            type = "nextPage",  # begin tables on new pages? Not working.
+            page_size = page_size,  # default is A4 portrait
+            page_margins = margins
         )
     )
-)
+} else {
+    # Sort out the pagination by doing it ourselves:
+    miscresults$save_flextables_as_docx(
+        values = savelist,
+        path = OUTPUT_DOCX,
+        page_size = officer::page_size(orient = "landscape"),
+        margins = margins
+    )
+}
 
 # SVG output: good quality (possibly very slightly altered fonts); no caption,
 # as per the docs.
