@@ -2395,12 +2395,16 @@ miscresults$mk_model_anova_coeffs <- function(
     #
     #   anova_model:
     #       Model used for the ANOVA table.
+    #
     #       For residual checks, can use e.g.
-    #         library(ggpubr)
-    #         r <- x$anova_model$residuals  # residuals from relevant model
-    #         ggpubr::ggdensity(r)  # visual check of density plot
-    #         ggpubr::ggqqplot(r)  # Q-Q plot (you can also split by factors)
-    #         shapiro.test(r)  # Shapiro-Wilk test; "significant" = "non-normal"
+    #           library(ggpubr)
+    #           r <- x$anova_model$residuals  # residuals from relevant model
+    #           ggpubr::ggdensity(r)  # visual check of density plot
+    #           ggpubr::ggqqplot(r)  # Q-Q plot (you can also split by factors)
+    #           shapiro.test(r)  # Shapiro-Wilk test; "signif." => "non-normal"
+    #
+    #       The formula is available as:
+    #           formula(anova_model)
     #
     #   contrasts_anova_model:
     #       Contrast options used for anova_model.
