@@ -331,6 +331,31 @@ miscresults$markdown_ggtext_to_flextable <- function(x) {
 }
 
 
+miscresults$str_replace_all_if_required <- function(txt, replacements) {
+    # Uses "replacements" to search/replace within "txt".
+    #
+    # Arguments:
+    #   txt
+    #       Text to apply replacements to. (Can be a vector.)
+    #   replacements
+    #       Search/replace pattern, for stringr::str_replace_all(). One option
+    #       is for this to be a vector of the form c("from1" = "to1", "from1" =
+    #       "to2", ...), with which to replace text. If NULL, txt is returned
+    #       unchanged.
+    #
+    # This function just exists to simplify code when replacements is NULL.
+    # NOTE:
+    #   If you want fixed patterns, use:
+    #       replacements <- fixed(c("abc." = "xyz", ...))
+    #   See https://stackoverflow.com/questions/65338223/.
+
+    if (is.null(replacements)) {
+        return(txt)
+    }
+    return(stringr::str_replace_all(txt, pattern = replacements))
+}
+
+
 # =============================================================================
 # Markdown helpers
 # =============================================================================
@@ -1182,13 +1207,10 @@ miscresults$fmt_predictor <- function(
         pattern = miscresults$R_INTERACTION_MARKER,
         replacement = interaction_txt
     )
-    if (!is.null(replacements)) {
-        predictor_txt <- stringr::str_replace_all(
-            predictor_txt,
-            pattern = replacements
-        )
-    }
-    return(predictor_txt)
+    return(miscresults$str_replace_all_if_required(
+        predictor_txt,
+        replacements = replacements
+    ))
 }
 
 
@@ -1221,8 +1243,14 @@ miscresults$fmt_single_level <- function(
     #
     # See fmt_level() for a vectorized version.
 
-    if (is.na(level_txt) || level_txt == miscresults$R_INTERCEPT_LABEL) {
+    if (is.na(level_txt)) {
         return(level_txt)
+    }
+    if (level_txt == miscresults$R_INTERCEPT_LABEL) {
+        return(miscresults$str_replace_all_if_required(
+            level_txt,
+            replacements = replacements
+        ))
     }
     if (is.na(anova_term_txt)) {
         stop(paste0("anova_term_txt is NA, for level_txt = ", level_txt))
@@ -1254,12 +1282,10 @@ miscresults$fmt_single_level <- function(
         level_parts,
         pattern = stringr::fixed(anova_parts)
     )
-    if (!is.null(replacements)) {
-        result_parts <- stringr::str_replace_all(
-            result_parts,
-            pattern = replacements
-        )
-    }
+    result_parts <- miscresults$str_replace_all_if_required(
+        result_parts,
+        replacements = replacements
+    )
     if (remove_blanks) {
         result_parts <- result_parts[!is.na(result_parts) & result_parts != ""]
     }
@@ -2555,6 +2581,7 @@ miscresults$mk_model_anova_coeffs <- function(
     #       table. You may want to start with table_markdown and process it
     #       yourself, though, for your own table style.
     #       Row-compatible with "working".
+    #       Column-compatible with "table_markdown".
     #
     # NOT CURRENTLY PROVIDED:
     # - Overall R-squared values:
@@ -2871,7 +2898,10 @@ miscresults$mk_model_anova_coeffs <- function(
                 )
             ),
             formatted_level = case_when(
-                is_reference_level ~ coeff_name,
+                is_reference_level ~ miscresults$str_replace_all_if_required(
+                    coeff_name,
+                    replacements = predictor_replacements
+                ),
                 is_intercept ~ level_not_applicable,
                 is_linear ~ level_not_applicable,
                 is_subterm ~ miscresults$fmt_level(
