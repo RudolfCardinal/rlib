@@ -2873,13 +2873,16 @@ miscresults$mk_model_anova_coeffs <- function(
             # not an ANOVA term for the intercept, so in that case we move the
             # label to the "term" column.
             formatted_term = case_when(
-                is_intercept ~ R_INTERCEPT_LABEL,
+                is_intercept ~ miscresults$str_replace_all_if_required(
+                    R_INTERCEPT_LABEL,
+                    replacements = predictor_replacements
+                ),
                 is_term ~ miscresults$fmt_predictor(
                     term,
                     replacements = predictor_replacements,
                     interaction_txt = interaction_txt
                 ),
-                .default ="",
+                .default = "",
             ),
             f_txt = case_when(
                 is.na(F) ~ "",
