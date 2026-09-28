@@ -2265,6 +2265,425 @@ miscresults$summarize_model_coefficients <- function(
 }
 
 
+miscresults$annotate_model_anova_coeffs <- function(
+    mlist,
+    model_fn,
+    formula,
+    data,
+    type = c("III", "II", "I", 3, 2, 1),  # default first
+    contrasts_anova_model = NULL,
+    contrasts_coeff_model = NULL,
+    # Cosmetic:
+    include_intercept = TRUE,
+    include_reference_levels = TRUE,
+    predictor_replacements = NULL,
+    coeff_use_plus = TRUE,
+    show_ci = TRUE,
+    suppress_nonsig_coeffs = FALSE,
+    suppress_nonsig_coeff_tests = FALSE,
+    keep_intercept_if_suppressing = TRUE,
+    squish_up_level_rows = FALSE,
+    # Tweaking:
+    min_abs_t = miscresults$MINIMUM_ABS_T_SHOWN,
+    omit_df_below_min_t = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS,
+    min_F = miscresults$MINIMUM_F_SHOWN,
+    omit_df_below_min_F = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS,
+    ns_text = miscresults$NOT_SIGNIFICANT,
+    interaction_txt = paste0(" ", miscresults$MULTIPLY, " "),
+    level_combination_text = ", ",
+    alpha_show_coeffs = miscresults$DEFAULT_ALPHA,
+    reference_label = "Reference",
+    level_not_applicable = miscresults$EN_DASH,
+    ci = miscresults$DEFAULT_CI,
+    show_ss_type = TRUE,
+    debug = FALSE
+) {
+    # This is normally an internal function. However, if you have a model
+    # and you want to annotate it differently, it may be expensive to re-run
+    # the model. In that case, you can pass a previous result from
+    # miscresults$mk_model_anova_coeffs() to this function, and it will return
+    # results in the same format at miscresults$mk_model_anova_coeffs() again,
+    # but with the cosmetic summary information recalculated.
+    #
+    # Arguments:
+    #   mlist
+    #       A list, expected to be the results of
+    #       miscresults$mk_model_anova_coeffs(), but of which only these
+    #       elements are used:
+    #           anova_model
+    #           contrasts_anova_model
+    #           anova_table
+    #           coeff_model
+    #           contrasts_coeff_model
+    #           type
+    #   [others]
+    #       As per miscresults$mk_model_anova_coeffs().
+    #
+    # Returns:
+    #   Exactly as per miscresults$mk_model_anova_coeffs().
+
+    # -------------------------------------------------------------------------
+    # Unpack list
+    # -------------------------------------------------------------------------
+
+    anova_model <- mlist$anova_model
+    contrasts_anova_model <- mlist$contrasts_anova_model
+    anova_table <- mlist$anova_table
+    coeff_model <- mlist$coeff_model
+    contrasts_coeff_model <- mlist$contrasts_coeff_model
+    type <- mlist$type
+
+    stopifnot(!is.null(anova_model))
+    stopifnot(!is.null(contrasts_anova_model))
+    stopifnot(!is.null(anova_table))
+    stopifnot(!is.null(coeff_model))
+    stopifnot(!is.null(contrasts_coeff_model))
+
+    using_type_I_ss <- type == "I" || type == 1
+    using_type_II_ss <- type == "II" || type == 2
+    using_type_III_ss <- type == "III" || type == 3
+    if (!using_type_I_ss && !using_type_II_ss && !using_type_III_ss) {
+        stop("Bad sum-of-squares type argument")
+    }
+
+    # -------------------------------------------------------------------------
+    # Build our version of the ANOVA table, intermediate_anova
+    # -------------------------------------------------------------------------
+    # Creates: anova_detail, intermediate_anova
+
+    anova_detail <- miscresults$summarize_anova_table(anova_table)
+
+    # If we are using Type III SS, the intercept from the ANOVA model is *not*
+    # the same as the intercept from the coefficients model. (And more
+    # generally, this is likely true if we have set different contrasts for the
+    # two models, or at least I'm not confident that it's not.) In these
+    # circumstances, do not consider the ANOVA F test for the intercept.
+
+    if (identical(contrasts_coeff_model, contrasts_anova_model)) {
+        # Same contrasts. Keep the intercept term.
+        intermediate_anova <- anova_detail
+    } else {
+        # Different contrasts. Ditch the intercept term's F test.
+        intermediate_anova <- dplyr::filter(anova_detail, !is_intercept)
+    }
+
+    # -------------------------------------------------------------------------
+    # Build our version of the coefficient table
+    # -------------------------------------------------------------------------
+    # Creates: intermediate_coeffs
+
+    cf <- miscresults$summarize_model_coefficients(
+        coeff_model,
+        anova_table = intermediate_anova,
+        include_reference_levels = include_reference_levels,
+        ci = ci
+    )
+    using_t_not_Z <- cf$using_t_not_Z
+    intermediate_coeffs <- cf$coeff_detail
+
+    # -------------------------------------------------------------------------
+    # Optionally (but by default), suppress statistical coefficient tests for
+    # terms without a significant term in the ANOVA
+    # -------------------------------------------------------------------------
+    # Modifies: intermediate_coeffs
+
+    if (suppress_nonsig_coeffs || suppress_nonsig_coeff_tests) {
+        if (is.null(alpha_show_coeffs)) {
+            stop(paste0(
+                "alpha_show_coeffs not specified, but you are using ",
+                "suppress_nonsig_coeffs or suppress_nonsig_coeff_tests"
+            ))
+        }
+        for (anova_rownum in 1:nrow(intermediate_anova)) {
+            if (intermediate_anova[anova_rownum, ]$pF >= alpha_show_coeffs) {
+                t_idx <- intermediate_anova[anova_rownum, ]$term_idx
+                if (suppress_nonsig_coeffs) {
+                    # Remove this set of coefficients, i.e. keep all others.
+                    # We might keep the intercept for this term also.
+                    intermediate_coeffs <- (
+                        intermediate_coeffs %>%
+                        dplyr::filter(
+                            term_idx != t_idx
+                            | (is_intercept & keep_intercept_if_suppressing)
+                        )
+                    )
+                } else if (suppress_nonsig_coeff_tests) {
+                    # Keep the rows, but suppress the significant tests for
+                    # these coefficients.
+                    rownums <- which(intermediate_coeffs$term_idx == t_idx)
+                    intermediate_coeffs[rownums, ]$coeff_stat <- NA
+                    intermediate_coeffs[rownums, ]$p_coeff_stat <- NA
+                }
+            }
+        }
+    }
+
+    # -------------------------------------------------------------------------
+    # Squish things up to save space?
+    # -------------------------------------------------------------------------
+    # Modifies: intermediate_coeffs
+
+    intermediate_coeffs_before_squish <- NULL
+    if (squish_up_level_rows) {
+        if (debug) {
+            intermediate_coeffs_before_squish <- intermediate_coeffs
+        }
+        intermediate_coeffs <- (
+            intermediate_coeffs
+            %>% group_by(term_idx)
+            %>% arrange(subterm_idx)
+            %>% mutate(new_subterm_idx = row_number() - 1)
+            %>% ungroup()
+            %>% mutate(subterm_idx = new_subterm_idx)
+        )
+    }
+
+    # -------------------------------------------------------------------------
+    # Merge the ANOVA and coefficients tables
+    # -------------------------------------------------------------------------
+    # Creates: intermediate
+
+    # We link on term_idx, subterm_idx.
+    intermediate <- (
+        dplyr::full_join(
+            x = intermediate_anova,
+            y = intermediate_coeffs,
+            by = c("term_idx", "subterm_idx")
+        )
+        %>% mutate(
+            # Fix columns present in both:
+            is_intercept = ifelse(
+                !is.na(is_intercept.x),
+                is_intercept.x,
+                is_intercept.y
+            ),
+            is_term = case_when(
+                # It's a term if intermediate_anova says so.
+                !is.na(is_term.x) ~ is_term.x,
+                .default = is_term.y
+            ),
+            is_subterm = case_when(
+                # It's a subterm if intermediate_coeffs says so.
+                is_intercept ~ FALSE,
+                !is.na(is_subterm.y) ~ is_subterm.y,
+                .default = is_subterm.x
+            ),
+            # Or not present in both:
+            is_reference_level = ifelse(
+                is.na(is_reference_level),
+                FALSE,
+                is_reference_level
+            )
+        )
+        %>% dplyr::select(
+            -is_intercept.x, -is_intercept.y,
+            -is_term.x, -is_term.y,
+            -is_subterm.x, -is_subterm.y
+        )
+        %>% dplyr::arrange(term_idx, subterm_idx)
+    )
+    if (!include_intercept) {
+        intermediate <- intermediate %>% dplyr::filter(!is_intercept)
+    }
+
+    # -------------------------------------------------------------------------
+    # Debugging output?
+    # -------------------------------------------------------------------------
+    if (debug) {
+        cat("- ANOVA table of main model:\n")
+        print(anova_table)
+        cat("\n- Summary of coefficient model:\n")
+        print(summary(coeff_model))
+        cat("\n- anova_detail:\n")
+        print(anova_detail)
+        cat("\n- intermediate_anova:\n")
+        print(intermediate_anova)
+        cat("\n- cf$coeff_detail:\n")
+        print(cf$coeff_detail)
+        cat("\n- intermediate_coeffs_before_squish:\n")
+        print(intermediate_coeffs_before_squish)
+        cat("\n- intermediate_coeffs:\n")
+        print(intermediate_coeffs)
+        cat("\n- intermediate:\n")
+        print(intermediate)
+    }
+
+    # -------------------------------------------------------------------------
+    # Format the table
+    # -------------------------------------------------------------------------
+    # Creates: working, table_markdown
+
+    working <- (
+        intermediate
+        %>% mutate(
+            # Now format.
+            # Also fix an oddity: glm() output can produce a coefficient but
+            # not an ANOVA term for the intercept, so in that case we move the
+            # label to the "term" column.
+            formatted_term = case_when(
+                is_intercept ~ miscresults$str_replace_all_if_required(
+                    R_INTERCEPT_LABEL,
+                    pattern = predictor_replacements
+                ),
+                is_term ~ miscresults$fmt_predictor(
+                    term,
+                    replacements = predictor_replacements,
+                    interaction_txt = interaction_txt
+                ),
+                .default = "",
+            ),
+            f_txt = case_when(
+                is.na(F) ~ "",
+                .default = miscresults$fmt_F(
+                    F, df, df_resid,
+                    min_F = min_F,
+                    omit_df_below_min_F = omit_df_below_min_F
+                )
+            ),
+            pf_txt = case_when(
+                is.na(pF) ~ "",
+                F < min_F ~ ns_text,
+                .default = miscresults$mk_p_text_with_label(
+                    pF,
+                    ns_text = ns_text
+                )
+            ),
+            formatted_level = case_when(
+                is_reference_level ~ miscresults$str_replace_all_if_required(
+                    coeff_name,
+                    pattern = predictor_replacements
+                ),
+                is_intercept ~ level_not_applicable,
+                is_linear ~ level_not_applicable,
+                is_subterm ~ miscresults$fmt_level(
+                    coeff_name,
+                    anova_term_name,
+                    replacements = predictor_replacements,
+                    interaction_txt = level_combination_text
+                ),
+                !is.na(coeff) ~ level_not_applicable,
+                .default = ""  # includes: not an actual level row
+            ),
+            coeff_txt = case_when(
+                is_reference_level ~ reference_label,
+                is.na(coeff) ~ "",
+                show_ci ~ miscresults$fmt_value_ci(
+                    x = coeff,
+                    ci_lower = ci_lower,
+                    ci_upper = ci_upper,
+                    use_plus = coeff_use_plus
+                ),
+                .default = miscresults$fmt_float(
+                    coeff,
+                    use_plus = coeff_use_plus
+                )
+            ),
+            se_txt = case_when(
+                is.na(se) ~ "",
+                .default = miscresults$fmt_float(se)
+            ),
+            coeff_stat_txt = case_when(
+                is.na(coeff_stat) ~ "",
+                using_t_not_Z ~ miscresults$fmt_t(
+                    t = coeff_stat,
+                    df = coeff_df_for_t,
+                    min_abs_t = min_abs_t,
+                    omit_df_below_min_t = omit_df_below_min_t
+                ),
+                .default = miscresults$fmt_Z(coeff_stat)
+            ),
+            p_coeff_stat_txt = case_when(
+                is.na(p_coeff_stat) ~ "",
+                using_t_not_Z & abs(coeff_stat) < min_abs_t ~ ns_text,
+                .default = miscresults$mk_p_text_with_label(
+                    p_coeff_stat,
+                    ns_text = ns_text
+                )
+            ),
+        )
+    )
+    table_markdown <- (
+        working
+        %>% select(
+            formatted_term,
+            f_txt,
+            pf_txt,
+            formatted_level,
+            coeff_txt,
+            se_txt,
+            coeff_stat_txt,
+            p_coeff_stat_txt
+        )
+    )
+
+    ci_pct <- ci * 100
+    formatted_ss_type <- paste0(
+        " (via Type ",
+        case_when(
+            using_type_I_ss ~ "I",
+            using_type_II_ss ~ "II",
+            using_type_III_ss ~ "III",
+            .default = "?"  # impossible as above
+        ),
+        " sums of squares)"
+    )
+
+    colnames(table_markdown) <- c(
+        # Prettier versions:
+        "Term",
+        paste0(
+            miscresults$italic_("F"),
+            ifelse(show_ss_type, formatted_ss_type, "")
+        ),
+        miscresults$italic_(paste0("p", miscresults$subscript_("F"))),
+        "Level",
+        ifelse(
+            show_ci,
+            paste0("Coefficient (", ci_pct, "% CI)"),
+            "Coefficient"
+        ),
+        "Standard error",
+        ifelse(
+            using_t_not_Z,
+            miscresults$italic_("t"),
+            miscresults$italic_("Z")
+        ),
+        ifelse(
+            using_t_not_Z,
+            miscresults$italic_(paste0("p", miscresults$subscript_("t"))),
+            miscresults$italic_(paste0("p", miscresults$subscript_("Z")))
+        )
+    )
+
+    # -------------------------------------------------------------------------
+    # Basic flextable version. (Though users may want to re-process the
+    # "table_markdown" component of the output.)
+    # -------------------------------------------------------------------------
+    # Creates: table_flex
+
+    table_flex <- miscresults$mk_default_flextable_from_markdown(
+        table_markdown
+    )
+
+    # -------------------------------------------------------------------------
+    # Return the results
+    # -------------------------------------------------------------------------
+    return(list(
+        anova_model = anova_model,
+        contrasts_anova_model = contrasts_anova_model,
+        anova_table = anova_table,
+        anova_detail = anova_detail,
+        coeff_model = coeff_model,
+        contrasts_coeff_model = contrasts_coeff_model,
+        coeff_summary = cf$coeff_summary,
+        coeff_detail = cf$coeff_detail,
+        working = working,
+        table_markdown = table_markdown,
+        table_flex = table_flex
+    ))
+}
+
+
 # -----------------------------------------------------------------------------
 # Public interface
 # -----------------------------------------------------------------------------
@@ -2594,7 +3013,17 @@ miscresults$mk_model_anova_coeffs <- function(
     #   For lmer(), use MuMIn::r.squaredGLMM(result$anova_model), e.g. as
     #   MuMIn::r.squaredGLMM(result$anova_model)[1, "R2c"].
 
+    # -------------------------------------------------------------------------
+    # Arguments
+    # -------------------------------------------------------------------------
+
     type <- match.arg(type)
+    using_type_I_ss <- type == "I" || type == 1
+    using_type_II_ss <- type == "II" || type == 2
+    using_type_III_ss <- type == "III" || type == 3
+    if (!using_type_I_ss && !using_type_II_ss && !using_type_III_ss) {
+        stop("Bad sum-of-squares type argument")
+    }
 
     # -------------------------------------------------------------------------
     # Collate ANOVA and coefficient information
@@ -2603,22 +3032,7 @@ miscresults$mk_model_anova_coeffs <- function(
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Establish what contrasts we'll use
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    using_type_I_ss <- type == "I" || type == 1
-    using_type_II_ss <- type == "II" || type == 2
-    using_type_III_ss <- type == "III" || type == 3
-    if (!using_type_I_ss && !using_type_II_ss && !using_type_III_ss) {
-        stop("Bad sum-of-squares type argument")
-    }
-    formatted_ss_type <- paste0(
-        " (via Type ",
-        case_when(
-            using_type_I_ss ~ "I",
-            using_type_II_ss ~ "II",
-            using_type_III_ss ~ "III",
-            .default = "?"  # impossible as above
-        ),
-        " sums of squares)"
-    )
+    # Creates: contrasts_anova_model, contrasts_coeff_model
 
     r_default_contrasts <- c(
         unordered = "contr.treatment",
@@ -2641,8 +3055,10 @@ miscresults$mk_model_anova_coeffs <- function(
     }
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    # Run the models, m1 and m2
+    # Run the models
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Creates: m1, m2
+
     saved_options_contrasts <- getOption("contrasts")  # save
     options(contrasts = contrasts_anova_model)  # set
     m1 <- model_fn(formula, data = data, ...)
@@ -2657,9 +3073,10 @@ miscresults$mk_model_anova_coeffs <- function(
     options(contrasts = saved_options_contrasts)  # restore
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    # Extract: ANOVA table object (a) from m1, plus summary (s) and
-    # coefficients (coeffs) from m2.
+    # Extract: ANOVA table object (a) from m1.
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Creates: a
+
     is_lmertest <- "lmerModLmerTest" %in% class(m1)
     if (is_lmertest) {
         # lmerTest::anova.lmerModLmerTest() takes an explicit "type" argument,
@@ -2719,311 +3136,46 @@ miscresults$mk_model_anova_coeffs <- function(
     }
 
     # -------------------------------------------------------------------------
-    # Build our version of the ANOVA table, in intermediate_anova
+    # Build our core list of expensive objects; let our helper function finish
     # -------------------------------------------------------------------------
-    anova_detail <- miscresults$summarize_anova_table(a)
-    # If we are using Type III SS, the intercept from the ANOVA model is *not*
-    # the same as the intercept from the coefficients model. (And more
-    # generally, this is likely true if we have set different contrasts for the
-    # two models, or at least I'm not confident that it's not.) In these
-    # circumstances, do not consider the ANOVA F test for the intercept.
-    if (identical(contrasts_coeff_model, contrasts_anova_model)) {
-        # Same contrasts. Keep the intercept term.
-        intermediate_anova <- anova_detail
-    } else {
-        # Different contrasts. Ditch the intercept term's F test.
-        intermediate_anova <- dplyr::filter(anova_detail, !is_intercept)
-    }
 
-    # -------------------------------------------------------------------------
-    # Build our version of the coefficient table, intermediate_coeffs
-    # -------------------------------------------------------------------------
-    cf <- miscresults$summarize_model_coefficients(
-        m2,
-        anova_table = intermediate_anova,
-        include_reference_levels = include_reference_levels,
-        ci = ci
-    )
-    using_t_not_Z <- cf$using_t_not_Z
-    intermediate_coeffs <- cf$coeff_detail
-
-    # -------------------------------------------------------------------------
-    # Optionally (but by default), suppress statistical coefficient tests for
-    # terms without a significant term in the ANOVA
-    # -------------------------------------------------------------------------
-    if (suppress_nonsig_coeffs || suppress_nonsig_coeff_tests) {
-        if (is.null(alpha_show_coeffs)) {
-            stop(paste0(
-                "alpha_show_coeffs not specified, but you are using ",
-                "suppress_nonsig_coeffs or suppress_nonsig_coeff_tests"
-            ))
-        }
-        for (anova_rownum in 1:nrow(intermediate_anova)) {
-            if (intermediate_anova[anova_rownum, ]$pF >= alpha_show_coeffs) {
-                t_idx <- intermediate_anova[anova_rownum, ]$term_idx
-                if (suppress_nonsig_coeffs) {
-                    # Remove this set of coefficients, i.e. keep all others.
-                    # We might keep the intercept for this term also.
-                    intermediate_coeffs <- (
-                        intermediate_coeffs %>%
-                        dplyr::filter(
-                            term_idx != t_idx
-                            | (is_intercept & keep_intercept_if_suppressing)
-                        )
-                    )
-                } else if (suppress_nonsig_coeff_tests) {
-                    # Keep the rows, but suppress the significant tests for
-                    # these coefficients.
-                    rownums <- which(intermediate_coeffs$term_idx == t_idx)
-                    intermediate_coeffs[rownums, ]$coeff_stat <- NA
-                    intermediate_coeffs[rownums, ]$p_coeff_stat <- NA
-                }
-            }
-        }
-    }
-
-    # -------------------------------------------------------------------------
-    # Squish things up to save space?
-    # -------------------------------------------------------------------------
-    intermediate_coeffs_before_squish <- NULL
-    if (squish_up_level_rows) {
-        if (debug) {
-            intermediate_coeffs_before_squish <- intermediate_coeffs
-        }
-        intermediate_coeffs <- (
-            intermediate_coeffs
-            %>% group_by(term_idx)
-            %>% arrange(subterm_idx)
-            %>% mutate(new_subterm_idx = row_number() - 1)
-            %>% ungroup()
-            %>% mutate(subterm_idx = new_subterm_idx)
-        )
-    }
-
-    # -------------------------------------------------------------------------
-    # Merge the ANOVA and coefficients tables
-    # -------------------------------------------------------------------------
-    # We link on term_idx, subterm_idx.
-    intermediate <- (
-        dplyr::full_join(
-            x = intermediate_anova,
-            y = intermediate_coeffs,
-            by = c("term_idx", "subterm_idx")
-        )
-        %>% mutate(
-            # Fix columns present in both:
-            is_intercept = ifelse(
-                !is.na(is_intercept.x),
-                is_intercept.x,
-                is_intercept.y
-            ),
-            is_term = case_when(
-                # It's a term if intermediate_anova says so.
-                !is.na(is_term.x) ~ is_term.x,
-                .default = is_term.y
-            ),
-            is_subterm = case_when(
-                # It's a subterm if intermediate_coeffs says so.
-                is_intercept ~ FALSE,
-                !is.na(is_subterm.y) ~ is_subterm.y,
-                .default = is_subterm.x
-            ),
-            # Or not present in both:
-            is_reference_level = ifelse(
-                is.na(is_reference_level),
-                FALSE,
-                is_reference_level
-            )
-        )
-        %>% dplyr::select(
-            -is_intercept.x, -is_intercept.y,
-            -is_term.x, -is_term.y,
-            -is_subterm.x, -is_subterm.y
-        )
-        %>% dplyr::arrange(term_idx, subterm_idx)
-    )
-    if (!include_intercept) {
-        intermediate <- intermediate %>% dplyr::filter(!is_intercept)
-    }
-
-    # -------------------------------------------------------------------------
-    # Debugging output?
-    # -------------------------------------------------------------------------
-    if (debug) {
-        cat("- ANOVA model:\n")
-        print(a)
-        cat("\n- Summary of coefficient model:\n")
-        print(summary(m2))
-        cat("\n- anova_detail:\n")
-        print(anova_detail)
-        cat("\n- intermediate_anova:\n")
-        print(intermediate_anova)
-        cat("\n- cf$coeff_detail:\n")
-        print(cf$coeff_detail)
-        cat("\n- intermediate_coeffs_before_squish:\n")
-        print(intermediate_coeffs_before_squish)
-        cat("\n- intermediate_coeffs:\n")
-        print(intermediate_coeffs)
-        cat("\n- intermediate:\n")
-        print(intermediate)
-    }
-
-    # -------------------------------------------------------------------------
-    # Format the table
-    # -------------------------------------------------------------------------
-    working <- (
-        intermediate
-        %>% mutate(
-            # Now format.
-            # Also fix an oddity: glm() output can produce a coefficient but
-            # not an ANOVA term for the intercept, so in that case we move the
-            # label to the "term" column.
-            formatted_term = case_when(
-                is_intercept ~ miscresults$str_replace_all_if_required(
-                    R_INTERCEPT_LABEL,
-                    pattern = predictor_replacements
-                ),
-                is_term ~ miscresults$fmt_predictor(
-                    term,
-                    replacements = predictor_replacements,
-                    interaction_txt = interaction_txt
-                ),
-                .default = "",
-            ),
-            f_txt = case_when(
-                is.na(F) ~ "",
-                .default = miscresults$fmt_F(
-                    F, df, df_resid,
-                    min_F = min_F,
-                    omit_df_below_min_F = omit_df_below_min_F
-                )
-            ),
-            pf_txt = case_when(
-                is.na(pF) ~ "",
-                F < min_F ~ ns_text,
-                .default = miscresults$mk_p_text_with_label(
-                    pF,
-                    ns_text = ns_text
-                )
-            ),
-            formatted_level = case_when(
-                is_reference_level ~ miscresults$str_replace_all_if_required(
-                    coeff_name,
-                    pattern = predictor_replacements
-                ),
-                is_intercept ~ level_not_applicable,
-                is_linear ~ level_not_applicable,
-                is_subterm ~ miscresults$fmt_level(
-                    coeff_name,
-                    anova_term_name,
-                    replacements = predictor_replacements,
-                    interaction_txt = level_combination_text
-                ),
-                !is.na(coeff) ~ level_not_applicable,
-                .default = ""  # includes: not an actual level row
-            ),
-            coeff_txt = case_when(
-                is_reference_level ~ reference_label,
-                is.na(coeff) ~ "",
-                show_ci ~ miscresults$fmt_value_ci(
-                    x = coeff,
-                    ci_lower = ci_lower,
-                    ci_upper = ci_upper,
-                    use_plus = coeff_use_plus
-                ),
-                .default = miscresults$fmt_float(
-                    coeff,
-                    use_plus = coeff_use_plus
-                )
-            ),
-            se_txt = case_when(
-                is.na(se) ~ "",
-                .default = miscresults$fmt_float(se)
-            ),
-            coeff_stat_txt = case_when(
-                is.na(coeff_stat) ~ "",
-                using_t_not_Z ~ miscresults$fmt_t(
-                    t = coeff_stat,
-                    df = coeff_df_for_t,
-                    min_abs_t = min_abs_t,
-                    omit_df_below_min_t = omit_df_below_min_t
-                ),
-                .default = miscresults$fmt_Z(coeff_stat)
-            ),
-            p_coeff_stat_txt = case_when(
-                is.na(p_coeff_stat) ~ "",
-                using_t_not_Z & abs(coeff_stat) < min_abs_t ~ ns_text,
-                .default = miscresults$mk_p_text_with_label(
-                    p_coeff_stat,
-                    ns_text = ns_text
-                )
-            ),
-        )
-    )
-    table_markdown <- (
-        working
-        %>% select(
-            formatted_term,
-            f_txt,
-            pf_txt,
-            formatted_level,
-            coeff_txt,
-            se_txt,
-            coeff_stat_txt,
-            p_coeff_stat_txt
-        )
-    )
-    ci_pct <- ci * 100
-    colnames(table_markdown) <- c(
-        # Prettier versions:
-        "Term",
-        paste0(
-            miscresults$italic_("F"),
-            ifelse(show_ss_type, formatted_ss_type, "")
-        ),
-        miscresults$italic_(paste0("p", miscresults$subscript_("F"))),
-        "Level",
-        ifelse(
-            show_ci,
-            paste0("Coefficient (", ci_pct, "% CI)"),
-            "Coefficient"
-        ),
-        "Standard error",
-        ifelse(
-            using_t_not_Z,
-            miscresults$italic_("t"),
-            miscresults$italic_("Z")
-        ),
-        ifelse(
-            using_t_not_Z,
-            miscresults$italic_(paste0("p", miscresults$subscript_("t"))),
-            miscresults$italic_(paste0("p", miscresults$subscript_("Z")))
-        )
-    )
-
-    # -------------------------------------------------------------------------
-    # Basic flextable version. (Though users may want to re-process the
-    # "table_markdown" component of the output.)
-    # -------------------------------------------------------------------------
-    table_flex <- miscresults$mk_default_flextable_from_markdown(
-        table_markdown
-    )
-
-    # -------------------------------------------------------------------------
-    # Return the results
-    # -------------------------------------------------------------------------
-    return(list(
+    mlist <- list(
+        # Model 1:
         anova_model = m1,
         contrasts_anova_model = contrasts_anova_model,
         anova_table = a,
-        anova_detail = anova_detail,
+        # Model 2:
         coeff_model = m2,
         contrasts_coeff_model = contrasts_coeff_model,
-        coeff_summary = cf$coeff_summary,
-        coeff_detail = cf$coeff_detail,
-        working = working,
-        table_markdown = table_markdown,
-        table_flex = table_flex
+        # Type:
+        type = type
+    )
+    return(miscresults$annotate_model_anova_coeffs(
+        mlist = mlist,
+
+        include_intercept = include_intercept,
+        include_reference_levels = include_reference_levels,
+        predictor_replacements = predictor_replacements,
+        coeff_use_plus = coeff_use_plus,
+        show_ci = show_ci,
+        suppress_nonsig_coeffs = suppress_nonsig_coeffs,
+        suppress_nonsig_coeff_tests = suppress_nonsig_coeff_tests,
+        keep_intercept_if_suppressing = keep_intercept_if_suppressing,
+        squish_up_level_rows = squish_up_level_rows,
+
+        min_abs_t = min_abs_t,
+        omit_df_below_min_t = omit_df_below_min_t,
+        min_F = min_F,
+        omit_df_below_min_F = omit_df_below_min_F,
+        ns_text = ns_text,
+        interaction_txt = interaction_txt,
+        level_combination_text = level_combination_text,
+        alpha_show_coeffs = alpha_show_coeffs,
+        reference_label = reference_label,
+        level_not_applicable = level_not_applicable,
+        ci = ci,
+        show_ss_type = show_ss_type,
+        debug = debug
     ))
 }
 
