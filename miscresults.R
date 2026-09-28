@@ -3400,7 +3400,7 @@ miscresults$predict_fixedeffects_with_ci_from_lmer <- function(
             # Calculated predicted values (a vector, one per observation).
             # (This is nearly instant.)
 
-            demo_predicted <- predict(
+            predicted <- predict(
                 fitted_model,
                 newdata = demo_data,
                 re.form = NA,
