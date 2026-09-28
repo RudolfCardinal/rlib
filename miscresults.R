@@ -3181,6 +3181,407 @@ miscresults$mk_model_anova_coeffs <- function(
 
 
 # =============================================================================
+# Prediction from lmer models with approximate confidence intervals
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Formula helper functions
+# -----------------------------------------------------------------------------
+
+eliminate_formula_lhs <- function(f) {
+    # Removes the LHS from a formula, but adding back the tilde, i.e.
+    # "~ [rhs]", as a formula.
+    # See https://stackoverflow.com/questions/12967797/.
+
+    rhs_formula <- rlang::f_rhs(f)
+    rhs_txt <- deparse(rhs_formula)
+    tilde_and_rhs_formula <- reformulate(rhs_txt)
+    return(tilde_and_rhs_formula)
+}
+
+
+fixed_effects_formula <- function(f) {
+    # Removes random effects from a formula, leaving fixed effects.
+
+    lme4::nobars(f)
+}
+
+
+fixed_effects_tilde_rhs_formula <- function(f) {
+    # Converts a formula like LHS ~ RHS + (1 | subject), with fixed and
+    # random effects, to a formula like: ~ RHS.
+
+    eliminate_formula_lhs(fixed_effects_formula(f))
+}
+
+
+# -----------------------------------------------------------------------------
+# Main function to predict from lmer models
+# -----------------------------------------------------------------------------
+
+miscresults$predict_fixedeffects_with_ci_from_lmer <- function(
+    fitted_model,
+    newdata,
+    varname_predicted = "predicted",
+    varname_predicted_median = "predicted_median",
+    varname_se_predicted = "se"
+    varname_ci_lower = "ci_lower",
+    varname_ci_upper = "ci_upper",
+    ci = 0.95,
+    predict_method = c("predict.merMod", "predictInterval", "bootMer"),
+    mermod_method = c("manual", "no_confint", "mermod_se_fit"),
+    seed = NULL,
+    nsim = 200
+) {
+    # Use a fitted lmer() model, "fitted_model", to make new predictions, using
+    # predictor data in "newdata". Calculate confidence intervals, based on
+    # the fixed-effects variability. Note that this a slightly controversial
+    # area, in that some of these methods are approximations.
+    #
+    # WARNING: If you pass in character columns in "newdata" without
+    # defining them as factors, it is likely that model.matrix() will fail
+    # with this error:
+    #   "contrasts can be applied only to factors with 2 or more levels"
+    #
+    # Arguments:
+    #   fitted_model
+    #       A model, e.g. the output of lmer().
+    #   data
+    #       A data.frame-compatible table containing new data from which to
+    #       predict. Every row is an observation, about which to make a new
+    #       prediction. Every column is a predictor value. The column names
+    #       must match predictors used in the fitted model.
+    #   varname_predicted
+    #       Variable name in which to store new predicted values -- either
+    #       straightforwardly predicted ones, or the mean values from
+    #       simulations.
+    #   varname_predicted_median
+    #       Variable name in which to store new predicted median values, from
+    #       simulations.
+    #   varname_se_predicted
+    #       Variable name in which to store standard errors of the newly
+    #       predicted values. If confidence intervals are not provided, or are
+    #       calculated via simulation, this column is missing.
+    #   varname_ci_lower
+    #       Variable name in which to store the lower confidence interval.
+    #       If confidence intervals are not provided, this column is missing.
+    #   varname_ci_upper
+    #       Variable name in which to store the upper confidence interval.
+    #       If confidence intervals are not provided, this column is missing.
+    #   ci
+    #       The confidence interval to use, e.g. 0.95 for 95% confidence
+    #       intervals (CIs), if CIs are calculated.
+    #   predict_method
+    #       The prediction method:
+    #       - "predict.merMod": lme4::predict.merMod(). FAST.
+    #       - "bootMer": lme4::bootMer(). VERY SLOW.
+    #       - "predictInterval": merTools::predictInterval(). INTERMEDIATE?
+    #   mermod_method
+    #       Only applicable for predict_method == "predict.merMod". How shall
+    #       we calculate confidence intervals?
+    #       - "manual": A manual method to estimate the prediction variances
+    #         (those variances being based on uncertainties only in the
+    #         fixed-effect predictors).
+    #       - "no_confint": Without confidence intervals.
+    #       - "mermod_se_fit": Via predict.merMod(se.fit = TRUE).
+    #   seed
+    #       Seed to apply, via set.seed(), if running simulations.
+    #       If NULL, no seed is set.
+    #   nsim
+    #       Number of simulations to run, if applicable. Needs to be large
+    #       enough to derive the confidence interval specified (e.g. you can't
+    #       get a decent 95% confidence interval with 10 simulations...).
+    #
+    # Returns:
+    #
+    #   A data.frame-compatible table, matching newdata, but adding new columns
+    #   (always one according to varname_predicted; perhaps others according to
+    #   varname_predicted_median, varname_se_predicted, varname_ci_lower, and
+    #   varname_ci_upper).
+
+    # -------------------------------------------------------------------------
+    # Arguments
+    # -------------------------------------------------------------------------
+
+    predict_method <- match.arg(predict_method)
+    mermod_method <- match.arg(mermod_method)
+    stopifnot(0.5 < ci && ci < 1)
+    stopifnot(ncols(newdata) >= 1)
+
+    # -------------------------------------------------------------------------
+    # Constants
+    # -------------------------------------------------------------------------
+
+    crit_p <- 1 - ((1 - ci) / 2)  # e.g. 0.975 for ci == 0.95
+    crit_z <- qnorm(crit_p)  # for ci == 0.95, crit_z == 1.96 approximately
+
+    # -------------------------------------------------------------------------
+    # Predict
+    # -------------------------------------------------------------------------
+
+    cat("▷ Predicting new data; method: ", predict_method, "...\n", sep = "")
+    predicted <- NULL
+    predicted_median <- NULL
+    se_predicted <- NULL
+    ci_lower <- NULL
+    ci_upper <- NULL
+
+    if (predict_method == "predict.merMod") {
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # lme4::predict.merMod(): quick, no confidence intervals;
+        #                         ... or slow, with them.
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        cat("  ... sub-method: ", mermod_method, "...\n", sep = "")
+
+        if (mermod_method == "no_confint") {
+
+            predicted <- predict(
+                # The model comes from lmerTest::lmer (which overloads
+                # lmer4::lmer). Therefore, predict() uses
+                # lme4::predict.merMod(). See ?predict.merMod; it doesn't have
+                # the "interval" option that other versions do. By default, it
+                # just returns a numeric vector.
+                fitted_model,
+                newdata = demo_data,
+                re.form = NA,
+                    # ... Don't include random effects; also much faster.
+                    # (NULL = include random effects; NA = don't.)
+                    # Since we have no variation, it is daft to include them.
+                allow.new.levels = TRUE,
+                    # ... as we are using new, made-up "subjects"; you have to
+                    # have a "subject" predictor, so use an unknown (new)
+                    # level, and it will use "the unconditional
+                    # (population-level) values for data with previously
+                    # unobserved levels (or NAs)".
+                type = "response"
+                    # ... default is "link", giving predictions on the scale of
+                    # the linear predictor; "response" gives them on the
+                    # original data scale. Here, they are the same.
+            )
+
+        } else if (mermod_method == "mermod_se_fit") {
+
+            prediction_list <- predict(  # predict.merMod()
+                fitted_model,
+                newdata = demo_data,
+                re.form = NA,
+                allow.new.levels = TRUE,
+                type = "response",
+                se.fit = TRUE  # Aha!
+                    # If FALSE, the default, it returns a vector of predicted
+                    # values. If TRUE, though not fully documented (as
+                    # experimental), it returns a list with elements "fit", the
+                    # predicted values, and "se.fit", the associated standard
+                    # errors. See also source, e.g.
+                    # https://rdrr.io/cran/lme4/src/R/predict.R.
+                    # However: SLOW.
+            )
+            predicted <- prediction_list$fit
+            se_predicted <- prediction_list$se.fit
+            ci_lower <- predicted + crit_z * se_predicted
+            ci_upper <- predicted - crit_z * se_predicted
+
+        } else if (mermod_method == "manual") {
+
+            # Check to avoid a difficult-to-debug crash from model.matrix().
+
+            for (j in 1:ncols(newdata)) {
+                if (is.character(newdata[, j])) {
+                    warning(paste0(
+                        "miscresults$predict_fixedeffects_with_ci_from_lmer: ",
+                        "newdata column ", j, "[", colnames(newdata)[j], "] ",
+                        "is of character type, not factor type; ",
+                        "model.matrix() may crash."
+                    ))
+                }
+            }
+
+            # Calculated predicted values (a vector, one per observation).
+            # (This is nearly instant.)
+
+            demo_predicted <- predict(
+                fitted_model,
+                newdata = demo_data,
+                re.form = NA,
+                allow.new.levels = TRUE,
+                type = "response"
+            )
+
+            # - A model.matrix (design matrix) has one row per observation, and
+            #   one column per predictor, with values being the values of each
+            #   predictor.
+            # - We want the design matrix for the demo data, not the original.
+
+            fixed_formula <- fixed_effects_tilde_rhs_formula(
+                formula(fitted_model)
+            )
+            X <- model.matrix(fixed_formula, data = demo_data)
+
+            # IF THIS FAILS WITH "contrasts can be applied only to factors with
+            # 2 or more levels"...
+            # Source for model.matrix() is at
+            # - https://github.com/wch/r-source/blob/trunk/src/library/stats/R/models.R
+            # Discussion is at:
+            # - https://stackoverflow.com/questions/44200195/
+            # In my case it was because at least one factor was in character
+            # format, without being defined as a factor. Hence the check above.
+
+            # - The variance-covariance matrix is square, with one row for
+            #   every predictor and one column for every predictor. The leading
+            #   diagonal represents the variances of each predictor (each
+            #   predictor's covariance with itself). The other elements
+            #   represent covariances. See also
+            #   https://en.wikipedia.org/wiki/Covariance_matrix.
+            # - vcov::Vcov() may be faster than base vcov(); see
+            #   https://cran.r-project.org/web/packages/vcov/refman/vcov.html.
+            # - vcov::se(object, ...) just does sqrt(diag(Vcov(object, ...))).
+            #   Although that just gives the SEs of the predictors, not of the
+            #   predicted values themselves.
+            # - But plain vcov() quick anyway, and by default returns only
+            #   fixed effects.
+
+            V <- vcov(fitted_model)
+
+            # - So if X is the design matrix, XT its transpose, and V the
+            #   variance-covariance matrix, using "matrix[row, col]"
+            #   descriptors, with "obs" for observation and "pred" for
+            #   predictor, then
+            #
+            #       X[obs, pred] %*% V[pred, pred]
+            #               ... gives something[obs, pred]
+            #       X[obs, pred] %*% V[pred, pred] %*% XT[pred, obs]
+            #               ... gives something[obs, obs]
+            # - See also
+            #   https://stat.ethz.ch/pipermail/r-sig-mixed-models/2011q2/016356.html
+            # - tcrossprod(x, y) equals x %*% t(y)
+            # - Matrix multiplication is associative.
+            # - diag(matrix) extracts a vector that is the leading diagonal of
+            #   a matrix.
+
+            pred_variance <- diag(X %*% tcrossprod(V, X))
+
+            # - These are the prediction variances based only on the
+            #   uncertainty in the fixed-effect predictors (see link above).
+
+            # - The standard error is the square root of the corresponding
+            #   variance.
+
+            se_predicted <- sqrt(pred_variance)
+            ci_lower <- predicted + crit_z * se_predicted
+            ci_upper <- predicted - crit_z * se_predicted
+
+        } else {
+            stop("bug")
+        }
+
+    } else if (predict_method == "bootMer") {
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # lme4::bootMer(): slow
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # https://www.r-bloggers.com/2015/06/confidence-intervals-for-prediction-in-glmms/
+        # Very, very slow.
+        progbar <- progress::progress_bar$new(
+            format = PROGRESS_BAR_FORMAT,
+            total = nsim,
+            clear = PROGRESS_BAR_CLEAR
+        )
+        pred_fn <- function(fit) {
+            # We return a single vector of predicted values.
+            predvalues <- predict(  # this is predict.merMod
+                fit,
+                newdata = demo_data,
+                re.form = NA,  # don't include random effects (as above)
+                allow.new.levels = TRUE,  # as above
+                type = "response"  # as above
+            )
+            progbar$tick()
+            return(predvalues)
+        }
+        if (!is.null(seed)) {
+            set.seed(seed)
+        }
+        boot_out <- bootMer(  # This is the very slow step!
+            fitted_model,
+            FUN = pred_fn,
+            nsim = nsim,
+            use.u = FALSE,  # simulate spherical random effects?
+            re.form = NA,  # the default; equivalent to use.u = FALSE
+            type = "parametric",  # the default
+            .progress = "txt",  # uses txtProgressBar
+            parallel = "no"
+                # ... "multicore" (threading) doesn't work under Windows
+                # ... "snow" and "future" require multiple R sessions
+        )
+        # Extract matrix of simulated values:
+        # (rows = simulations, cols = new data points, one per input data row)
+        sim_matrix <- boot_out$t
+        # Fill in answers
+        margin <- 2  # meaning "across columns"; see ?apply
+
+        # 95% CI via percentiles of simulated values
+        ci_lower <- apply(sim_matrix, margin, quantile, probs = 0.025)
+        ci_upper <- apply(sim_matrix, margin, quantile, probs = 0.975)
+        predicted_median <- apply(sim_matrix, margin, quantile, probs = 0.5)
+        predicted <- apply(sim_matrix, margin, mean)
+
+    } else if (predict_method == "predictInterval") {
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # merTools::predictInterval(): intermediate? But still very slow
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        #   https://www.rdocumentation.org/packages/merTools/versions/0.6.4/topics/predictInterval
+        #   https://cran.r-project.org/web/packages/merTools/vignettes/Using_predictInterval.html
+        predicted_intervals <- merTools::predictInterval(
+            merMod = fitted_model,
+            newdata = demo_data,
+            which = "fixed",  # which interval: full, fixed, random, all
+            level = 0.95,  # 95% CI
+            n.sims = nsim,
+            stat = "mean",  # or median?
+            type = "linear.prediction",
+            include.resid.var = FALSE,
+            seed = seed,  # deals with NULL
+            .parallel = FALSE  # just takes ages creating new sessions
+        )
+        predicted <- predicted_intervals$fit
+        ci_lower <- predicted_intervals$lwr
+        ci_upper <- predicted_intervals$upr
+
+    } else (
+        stop("bug")
+    )
+
+    # Other methods not tried:
+    # - arm::sim()
+
+    # -------------------------------------------------------------------------
+    # Write results back to the data frame, and return
+    # -------------------------------------------------------------------------
+
+    if (is.null(predicted)) {
+        stop("bug")
+    }
+    newdata[[varname_predicted]] <- predicted
+
+    if (!is.null(ci_lower) && !is.null(ci_upper)) {
+        newdata[[varname_ci_lower]] <- ci_lower
+        newdata[[varname_ci_upper]] <- ci_upper
+    }
+    if (!is.null(predicted_median)) {
+        newdata[[varname_predicted_median]] <- predicted_median
+    }
+    if (!is.null(se_predicted)) {
+        newdata[[varname_se_predicted]] <- se_predicted
+    }
+
+    cat("  ... done\n")
+    return(newdata)
+}
+
+
+# =============================================================================
 # Formatting Cox proportional hazards models
 # =============================================================================
 
