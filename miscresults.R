@@ -1235,7 +1235,8 @@ miscresults$fmt_single_level <- function(
     #       Name of the ANOVA term, e.g. "drug:sex".
     #   replacements
     #       Optional vector of the form c("from1" = "to1", "from1" = "to2",
-    #       ...), with which to replace text.
+    #       ...), with which to replace text. For more detail, see
+    #       miscresults$str_replace_all_if_required().
     #   interaction_txt
     #       Text to use to join components of the level, e.g. " x " or ", ".
     #   remove_blanks
@@ -2366,7 +2367,8 @@ miscresults$mk_model_anova_coeffs <- function(
     #   predictor_replacements:
     #       Vector of replacements to apply to all predictor text, including
     #       factors and levels, e.g. c("from1" = "to1", "from2" = "to2", ...),
-    #       or NULL.
+    #       or NULL. For more detail, see
+    #       miscresults$str_replace_all_if_required().
     #   coeff_use_plus:
     #       Show "+" for positive coefficients (and confidence intervals, if
     #       shown).
@@ -3288,7 +3290,8 @@ miscresults$mk_cph_table <- function(
     #       "FALSE" level (though without coefficient detail, of course).
     #   predictor_replacements:
     #       Vector of replacements to apply to all predictor text, e.g.
-    #       c("from1" = "to1", "from2" = "to2", ...), or NULL.
+    #       c("from1" = "to1", "from2" = "to2", ...), or NULL. For more detail,
+    #       see miscresults$str_replace_all_if_required().
     #   coeff_use_plus:
     #       Show "+" for positive coefficients.
     #   z_use_plus:
