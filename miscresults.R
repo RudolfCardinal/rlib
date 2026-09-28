@@ -3343,7 +3343,7 @@ miscresults$predict_fixedeffects_with_ci_from_lmer <- function(
                 # the "interval" option that other versions do. By default, it
                 # just returns a numeric vector.
                 fitted_model,
-                newdata = demo_data,
+                newdata = newdata,
                 re.form = NA,
                     # ... Don't include random effects; also much faster.
                     # (NULL = include random effects; NA = don't.)
@@ -3364,7 +3364,7 @@ miscresults$predict_fixedeffects_with_ci_from_lmer <- function(
 
             prediction_list <- predict(  # predict.merMod()
                 fitted_model,
-                newdata = demo_data,
+                newdata = newdata,
                 re.form = NA,
                 allow.new.levels = TRUE,
                 type = "response",
@@ -3402,7 +3402,7 @@ miscresults$predict_fixedeffects_with_ci_from_lmer <- function(
 
             predicted <- predict(
                 fitted_model,
-                newdata = demo_data,
+                newdata = newdata,
                 re.form = NA,
                 allow.new.levels = TRUE,
                 type = "response"
@@ -3416,7 +3416,7 @@ miscresults$predict_fixedeffects_with_ci_from_lmer <- function(
             fixed_formula <- fixed_effects_tilde_rhs_formula(
                 formula(fitted_model)
             )
-            X <- model.matrix(fixed_formula, data = demo_data)
+            X <- model.matrix(fixed_formula, data = newdata)
 
             # IF THIS FAILS WITH "contrasts can be applied only to factors with
             # 2 or more levels"...
@@ -3491,7 +3491,7 @@ miscresults$predict_fixedeffects_with_ci_from_lmer <- function(
             # We return a single vector of predicted values.
             predvalues <- predict(  # this is predict.merMod
                 fit,
-                newdata = demo_data,
+                newdata = newdata,
                 re.form = NA,  # don't include random effects (as above)
                 allow.new.levels = TRUE,  # as above
                 type = "response"  # as above
@@ -3535,7 +3535,7 @@ miscresults$predict_fixedeffects_with_ci_from_lmer <- function(
         #   https://cran.r-project.org/web/packages/merTools/vignettes/Using_predictInterval.html
         predicted_intervals <- merTools::predictInterval(
             merMod = fitted_model,
-            newdata = demo_data,
+            newdata = newdata,
             which = "fixed",  # which interval: full, fixed, random, all
             level = 0.95,  # 95% CI
             n.sims = nsim,
