@@ -3306,7 +3306,7 @@ miscresults$predict_fixedeffects_with_ci_from_lmer <- function(
     predict_method <- match.arg(predict_method)
     mermod_method <- match.arg(mermod_method)
     stopifnot(0.5 < ci && ci < 1)
-    stopifnot(ncols(newdata) >= 1)
+    stopifnot(ncol(newdata) >= 1)
 
     # -------------------------------------------------------------------------
     # Constants
@@ -3386,7 +3386,7 @@ miscresults$predict_fixedeffects_with_ci_from_lmer <- function(
 
             # Check to avoid a difficult-to-debug crash from model.matrix().
 
-            for (j in 1:ncols(newdata)) {
+            for (j in 1:ncol(newdata)) {
                 if (is.character(newdata[, j])) {
                     warning(paste0(
                         "miscresults$predict_fixedeffects_with_ci_from_lmer: ",
