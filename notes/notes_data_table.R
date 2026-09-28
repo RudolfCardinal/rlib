@@ -472,3 +472,40 @@ test_list_encapsulation <- function() {
     # ... but I think the last one does not apply within `:=`().
     # So we remove one list level.
 }
+
+
+# -----------------------------------------------------------------------------
+# Pass by reference
+# -----------------------------------------------------------------------------
+#
+# All R objects are passed by reference when used as function arguments -- but
+# most are then copied as soon as they are modified, making it seem like they
+# are passed by value. Since data.table often actually modifies by reference,
+# the pass-by-reference behaviour becomes apparent.
+#
+# See:
+# - https://stackoverflow.com/questions/62740267
+# - https://bookdown.org/content/d1e53ac9-28ce-472f-bc2c-f499f18264a3/reference.html
+#   "Copy on modify" is the idiom. But data.table does not follow that.
+#
+# However, I seem to have found a situation (with a 1.8M-row data.table and
+# data.table 1.16.0) when the modify-by-reference behaviour demonstrated below
+# did not work. Bug? See similar things:
+# - https://stackoverflow.com/questions/18494284
+# - https://stackoverflow.com/questions/15195220
+# In my case, length(x) was 29 and truelength(x) was 0.
+# It probably does reflect this bug, which relates to having just loaded a
+# table from disk (in my case: from a cache).
+# The FIX is to call alloc.col(x) first.
+# ... which, as a diagnostic, increases the value of truelength(x).
+
+
+demo_pass_by_reference_data_table <- function() {
+    f <- function(x) {
+        x[, `:=`(p = 3, q = 4)]
+    }
+    d = data.table(a = 1:10)  # only column is a
+    f(d)  # modifies d
+    print(d)  # it now has columns a, p, q
+    return(d)
+}
