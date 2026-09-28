@@ -3385,9 +3385,15 @@ miscresults$predict_fixedeffects_with_ci_from_lmer <- function(
         } else if (mermod_method == "manual") {
 
             # Check to avoid a difficult-to-debug crash from model.matrix().
+            #
+            # Note when using an integer column index, j: with a data.frame or
+            # tibble, newdata[, j] selects the column. With data.table,
+            # newdata[, j] crashes with an error, and newdata[, ..j] is
+            # required. However, newdata[[j]] works for data.frame, tibble, and
+            # data.table.
 
             for (j in 1:ncol(newdata)) {
-                if (is.character(newdata[, j])) {
+                if (is.character(newdata[[j]])) {
                     warning(paste0(
                         "miscresults$predict_fixedeffects_with_ci_from_lmer: ",
                         "newdata column ", j, "[", colnames(newdata)[j], "] ",
