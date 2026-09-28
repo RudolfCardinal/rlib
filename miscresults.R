@@ -331,28 +331,32 @@ miscresults$markdown_ggtext_to_flextable <- function(x) {
 }
 
 
-miscresults$str_replace_all_if_required <- function(txt, replacements) {
-    # Uses "replacements" to search/replace within "txt".
+miscresults$str_replace_all_if_required <- function(string, pattern) {
+    # Uses "pattern" to search/replace within "string", returning the value(s)
+    # of "string" with any modifications applied. It is just a wrapper around
+    # stringr::str_replace_all(); however, it also accepts pattern = NULL,
+    # which stringr::str_replace_all() does not.
     #
     # Arguments:
-    #   txt
-    #       Text to apply replacements to. (Can be a vector.)
-    #   replacements
-    #       Search/replace pattern, for stringr::str_replace_all(). One option
-    #       is for this to be a vector of the form c("from1" = "to1", "from1" =
-    #       "to2", ...), with which to replace text. If NULL, txt is returned
-    #       unchanged.
     #
-    # This function just exists to simplify code when replacements is NULL.
-    # NOTE:
-    #   If you want fixed patterns, use:
-    #       replacements <- fixed(c("abc." = "xyz", ...))
-    #   See https://stackoverflow.com/questions/65338223/.
+    #   string
+    #       Text to apply pattern-based replacements to. (Can be a vector.)
+    #   pattern
+    #       Search/replace pattern. If NULL, string is returned unchanged.
+    #       Otherwise, this is passed to stringr::str_replace_all().
+    #       - See https://stringr.tidyverse.org/reference/str_replace.html.
+    #       - One option is for this to be a vector of the form c("from1" =
+    #         "to1", "from1" = "to2", ...), with which to replace text.
+    #       - By default, these are regular expression patterns.
+    #       - If you want fixed patterns, wrap pattern within stringr::fixed(),
+    #         like this:
+    #               pattern <- fixed(c("abc." = "xyz", ...))
+    #         See https://stackoverflow.com/questions/65338223/.
 
-    if (is.null(replacements)) {
-        return(txt)
+    if (is.null(pattern)) {
+        return(string)
     }
-    return(stringr::str_replace_all(txt, pattern = replacements))
+    return(stringr::str_replace_all(string, pattern = pattern))
 }
 
 
@@ -1209,7 +1213,7 @@ miscresults$fmt_predictor <- function(
     )
     return(miscresults$str_replace_all_if_required(
         predictor_txt,
-        replacements = replacements
+        pattern = replacements
     ))
 }
 
@@ -1249,7 +1253,7 @@ miscresults$fmt_single_level <- function(
     if (level_txt == miscresults$R_INTERCEPT_LABEL) {
         return(miscresults$str_replace_all_if_required(
             level_txt,
-            replacements = replacements
+            pattern = replacements
         ))
     }
     if (is.na(anova_term_txt)) {
@@ -1284,7 +1288,7 @@ miscresults$fmt_single_level <- function(
     )
     result_parts <- miscresults$str_replace_all_if_required(
         result_parts,
-        replacements = replacements
+        pattern = replacements
     )
     if (remove_blanks) {
         result_parts <- result_parts[!is.na(result_parts) & result_parts != ""]
@@ -2875,7 +2879,7 @@ miscresults$mk_model_anova_coeffs <- function(
             formatted_term = case_when(
                 is_intercept ~ miscresults$str_replace_all_if_required(
                     R_INTERCEPT_LABEL,
-                    replacements = predictor_replacements
+                    pattern = predictor_replacements
                 ),
                 is_term ~ miscresults$fmt_predictor(
                     term,
@@ -2903,7 +2907,7 @@ miscresults$mk_model_anova_coeffs <- function(
             formatted_level = case_when(
                 is_reference_level ~ miscresults$str_replace_all_if_required(
                     coeff_name,
-                    replacements = predictor_replacements
+                    pattern = predictor_replacements
                 ),
                 is_intercept ~ level_not_applicable,
                 is_linear ~ level_not_applicable,
