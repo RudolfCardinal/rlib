@@ -3224,7 +3224,7 @@ miscresults$predict_fixedeffects_with_ci_from_lmer <- function(
     newdata,
     varname_predicted = "predicted",
     varname_predicted_median = "predicted_median",
-    varname_se_predicted = "se"
+    varname_se_predicted = "se",
     varname_ci_lower = "ci_lower",
     varname_ci_upper = "ci_upper",
     ci = 0.95,
