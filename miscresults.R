@@ -3396,7 +3396,7 @@ miscresults$predict_fixedeffects_with_ci_from_lmer <- function(
                 if (is.character(newdata[[j]])) {
                     warning(paste0(
                         "miscresults$predict_fixedeffects_with_ci_from_lmer: ",
-                        "newdata column ", j, "[", colnames(newdata)[j], "] ",
+                        "newdata column ", j, " [", colnames(newdata)[j], "] ",
                         "is of character type, not factor type; ",
                         "model.matrix() may crash."
                     ))
