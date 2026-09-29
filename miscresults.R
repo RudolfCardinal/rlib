@@ -5107,14 +5107,14 @@ miscresults$compare_models_via_anova <- function(
     footer_elements <- c(
         "Fixed: number of fixed-effect predictors (columns in the design",
         " matrix).",
-        " Random: number of random-effect predictors, if applicable.",
+        " Random: number of random-effect predictors.",
         " DF: number of parameters estimated from degrees of freedom.",
         " Observations: total number of observations being predicted.",
         " *R*^2^~*m*~: Marginal pseudo-*R*^2^, the proportion of variance",
         " explained by fixed effects.",
         " *R*^2^~*c*~: Conditional pseudo-*R*^2^, the proportion of ",
         " variance explained by the entire model (fixed and random ",
-        " effects, if applicable).",
+        " effects).",
         " LL, log likelihood: natural log of likelihood *L*(model | data)",
         " ∝ *P*(data | model); higher (less negative) values indicate a",
         " better fit."
