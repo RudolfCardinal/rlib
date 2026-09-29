@@ -4650,6 +4650,7 @@ miscresults$compare_models_via_anova <- function(
     no_comparison_txt = miscresults$EN_DASH,
     missing_description_txt = miscresults$EN_DASH,
     zero_df_comparison_txt = "[comparison has 0 df]",
+    other_missing_txt = miscresults$EN_DASH,
     min_F = miscresults$MINIMUM_F_SHOWN,
     min_chisq = miscresults$MINIMUM_CHISQ_SHOWN,
     omit_df_below_min_F = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS,
@@ -4688,6 +4689,8 @@ miscresults$compare_models_via_anova <- function(
     #   zero_df_comparison_txt
     #       Text to use if a comparison has 0 df (which arises e.g. if you
     #       compare a model to itself).
+    #   other_missing_txt
+    #       Text to use if something else is missing.
     #
     #   min_F                   }
     #   min_chisq               }
@@ -4793,10 +4796,13 @@ miscresults$compare_models_via_anova <- function(
         base_model_name <- index_model_element$compare_to
 
         # Just to avoid screw-ups with variables from a previous interation:
+        n_obs <- NA_integer_
         r2m <- NA_real_
         r2c <- NA_real_
         ll_obj <- NULL
-        npar <- NA_integer_
+        model_n_fixed <- NA_integer_
+        model_n_random <- NA_integer_
+        model_df <- NA_integer_
         ll <- NA_real_
         aic <- NA_real_
         bic <- NA_real_
@@ -4819,10 +4825,25 @@ miscresults$compare_models_via_anova <- function(
         # effects, in which case (of course) the two numbers are the same.
 
         # Others
+        n_obs <- stats::nobs(index_model)
+        if (inherits(index_model, "merMod")) {
+            # lme4::lmer() models will satisfy this.
+            model_n_fixed <- ncol(model.matrix(index_model, "fixed"))
+            model_n_random <- ncol(model.matrix(index_model, "random"))
+        } else if ("rank" %in% names(index_model)) {
+            # lm() objects will satisfy this
+            model_n_fixed <- index_model$rank
+            model_n_random <- other_missing_txt
+        } else {
+            model_n_fixed <- other_missing_txt
+            model_n_random <- other_missing_txt
+        }
         ll_obj <- stats::logLik(index_model)
-        npar <- attr(ll_obj, "df")
+        model_df <- attr(ll_obj, "df")
             # From ?stats::logLik: "df"..., giving the number of (estimated)
-            # parameters in the model.
+            # parameters in the model. Note that it is either rank or rank + 1.
+            # Source:
+            # https://github.com/wch/r-source/blob/trunk/src/library/stats/R/logLik.R
         ll <- as.numeric(ll_obj)  # log likelihood
         aic <- stats::AIC(index_model)
         bic <- stats::BIC(index_model)
@@ -4855,6 +4876,19 @@ miscresults$compare_models_via_anova <- function(
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # Compare to the base model
             a <- anova(base_model, index_model)
+
+            # - Generic:
+            #   https://nathanieldphillips-yarrr.share.connect.posit.cloud/comparing-regression-models-with-anova.html
+            # - Base anova():
+            #   https://stat.ethz.ch/R-manual/R-patched/library/stats/html/anova.html
+            #   https://github.com/wch/r-source/blob/trunk/src/library/stats/R/anova.R
+            # - anova.lm() and anova.lmlist():
+            #   https://stat.ethz.ch/R-manual/R-patched/library/stats/html/anova.lm.html
+            #   https://github.com/wch/r-source/blob/trunk/src/library/stats/R/lm.R
+            # - For lmer() models:
+            #   https://rstats4ag.org/mixed-models-anova.html
+            # - Possibly anova.glm():
+            #   https://github.com/wch/r-source/blob/trunk/src/library/stats/R/glm.R
 
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             # Interpret it
@@ -4932,7 +4966,10 @@ miscresults$compare_models_via_anova <- function(
         newrow <- tibble(
             model = index_model_name,
             description = index_model_description,
-            npar = npar,
+            fixed = model_n_fixed,
+            random = model_n_random,
+            df = model_df,
+            nobs = n_obs,
             R2m = r2m,
             R2c = r2c,
             logLik = ll,
@@ -4949,7 +4986,10 @@ miscresults$compare_models_via_anova <- function(
     table_markdown <- (
         working
         %>% mutate(
-            npar = miscresults$fmt_int(npar),
+            fixed = miscresults$fmt_int(fixed),
+            random = miscresults$fmt_int(random),
+            df = miscresults$fmt_int(df),
+            nobs = miscresults$fmt_int(nobs),
             R2m = miscresults$fmt_float(R2m, allow_sci_notation = FALSE),
             R2c = miscresults$fmt_float(R2c, allow_sci_notation = FALSE),
             logLik = miscresults$fmt_dp(logLik, dp = dp),
@@ -4959,7 +4999,10 @@ miscresults$compare_models_via_anova <- function(
         %>% rename(
             "Model" = model,
             "Description" = description,
-            "Parameters" = npar,
+            "Fixed" = fixed,
+            "Random" = random,
+            "DF" = df,
+            "Observations" = nobs,
             "*R*^2^~*m*~" = R2m,
             "*R*^2^~*c*~" = R2c,
             "LL" = logLik,
@@ -4972,18 +5015,25 @@ miscresults$compare_models_via_anova <- function(
             table_markdown
         )
         %>% add_footer_lines(as_paragraph_md(paste0(
-            "Number of parameters estimated from degrees of freedom.",
+            "Fixed: number of fixed-effect predictors (columns in the design",
+            " matrix).",
+            " Random: number of random-effect predictors, if applicable.",
+            " DF: number of parameters estimated from degrees of freedom.",
+            " Observations: total number of observations being predicted.",
             " *R*^2^~*m*~: Marginal pseudo-*R*^2^, the proportion of variance",
             " explained by fixed effects.",
             " *R*^2^~*c*~: Conditional pseudo-*R*^2^, the proportion of ",
             " variance explained by the entire model (fixed and random ",
             " effects, if applicable).",
-            " LL, log likelihood: natural log of likelihood ",
-            " L(model | data) ∝ P(data | model); higher (less negative) values",
-            " indicate a better fit.",
+            " LL, log likelihood: natural log of likelihood *L*(model | data)",
+            " ∝ *P*(data | model); higher (less negative) values indicate a",
+            " better fit.",
             " AIC, Akaike Information Criterion (rewards LL, penalizes ",
             " more parameters): lower values are better.",
-            " BIC, Bayesian Information Criterion: lower values are better."
+            " BIC, Bayesian Information Criterion: lower values are better.",
+            " Versus: other model, to which this model is compared.",
+            " Comparison: the null hypothesis is broadly that the two models",
+            " explain the same proportion of variance."
         )))
     )
     # -------------------------------------------------------------------------
