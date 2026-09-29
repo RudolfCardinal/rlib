@@ -5014,7 +5014,7 @@ miscresults$compare_models_via_anova <- function(
         miscresults$mk_default_flextable_from_markdown(
             table_markdown
         )
-        %>% add_footer_lines(as_paragraph_md(paste0(
+        %>% add_footer_lines(ftExtra::as_paragraph_md(paste0(
             "Fixed: number of fixed-effect predictors (columns in the design",
             " matrix).",
             " Random: number of random-effect predictors, if applicable.",
