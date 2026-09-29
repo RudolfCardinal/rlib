@@ -4658,6 +4658,7 @@ miscresults$compare_models_via_anova <- function(
     check_alpha = DEFAULT_ALPHA,
     df_format = miscresults$DF_FORMAT_OPTIONS,
     dp = miscresults$DEFAULT_DP,
+    include_model_list = FALSE,
     verbose = TRUE
 ) {
     # Compares multiple nested models (which must be of the same data, and
@@ -4705,8 +4706,9 @@ miscresults$compare_models_via_anova <- function(
     #
     # Returns a list with these elements:
     #
-    #   model_info_list
-    #       The input, as above.
+    #   model_info_list -- ONLY IF include_model_list = TRUE.
+    #       The input, as above. Note that this can be very large for some
+    #       models, so it is not included by default.
     #   working:
     #       Full-working internal table. Columns are:
     #       - model
@@ -5039,12 +5041,15 @@ miscresults$compare_models_via_anova <- function(
     # -------------------------------------------------------------------------
     # Return
     # -------------------------------------------------------------------------
-    return(list(
-        model_info_list = model_info_list,  # the input
+    result <- list(
         working = working,
         table_markdown = table_markdown,
         table_flex = table_flex
-    ))
+    )
+    if (include_model_list) {
+        result$model_info_list <- model_info_list  # the input
+    }
+    return(result)
 }
 
 
