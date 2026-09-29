@@ -5148,7 +5148,7 @@ miscresults$compare_models_via_anova <- function(
         footer_elements <- c(
             footer_elements,
             " Versus: other model, to which this model is compared.",
-            " Comparison: the null hypothesis is broadly that the two models",
+            " Comparison: for the null hypothesis that the two models",
             " explain the same proportion of variance."
         )
     } else {
