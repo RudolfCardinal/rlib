@@ -5122,8 +5122,7 @@ miscresults$compare_models_via_anova <- function(
     if (include_aic) {
         footer_elements <- c(
             footer_elements,
-            " AIC, Akaike Information Criterion (rewards LL, penalizes ",
-            " more parameters): lower values are better."
+            " AIC, Akaike Information Criterion: lower values are better."
         )
     } else {
         table_markdown <- table_markdown %>% select(-AIC, -"AIC rank")
