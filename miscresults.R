@@ -4700,6 +4700,9 @@ miscresults$compare_models_via_anova <- function(
     df_format = miscresults$DF_FORMAT_OPTIONS,
     dp = miscresults$DEFAULT_DP,
     include_model_list = FALSE,
+    include_aic = TRUE,
+    include_bic = TRUE,
+    include_pairwise = TRUE,
     verbose = TRUE
 ) {
     # Compares multiple nested models (which must be of the same data, and
@@ -4742,6 +4745,13 @@ miscresults$compare_models_via_anova <- function(
     #   df_format               }
     #   dp                      }
     #
+    #   include_aic
+    #       Include AIC and AIC rank in the formatted output?
+    #   include_bic
+    #       Include BIC and BIC rank in the formatted output?
+    #   include_pairwise
+    #       Calculate comparisons, and include the "versus" and "comparison"
+    #       columns in the formatted output?
     #   verbose
     #       Be verbose?
     #
@@ -4785,13 +4795,14 @@ miscresults$compare_models_via_anova <- function(
     #           chi-square test.
     #   table_markdown:
     #       Markdown table, designed to be converted to a flextable.
-    #       Row- and column-compatible with "working", but with formatted
-    #       headings and numerical content.
+    #       Row-compatible with "working", but with formatted headings and
+    #       numerical content. Column-compatible unless you do not include
+    #       AIC/BIC, as above.
     #   table_flex:
     #       Version of table_markdown formatted, in basic style, as a flextable
     #       table, with an explanatory footnote. You may want to start with
     #       table_markdown and process it yourself, though, for your own table
-    #       style. Row- and column-compatible with "working", "table_markdown".
+    #       style. Row- and column-compatible "table_markdown".
     #
     # NOTE: if an F test has a negative first degree of freedom, you are
     # probably comparing models backwards (and the second DF number will be the
@@ -4895,7 +4906,11 @@ miscresults$compare_models_via_anova <- function(
         aic <- stats::AIC(index_model)
         bic <- stats::BIC(index_model)
 
-        if (is.na(base_model_name) || is.null(base_model_name)) {
+        if (
+            !include_pairwise
+            || is.na(base_model_name)
+            || is.null(base_model_name)
+        ) {
             # -----------------------------------------------------------------
             # A non-comparison row.
             # -----------------------------------------------------------------
@@ -5027,9 +5042,11 @@ miscresults$compare_models_via_anova <- function(
         )
         working <- rbind(working, newrow)
     }
+
     # -------------------------------------------------------------------------
     # Formatting
     # -------------------------------------------------------------------------
+
     working <- (
         working
         %>% mutate(
@@ -5087,36 +5104,69 @@ miscresults$compare_models_via_anova <- function(
             "Comparison" = comparison
         )
     )
-    table_flex <- (
-        miscresults$mk_default_flextable_from_markdown(
-            table_markdown
-        )
-        %>% add_footer_lines(ftExtra::as_paragraph_md(paste0(
-            "Fixed: number of fixed-effect predictors (columns in the design",
-            " matrix).",
-            " Random: number of random-effect predictors, if applicable.",
-            " DF: number of parameters estimated from degrees of freedom.",
-            " Observations: total number of observations being predicted.",
-            " *R*^2^~*m*~: Marginal pseudo-*R*^2^, the proportion of variance",
-            " explained by fixed effects.",
-            " *R*^2^~*c*~: Conditional pseudo-*R*^2^, the proportion of ",
-            " variance explained by the entire model (fixed and random ",
-            " effects, if applicable).",
-            " LL, log likelihood: natural log of likelihood *L*(model | data)",
-            " ∝ *P*(data | model); higher (less negative) values indicate a",
-            " better fit.",
+    footer_elements <- c(
+        "Fixed: number of fixed-effect predictors (columns in the design",
+        " matrix).",
+        " Random: number of random-effect predictors, if applicable.",
+        " DF: number of parameters estimated from degrees of freedom.",
+        " Observations: total number of observations being predicted.",
+        " *R*^2^~*m*~: Marginal pseudo-*R*^2^, the proportion of variance",
+        " explained by fixed effects.",
+        " *R*^2^~*c*~: Conditional pseudo-*R*^2^, the proportion of ",
+        " variance explained by the entire model (fixed and random ",
+        " effects, if applicable).",
+        " LL, log likelihood: natural log of likelihood *L*(model | data)",
+        " ∝ *P*(data | model); higher (less negative) values indicate a",
+        " better fit."
+    )
+    if (include_aic) {
+        footer_elements <- c(
+            footer_elements,
             " AIC, Akaike Information Criterion (rewards LL, penalizes ",
-            " more parameters): lower values are better.",
-            " BIC, Bayesian Information Criterion: lower values are better.",
-            " AIC/BIC ranks are within the models shown (1 best).",
+            " more parameters): lower values are better."
+        )
+    } else {
+        table_markdown <- table_markdown %>% select(-AIC, -"AIC rank")
+    }
+
+    if (include_bic) {
+        footer_elements <- c(
+            footer_elements,
+            " BIC, Bayesian Information Criterion: lower values are better."
+        )
+    } else {
+        table_markdown <- table_markdown %>% select(-BIC, -"BIC rank")
+    }
+
+    if (include_aic || include_bic) {
+        footer_elements <- c(
+            footer_elements,
+            " Ranks are within the models shown (1 best)."
+        )
+    }
+
+    if (include_pairwise) {
+        footer_elements <- c(
+            footer_elements,
             " Versus: other model, to which this model is compared.",
             " Comparison: the null hypothesis is broadly that the two models",
             " explain the same proportion of variance."
-        )))
+        )
+    } else {
+        table_markdown <- table_markdown %>% select(-Versus, -Comparison)
+    }
+
+    table_flex <- (
+        miscresults$mk_default_flextable_from_markdown(table_markdown)
+        %>% add_footer_lines(ftExtra::as_paragraph_md(
+            paste0(footer_elements, collapse = "")
+        ))
     )
+
     # -------------------------------------------------------------------------
     # Return
     # -------------------------------------------------------------------------
+
     result <- list(
         working = working,
         table_markdown = table_markdown,
