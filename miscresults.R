@@ -622,11 +622,15 @@ miscresults$fmt_dp <- function(
     x,
     dp = miscresults$DEFAULT_DP,
     big.mark = get_flextable_defaults()$big.mark,
-    decimal.mark = get_flextable_defaults()$decimal.mark
+    decimal.mark = get_flextable_defaults()$decimal.mark,
+    drop0trailing = FALSE
 ) {
     # Formats a number to a certain number of decimal places (dp).
     # If an integer is provided, that will also be formatted with decimal
     # places.
+    #
+    # If drop0trailing = TRUE, trailing zeros after the decimal mark are
+    # dropped (i.e. dp becomes the MAXIMUM number of decimal places).
     #
     # Don't use this for degrees of freedom; use miscresults$mk_df_text()
     # instead, because of the defaults around commas for thousands separators
@@ -637,7 +641,8 @@ miscresults$fmt_dp <- function(
         format = "f",
         digits = dp,
         big.mark = big.mark,
-        decimal.mark = decimal.mark
+        decimal.mark = decimal.mark,
+        drop0trailing = drop0trailing
     ))
 }
 
@@ -688,6 +693,42 @@ miscresults$mk_p_text_with_label <- function(
             sidak_correction_n = sidak_correction_n_for_asterisks,
             ns_text = ns_text
         )
+    ))
+}
+
+
+miscresults$fmt_int_or_max_dp <- function(
+    x,
+    dp = miscresults$DEFAULT_DP,
+    big.mark = get_flextable_defaults()$big.mark,
+    decimal.mark = get_flextable_defaults()$decimal.mark,
+    use_plus = FALSE,  # prepend "+" for positive numbers?
+    na_str = get_flextable_defaults()$na_str,
+    nan_str = get_flextable_defaults()$nan_str
+) {
+    # If a number appears to be an integer, format it as such; otherwise,
+    # format it UP TO a certain number of decimal places.
+    # For example, with dp = 2: 1 -> 1, 2.5 -> 2.5, 3.33333 -> 3.33.
+    #   x <- c(1, 2.5, 3.3333)
+    #   miscresults$fmt_int_or_max_dp(x, dp = 2)
+    #       # [1] "1"    "2.5"  "3.33"
+
+    return(ifelse(
+        as.integer(x) == x | is.na(x) | is.nan(x),
+        miscresults$fmt_int(
+            x,
+            big.mark = big.mark,
+            use_plus = use_plus,
+            na_str = na_str,
+            nan_str = nan_str
+        ),  # integer version, also handling NA/NaN
+        miscresults$fmt_dp(
+            x,
+            dp = dp,
+            big.mark = big.mark,
+            decimal.mark = decimal.mark,
+            drop0trailing = TRUE
+        )  # floating-point version
     ))
 }
 
@@ -4729,8 +4770,12 @@ miscresults$compare_models_via_anova <- function(
     #           Log likelihood for the model. From stats::logLik().
     #       - AIC
     #           The Akaike Information Criterion, from stats::AIC().
+    #       - AIC_rank
+    #           Rank of AIC (1 best).
     #       - BIC
     #           The Bayesian Information Criterion, from stats::BIC().
+    #       - BIC_rank
+    #           Rank of AIC (1 best).
     #       - versus
     #           Name of the (base) model being compared to.
     #       - comparison
@@ -4985,9 +5030,35 @@ miscresults$compare_models_via_anova <- function(
     # -------------------------------------------------------------------------
     # Formatting
     # -------------------------------------------------------------------------
+    working <- (
+        working
+        %>% mutate(
+            AIC_rank = rank(AIC),  # lowest gets rank 1 (best)
+            BIC_rank = rank(BIC)  # lowest gets rank 1 (best)
+        )
+        %>% select(
+            # Column order:
+            model,
+            description,
+            fixed,
+            random,
+            df,
+            nobs,
+            R2m,
+            R2c,
+            logLik,
+            AIC,
+            AIC_rank,
+            BIC,
+            BIC_rank,
+            versus,
+            comparison
+        )
+    )
     table_markdown <- (
         working
         %>% mutate(
+            # Cosmetic:
             fixed = miscresults$fmt_int(fixed),
             random = miscresults$fmt_int(random),
             df = miscresults$fmt_int(df),
@@ -4996,7 +5067,9 @@ miscresults$compare_models_via_anova <- function(
             R2c = miscresults$fmt_float(R2c, allow_sci_notation = FALSE),
             logLik = miscresults$fmt_dp(logLik, dp = dp),
             AIC = miscresults$fmt_dp(AIC, dp = dp),
-            BIC = miscresults$fmt_dp(BIC, dp = dp)
+            AIC_rank = miscresults$fmt_int_or_max_dp(AIC_rank),
+            BIC = miscresults$fmt_dp(BIC, dp = dp),
+            BIC_rank = miscresults$fmt_int_or_max_dp(BIC_rank)
         )
         %>% rename(
             "Model" = model,
@@ -5008,6 +5081,8 @@ miscresults$compare_models_via_anova <- function(
             "*R*^2^~*m*~" = R2m,
             "*R*^2^~*c*~" = R2c,
             "LL" = logLik,
+            "AIC rank" = AIC_rank,
+            "BIC rank" = BIC_rank,
             "Versus" = versus,
             "Comparison" = comparison
         )
@@ -5033,6 +5108,7 @@ miscresults$compare_models_via_anova <- function(
             " AIC, Akaike Information Criterion (rewards LL, penalizes ",
             " more parameters): lower values are better.",
             " BIC, Bayesian Information Criterion: lower values are better.",
+            " AIC/BIC ranks are within the models shown (1 best).",
             " Versus: other model, to which this model is compared.",
             " Comparison: the null hypothesis is broadly that the two models",
             " explain the same proportion of variance."
