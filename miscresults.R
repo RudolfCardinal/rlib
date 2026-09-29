@@ -176,7 +176,9 @@ miscresults$SIDAK_TXT <- paste0(
 # Other
 # -----------------------------------------------------------------------------
 
-miscresults$DEFAULT_DP_FOR_DF <- 1  # decimal places for non-integer degrees of freedom
+miscresults$DEFAULT_DP <- 2  # For generic numbers
+miscresults$DEFAULT_DP_FOR_DF <- 1
+    # Decimal places for non-integer degrees of freedom.
 miscresults$MINIMUM_P_SHOWN <- 2.2e-16
     # .Machine$double.eps is 2.220446e-16; however, readers are used to seeing
     # "2.2e-16" or equivalent representations in output from R, not "2.22e-16".
@@ -187,6 +189,7 @@ miscresults$MINIMUM_ABS_T_SHOWN <- 1
     #     So that's about 1.96. We might want to report things that didn't
     #     make it, but 1 seems like a reasonable "definitely do not care"
     #     threshold.
+miscresults$MINIMUM_CHISQ_SHOWN <- 1
 miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS <- TRUE
 miscresults$DEFAULT_MAX_SIG_STARS <- 3  # range: 3 to 5
 miscresults$NOT_SIGNIFICANT <- "NS"
@@ -505,6 +508,11 @@ miscresults$mk_p_asterisk_caption <- function(
 }
 
 
+miscresults$hyphen_to_minus <- function(txt) {
+    stringr::str_replace_all(txt, miscresults$HYPHEN, miscresults$MINUS)
+}
+
+
 miscresults$fmt_int <- function(
     x,
     big.mark = get_flextable_defaults()$big.mark,
@@ -525,9 +533,7 @@ miscresults$fmt_int <- function(
         big.mark = big.mark
     )
     # Convert hyphens to proper minus signs, and trim whitespace:
-    txt <- stringr::str_trim(
-        stringr::str_replace_all(txt, miscresults$HYPHEN, miscresults$MINUS)
-    )
+    txt <- stringr::str_trim(miscresults$hyphen_to_minus(txt))
     # Deal with NaN and NA (in parallel):
     return(case_when(
         is.nan(x) ~ nan_str,
@@ -552,6 +558,7 @@ miscresults$fmt_float <- function(
     # significant figures, allowing scientific notation or not. Return values
     # might look like "0.1", "2.2 × 10^−16^" (the latter using ftExtra markup).
     # An extension for flextable::fmt_dbl(), using its notation.
+    # See also miscresults$fmt_dp() for a decimal-point version.
 
     flag <- ""
     if (include_trailing_zero) {
@@ -601,14 +608,36 @@ miscresults$fmt_float <- function(
         )
     }
     # Convert hyphens to proper minus signs, and trim whitespace:
-    txt <- stringr::str_trim(
-        stringr::str_replace_all(txt, miscresults$HYPHEN, miscresults$MINUS)
-    )
+    txt <- stringr::str_trim(miscresults$hyphen_to_minus(txt))
     # Deal with NaN and NA (in parallel):
     return(case_when(
         is.nan(x) ~ nan_str,
         is.na(x) ~ na_str,
         .default = txt
+    ))
+}
+
+
+miscresults$fmt_dp <- function(
+    x,
+    dp = miscresults$DEFAULT_DP,
+    big.mark = get_flextable_defaults()$big.mark,
+    decimal.mark = get_flextable_defaults()$decimal.mark
+) {
+    # Formats a number to a certain number of decimal places (dp).
+    # If an integer is provided, that will also be formatted with decimal
+    # places.
+    #
+    # Don't use this for degrees of freedom; use miscresults$mk_df_text()
+    # instead, because of the defaults around commas for thousands separators
+    # (usually undesirable for degrees of freedom).
+
+    miscresults$hyphen_to_minus(formatC(
+        x,
+        format = "f",
+        digits = dp,
+        big.mark = big.mark,
+        decimal.mark = decimal.mark
     ))
 }
 
@@ -674,16 +703,14 @@ miscresults$mk_df_text <- function(
     # integer is often quite important!).
     # - By default, big.mark is "", not get_flextable_defaults()$big.mark;
     #   commas in degrees of freedom would be very confusing for F tests, in
-    #   which we will separate the two df numbers by commas anyway.
-    # - So for consistency, we'll use "" as the default.
+    #   which we will separate the two df numbers by commas.
 
     return(ifelse(
         as.integer(df) == df,
         miscresults$fmt_int(df, big.mark = big.mark),  # integer version
-        formatC(
+        miscresults$fmt_dp(
             df,
-            format = "f",
-            digits = dp,
+            dp = dp,
             big.mark = big.mark,
             decimal.mark = decimal.mark
         )  # floating-point version
@@ -996,7 +1023,7 @@ miscresults$mk_median_range <- function(
 
 miscresults$fmt_chisq <- function(
     chisq, df,
-    min_chisq = 1,  # minimum value shown exactly
+    min_chisq = miscresults$MINIMUM_CHISQ_SHOWN,  # minimum value shown exactly
     # ... critical value is qchisq(0.95, df) at α=0.05 and df=1, increasing
     #     for higher df. We might want to report things that didn't
     #     make it, but 1 seems like a reasonable "definitely do not care"
@@ -1029,7 +1056,7 @@ miscresults$fmt_chisq <- function(
 
 miscresults$fmt_chisq_p <- function(
     chisq, df, p,
-    min_chisq = 1,  # see miscresults$fmt_chisq()
+    min_chisq = miscresults$MINIMUM_CHISQ_SHOWN,  # see miscresults$fmt_chisq()
     ns_text = miscresults$NOT_SIGNIFICANT,
     check_alpha = DEFAULT_ALPHA,
     ...
@@ -4622,12 +4649,15 @@ miscresults$compare_models_via_anova <- function(
     model_info_list,
     no_comparison_txt = miscresults$EN_DASH,
     missing_description_txt = miscresults$EN_DASH,
-    same_model_txt = "[same]",
+    zero_df_comparison_txt = "[comparison has 0 df]",
     min_F = miscresults$MINIMUM_F_SHOWN,
+    min_chisq = miscresults$MINIMUM_CHISQ_SHOWN,
     omit_df_below_min_F = miscresults$DEFAULT_OMIT_DF_BELOW_MIN_STATS,
     ns_text = miscresults$NOT_SIGNIFICANT,
     check_alpha = DEFAULT_ALPHA,
-    df_format = miscresults$DF_FORMAT_OPTIONS
+    df_format = miscresults$DF_FORMAT_OPTIONS,
+    dp = miscresults$DEFAULT_DP,
+    verbose = TRUE
 ) {
     # Compares multiple nested models (which must be of the same data, and
     # via the same modelling mechanism, with only predictors differing) via
@@ -4650,36 +4680,77 @@ miscresults$compare_models_via_anova <- function(
     #           compare_to
     #               Name of the base (lesser) model this should be compared to,
     #               or NA/NULL for no comparison (e.g. for a base model).
+    #
     #   no_comparison_txt
     #       Text to use where no comparison is made.
     #   missing_description_txt
     #       Text to use when a description is missing.
-    #   same_model_txt
-    #       Text to use when if a model is compared to itself, i.e. 0 df in the
-    #       comparison.
+    #   zero_df_comparison_txt
+    #       Text to use if a comparison has 0 df (which arises e.g. if you
+    #       compare a model to itself).
+    #
     #   min_F                   }
-    #   omit_df_below_min_F     }
-    #   ns_text                 } passed to miscresults$fmt_F_p(); q.v.
-    #   check_alpha             }
+    #   min_chisq               }
+    #   omit_df_below_min_F     } passed to miscresults$fmt_F_p(),
+    #   ns_text                 } miscresults$fmt_chisq_p(), and/or
+    #   check_alpha             } miscresults$fmt_dp(); q.v.
     #   df_format               }
+    #   dp                      }
+    #
+    #   verbose
+    #       Be verbose?
     #
     # Returns a list with these elements:
     #
     #   model_info_list
-    #       The input.
+    #       The input, as above.
     #   working:
-    #       Full-working internal table.
+    #       Full-working internal table. Columns are:
+    #       - model
+    #           Name of this model.
+    #       - description
+    #           Description of this model.
+    #       - npar
+    #           Estimated number of parameters in the model; the degrees of
+    #           freedom from stats::logLik().
+    #       - R2m
+    #           Pseudo-R-squared, marginal: the variance explained by the fixed
+    #           effects. Via MuMIn::r.squaredGLMM().
+    #       - R2c
+    #           Pseudo-R-squared, conditional: the variance explained by the
+    #           entire model (fixed and random effects). Via
+    #           MuMIn::r.squaredGLMM().
+    #       - logLik
+    #           Log likelihood for the model. From stats::logLik().
+    #       - AIC
+    #           The Akaike Information Criterion, from stats::AIC().
+    #       - BIC
+    #           The Bayesian Information Criterion, from stats::BIC().
+    #       - versus
+    #           Name of the (base) model being compared to.
+    #       - comparison
+    #           Textual version of the statistical test of "this" model versus
+    #           the "base" model. The comparison is performed via
+    #           anova(this_model, base_model). It may be an F test or a
+    #           chi-square test.
     #   table_markdown:
     #       Markdown table, designed to be converted to a flextable.
+    #       Row- and column-compatible with "working", but with formatted
+    #       headings and numerical content.
     #   table_flex:
     #       Version of table_markdown formatted, in basic style, as a flextable
-    #       table. You may want to start with table_markdown and process it
-    #       yourself, though, for your own table style.
+    #       table, with an explanatory footnote. You may want to start with
+    #       table_markdown and process it yourself, though, for your own table
+    #       style. Row- and column-compatible with "working", "table_markdown".
     #
     # NOTE: if an F test has a negative first degree of freedom, you are
     # probably comparing models backwards (and the second DF number will be the
     # residuals from the smaller model/higher residual DF, not the larger
     # model/smaller residual DF). This will also generate a warning.
+
+    # -------------------------------------------------------------------------
+    # Arguments
+    # -------------------------------------------------------------------------
 
     model_names <- names(model_info_list)
     if (any(is.na(model_names) | is.null(model_names))) {
@@ -4693,10 +4764,24 @@ miscresults$compare_models_via_anova <- function(
         stop("Don't supply duplicate model names")
     }
 
+    # -------------------------------------------------------------------------
+    # Constants
+    # -------------------------------------------------------------------------
+
+    F_COMPARISON_COLS <- c("Res.Df", "RSS", "Df", "Sum of Sq", "F", "Pr(>F)")
+    CHISQ_COMPARISON_COLS <- c(
+        "npar", "AIC", "BIC", "logLik", "deviance", "Chisq", "Df", "Pr(>Chisq)"
+    )
+
+    # -------------------------------------------------------------------------
+    # Iterate through models
+    # -------------------------------------------------------------------------
     working <- NULL
     n_models <- length(model_info_list)
     for (m in 1:n_models) {
+        # ---------------------------------------------------------------------
         # Establish the comparison.
+        # ---------------------------------------------------------------------
         index_model_name <- model_names[m]
         index_model_element <- model_info_list[[m]]
         index_model <- index_model_element$model
@@ -4706,72 +4791,204 @@ miscresults$compare_models_via_anova <- function(
             index_model_description <- missing_description_txt
         }
         base_model_name <- index_model_element$compare_to
+
+        # Just to avoid screw-ups with variables from a previous interation:
+        r2m <- NA_real_
+        r2c <- NA_real_
+        ll_obj <- NULL
+        npar <- NA_integer_
+        ll <- NA_real_
+        aic <- NA_real_
+        bic <- NA_real_
+        versus <- NA_character_
+        comparison <- NA_character_
+
+        # ---------------------------------------------------------------------
+        # Metrics for the model, independent of any comparisons
+        # ---------------------------------------------------------------------
+
+        # R squared
+        mumin_metrics <- MuMIn::r.squaredGLMM(index_model)
+        r2m <- mumin_metrics[1, "R2m"]
+        r2c <- mumin_metrics[1, "R2c"]
+        # https://stackoverflow.com/questions/45327217
+        # ?MuMIn::r.squaredGLMM
+        # - R2m: marginal (fixed effects)
+        # - R2c: conditional (fixed + random effects)
+        # This function also works with plain lm() models with just fixed
+        # effects, in which case (of course) the two numbers are the same.
+
+        # Others
+        ll_obj <- stats::logLik(index_model)
+        npar <- attr(ll_obj, "df")
+            # From ?stats::logLik: "df"..., giving the number of (estimated)
+            # parameters in the model.
+        ll <- as.numeric(ll_obj)  # log likelihood
+        aic <- stats::AIC(index_model)
+        bic <- stats::BIC(index_model)
+
         if (is.na(base_model_name) || is.null(base_model_name)) {
+            # -----------------------------------------------------------------
             # A non-comparison row.
-            newrow <- tibble(
-                model = index_model_name,
-                description = index_model_description,
-                versus = no_comparison_txt,
-                comparison = no_comparison_txt
-            )
+            # -----------------------------------------------------------------
+            cat(paste0("▷ Examining model ", index_model_name, "...\n"))
+            versus <- no_comparison_txt
+            comparison <- no_comparison_txt
         } else {
+            # -----------------------------------------------------------------
+            # Comparison to a base model
+            # -----------------------------------------------------------------
+            cat(paste0(
+                "▷ Examining model ", index_model_name,
+                ", versus ", base_model_name, "...\n"
+            ))
+            # Determine the base model
+            versus <- base_model_name
             base_model_idx <- match(base_model_name, model_names)
             if (is.na(base_model_idx)) {
                 stop(paste0("No model has this name: ", base_model_name))
             }
             base_model <- model_info_list[[base_model_idx]]$model
-            # Compare
+
+            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            # Here's the actual comparison
+            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            # Compare to the base model
             a <- anova(base_model, index_model)
+
+            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            # Interpret it
+            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            # Row 1 is the base model; row 2 is the index model.
             stopifnot(nrow(a) == 2)
-            stopifnot(is.na(a$Df[1]))
+            index_rownum <- 1
             test_rownum <- 2
-            df1 <- a$Df[test_rownum]
-            if (df1 == 0) {
-                # Likely comparison to itself! Will be blanks elsewhere.
-                comparison_txt <- same_model_txt
-            } else {
-                if (df1 < 0) {
-                    warning(paste0(
-                        "miscresults$compare_models_via_anova: likely ",
-                        "backwards comparison: ", index_model_name, " versus ",
-                        base_model_name, "\n"
-                    ))
+
+            a_colnames <- colnames(a)
+            if (all(F_COMPARISON_COLS %in% a_colnames)) {
+                # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                # Comparison by F test.
+                # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                # Row 1 is the base model (with "Res.Df" and "RSS" only); row 2
+                # is the index model, with those plus "Df", "Sum of Sq", "F",
+                # and "Pr(>F)".
+                stopifnot(is.na(a$Df[1]))
+                df1 <- a$Df[test_rownum]
+                if (df1 == 0) {
+                    # Comparison has 0 df. (Could be a self-comparison.)
+                    # Will be blanks elsewhere.
+                    comparison <- zero_df_comparison_txt
+                } else {
+                    if (df1 < 0) {
+                        warning(paste0(
+                            "miscresults$compare_models_via_anova: likely ",
+                            "backwards comparison: ", index_model_name,
+                            " versus ", base_model_name, "\n"
+                        ))
+                    }
+                    comparison <- miscresults$fmt_F_p(
+                        F = a$F[test_rownum],
+                        df1 = df1,
+                        df2 = a$Res.Df[test_rownum],
+                        p = a$`Pr(>F)`[test_rownum],
+                        min_F = min_F,
+                        omit_df_below_min_F = omit_df_below_min_F,
+                        ns_text = ns_text,
+                        check_alpha = check_alpha,
+                        df_format = df_format
+                    )
                 }
-                comparison_txt <- miscresults$fmt_F_p(
-                    F = a$F[test_rownum],
-                    df1 = df1,
-                    df2 = a$Res.Df[test_rownum],
-                    p = a$`Pr(>F)`[test_rownum],
-                    min_F = min_F,
-                    omit_df_below_min_F = omit_df_below_min_F,
-                    ns_text = ns_text,
-                    check_alpha = check_alpha,
-                    df_format = df_format
-                )
+
+            } else if (all(CHISQ_COMPARISON_COLS %in% a_colnames)) {
+                # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                # Comparison by chi-square test.
+                # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                stopifnot(is.na(a$Df[1]))
+                df1 <- a$Df[test_rownum]
+                if (df1 == 0) {
+                    comparison <- zero_df_comparison_txt
+                } else {
+                    comparison <- miscresults$fmt_chisq_p(
+                        chisq = a$Chisq[test_rownum],
+                        df = df1,
+                        p = a$`Pr(>Chisq)`[test_rownum],
+                        min_chisq = min_chisq,
+                        ns_text = ns_text,
+                        check_alpha = check_alpha,
+                        df_format = df_format
+                    )
+                }
+
+            } else {
+                cat("Unknown comparison object:\n")
+                print(a)
+                stop("Don't know how to interpret this.")
             }
-            # Format the results.
-            newrow <- tibble(
-                model = index_model_name,
-                description = index_model_description,
-                versus = base_model_name,
-                comparison = comparison_txt
-            )
+
         }
-        # Combine
+        # ---------------------------------------------------------------------
+        # Create and add the new row
+        # ---------------------------------------------------------------------
+        newrow <- tibble(
+            model = index_model_name,
+            description = index_model_description,
+            npar = npar,
+            R2m = r2m,
+            R2c = r2c,
+            logLik = ll,
+            AIC = aic,
+            BIC = bic,
+            versus = versus,
+            comparison = comparison
+        )
         working <- rbind(working, newrow)
     }
+    # -------------------------------------------------------------------------
+    # Formatting
+    # -------------------------------------------------------------------------
     table_markdown <- (
         working
+        %>% mutate(
+            npar = miscresults$fmt_int(npar),
+            R2m = miscresults$fmt_float(R2m, allow_sci_notation = FALSE),
+            R2c = miscresults$fmt_float(R2c, allow_sci_notation = FALSE),
+            logLik = miscresults$fmt_dp(logLik, dp = dp),
+            AIC = miscresults$fmt_dp(AIC, dp = dp),
+            BIC = miscresults$fmt_dp(BIC, dp = dp)
+        )
         %>% rename(
             "Model" = model,
             "Description" = description,
+            "Parameters" = npar,
+            "*R*^2^~*m*~" = R2m,
+            "*R*^2^~*c*~" = R2c,
+            "LL" = logLik,
             "Versus" = versus,
             "Comparison" = comparison
         )
     )
-    table_flex <- miscresults$mk_default_flextable_from_markdown(
-        table_markdown
+    table_flex <- (
+        miscresults$mk_default_flextable_from_markdown(
+            table_markdown
+        )
+        %>% add_footer_lines(as_paragraph_md(paste0(
+            "Number of parameters estimated from degrees of freedom.",
+            " *R*^2^~*m*~: Marginal pseudo-*R*^2^, the proportion of variance",
+            " explained by fixed effects.",
+            " *R*^2^~*c*~: Conditional pseudo-*R*^2^, the proportion of ",
+            " variance explained by the entire model (fixed and random ",
+            " effects, if applicable).",
+            " LL, log likelihood: natural log of likelihood ",
+            " L(model | data) ∝ P(data | model); higher (less negative) values",
+            " indicate a better fit.",
+            " AIC, Akaike Information Criterion (rewards LL, penalizes ",
+            " more parameters): lower values are better.",
+            " BIC, Bayesian Information Criterion: lower values are better."
+        )))
     )
+    # -------------------------------------------------------------------------
+    # Return
+    # -------------------------------------------------------------------------
     return(list(
         model_info_list = model_info_list,  # the input
         working = working,

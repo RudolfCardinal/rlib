@@ -409,6 +409,7 @@ fd4[, performance := NULL]
 fd4[, succeeded := NULL]
 fd4[, subjnum := 1:nrow(fd4)]
 fd4[, subject := paste0("s", subjnum)]
+fd4[, subject_offset := rnorm(n = nrow(fd4), mean = 0, sd = 5.0)]
 fd4 <- (
     rbind(
         fd4 %>% mutate(wsfac = "A"),
@@ -430,6 +431,7 @@ fd4 <- (
         performance = (
             y_start + y_age + y_sex + y_drug + y_boolpred
                 + y_wslin + y_wsfac
+                + subject_offset
                 + err
         ),
         succeeded = as.integer(performance > mean(performance))
@@ -681,7 +683,6 @@ m3l <- mk_model_anova_coeffs(
     predictor_replacements = M3_PREDICTOR_REPLACEMENTS
 )
 
-
 cat("Creating m4f...\n")
 m4f <- mk_model_anova_coeffs(
     # Also with boolean predictor:
@@ -724,6 +725,23 @@ ft5a <- (
     %>% set_caption("[ft5a] lme4::glmer, Poisson")
 )
 
+cat("Creating m6f...\n")
+# For model comparison with m4f
+m6f <- mk_model_anova_coeffs(
+    # Also with boolean predictor:
+    model_fn = lmerTest::lmer,
+    formula = (
+        performance ~
+            age * drug * sex
+            + (1 | subject)
+    ),
+    data = fd4,
+    predictor_replacements = M3_PREDICTOR_REPLACEMENTS,
+    squish_up_level_rows = TRUE,
+    suppress_nonsig_coeffs = FALSE,
+    suppress_nonsig_coeff_tests = TRUE
+)
+
 
 # =============================================================================
 # Model comparison
@@ -764,6 +782,24 @@ mcomp1 <- miscresults$compare_models_via_anova(list(
 ftcomp1 <- (
     mcomp1$table_flex
     %>% set_caption("[ftcomp1] Model comparison 1")
+)
+
+
+mcomp2 <- miscresults$compare_models_via_anova(list(
+    "Model m6f" = list(
+        model = m6f$anova_model,
+        description = "WS, limited predictors",
+        compare_to = NA
+    ),
+    "Model m4f" = list(
+        model = m4f$anova_model,
+        description = "WS, full predictors",
+        compare_to = "Model m6f"
+    )
+))
+ftcomp2 <- (
+    mcomp2$table_flex
+    %>% set_caption("[ftcomp2] Model comparison 2")
 )
 
 
@@ -850,3 +886,4 @@ readline(PROMPT); print(ft3m)
 readline(PROMPT); print(ft3f)
 readline(PROMPT); print(ft4a)
 readline(PROMPT); print(ftcomp1)
+readline(PROMPT); print(ftcomp2)

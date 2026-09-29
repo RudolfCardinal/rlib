@@ -788,8 +788,21 @@ miscstat$sidak_corrected_p <- function(uncorrected_p, n_comparisons) {
 
 miscstat$aic <- function(nLL, k) {
     # Akaike Information Criterion
+    #
+    # Arguments:
+    #   nLL
+    #       Negative log-likelihood for a model.
+    #   k
+    #       Number of parameters in the model.
+
     2 * k + 2 * nLL
     # = 2k - 2ln(L)
+
+    # Other expressions are e.g. per stats::AIC,
+    #   -2ln(L) + k * n_par
+    # where n_par is the number of parameters, and k here is something else:
+    # k = 2 for the usual AIC, or k = log(n) where n is the number of
+    # observations, for BIC.
 }
 
 
