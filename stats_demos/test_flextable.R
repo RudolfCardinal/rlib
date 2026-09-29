@@ -216,7 +216,11 @@ tsumm1 <- (
             variable == "height" ~ "Height (m)",
             variable == "response_mean" ~ "Response (response units) (mean)",
             variable == "response_median" ~ "Response (response units) (median)",
-            variable == "dullness" ~ "Dullness (bishops)",
+            variable == "dullness" ~ paste0(
+                "Dullness", miscresults$MARKDOWN_NEWLINE,
+                "(bishops)", miscresults$MARKDOWN_NEWLINE,
+                "(multiline)"
+            ),
             .default = variable
         )
     )
@@ -240,7 +244,7 @@ tsumm1 <- (
             "\n\n",
             "[^fref]: Third footnote."
         ),
-        .before = 7 # ***
+        .before = 7
     )
 )
 # Get the groups in the right order:

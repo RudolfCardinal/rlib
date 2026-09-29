@@ -2338,7 +2338,7 @@ miscresults$annotate_model_anova_coeffs <- function(
     model_fn,
     formula,
     data,
-    type = c("III", "II", "I", 3, 2, 1),  # default first
+    type = c("III", "II", "I", "3", "2", "1"),  # default first
     contrasts_anova_model = NULL,
     contrasts_coeff_model = NULL,
     # Cosmetic:
@@ -2407,9 +2407,9 @@ miscresults$annotate_model_anova_coeffs <- function(
     stopifnot(!is.null(coeff_model))
     stopifnot(!is.null(contrasts_coeff_model))
 
-    using_type_I_ss <- type == "I" || type == 1
-    using_type_II_ss <- type == "II" || type == 2
-    using_type_III_ss <- type == "III" || type == 3
+    using_type_I_ss <- type == "I" || type == "1"
+    using_type_II_ss <- type == "II" || type == "2"
+    using_type_III_ss <- type == "III" || type == "3"
     if (!using_type_I_ss && !using_type_II_ss && !using_type_III_ss) {
         stop("Bad sum-of-squares type argument")
     }
@@ -2760,7 +2760,7 @@ miscresults$mk_model_anova_coeffs <- function(
     model_fn,
     formula,
     data,
-    type = c("III", "II", "I", 3, 2, 1),  # default first
+    type = c("III", "II", "I", "3", "2", "1"),  # default first
     contrasts_anova_model = NULL,
     contrasts_coeff_model = NULL,
     # Cosmetic:
@@ -3086,9 +3086,9 @@ miscresults$mk_model_anova_coeffs <- function(
     # -------------------------------------------------------------------------
 
     type <- match.arg(type)
-    using_type_I_ss <- type == "I" || type == 1
-    using_type_II_ss <- type == "II" || type == 2
-    using_type_III_ss <- type == "III" || type == 3
+    using_type_I_ss <- type == "I" || type == "1"
+    using_type_II_ss <- type == "II" || type == "2"
+    using_type_III_ss <- type == "III" || type == "3"
     if (!using_type_I_ss && !using_type_II_ss && !using_type_III_ss) {
         stop("Bad sum-of-squares type argument")
     }
