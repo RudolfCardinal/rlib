@@ -2588,17 +2588,17 @@ miscresults$annotate_model_anova_coeffs <- function(
             # Also fix an oddity: glm() output can produce a coefficient but
             # not an ANOVA term for the intercept, so in that case we move the
             # label to the "term" column.
-            formatted_term = case_when(
-                is_intercept ~ miscresults$str_replace_all_if_required(
-                    R_INTERCEPT_LABEL,
-                    pattern = predictor_replacements
-                ),
+            partformatted_term = case_when(
+                is_intercept ~ R_INTERCEPT_LABEL,
                 is_term ~ miscresults$fmt_predictor(
                     term,
-                    replacements = predictor_replacements,
                     interaction_txt = interaction_txt
                 ),
                 .default = "",
+            ),
+            formatted_term = miscresults$str_replace_all_if_required(
+                partformatted_term,
+                pattern = predictor_replacements
             ),
             f_txt = case_when(
                 is.na(F) ~ "",
@@ -2616,21 +2616,21 @@ miscresults$annotate_model_anova_coeffs <- function(
                     ns_text = ns_text
                 )
             ),
-            formatted_level = case_when(
-                is_reference_level ~ miscresults$str_replace_all_if_required(
-                    coeff_name,
-                    pattern = predictor_replacements
-                ),
+            partformatted_level = case_when(
+                is_reference_level ~ coeff_name,
                 is_intercept ~ level_not_applicable,
                 is_linear ~ level_not_applicable,
                 is_subterm ~ miscresults$fmt_level(
                     coeff_name,
                     anova_term_name,
-                    replacements = predictor_replacements,
                     interaction_txt = level_combination_text
                 ),
                 !is.na(coeff) ~ level_not_applicable,
                 .default = ""  # includes: not an actual level row
+            ),
+            formatted_level = miscresults$str_replace_all_if_required(
+                partformatted_level,
+                pattern = predictor_replacements
             ),
             coeff_txt = case_when(
                 is_reference_level ~ reference_label,
@@ -2984,8 +2984,13 @@ miscresults$mk_model_anova_coeffs <- function(
     #           Denominator (residual) degrees of freedom for the F statistic.
     #       pF [numeric]
     #           Probability (p value) associated with the F statistic.
+    #       partformatted_term [character]
+    #           A slightly nicer-looking version of the term name, e.g.
+    #           "age × sex". At this point, predictor_replacements have not yet
+    #           been applied.
     #       formatted_term [character]
     #           A nice-looking version of the term name, e.g. "Age × Sex".
+    #           This is partformatted_term with predictor_replacements applied.
     #       f_txt [character]
     #           A Markdown-formatted version of the F statistic with its
     #           degrees of freedom.
@@ -3033,9 +3038,14 @@ miscresults$mk_model_anova_coeffs <- function(
     #       coeff_df_for_t [numeric]
     #           If the test statistic is t, the associated degrees of freedom.
     #           (NA for Z tests.)
+    #       partformatted_level [character]
+    #           A slightly nicer-looking version of the subterm/level name,
+    #           e.g. "age × sexMale". At this point, predictor_replacements
+    #           have not yet been applied.
     #       formatted_level [character]
     #           A nice-looking version of the subterm/level name, e.g. "Low
-    #           dose, Make".
+    #           dose, Male". This is partformatted_level with
+    #           predictor_replacements applied.
     #       coeff_txt [character]
     #           A formatted value of the coefficient (e.g. "−4.16 (CI −10.8 to
     #           +2.45)", or "Reference").
@@ -3073,13 +3083,8 @@ miscresults$mk_model_anova_coeffs <- function(
     #       Version of table_markdown formatted, in basic style, as a flextable
     #       table. You may want to start with table_markdown and process it
     #       yourself, though, for your own table style.
-    #       Row-compatible with "working".
+    #       Row-compatible with "working" and "table_markdown".
     #       Column-compatible with "table_markdown".
-    #
-    # NOT CURRENTLY PROVIDED:
-    # - Overall R-squared values:
-    #   For lmer(), use MuMIn::r.squaredGLMM(result$anova_model), e.g. as
-    #   MuMIn::r.squaredGLMM(result$anova_model)[1, "R2c"].
 
     # -------------------------------------------------------------------------
     # Arguments
@@ -4760,44 +4765,58 @@ miscresults$compare_models_via_anova <- function(
     #   model_info_list -- ONLY IF include_model_list = TRUE.
     #       The input, as above. Note that this can be very large for some
     #       models, so it is not included by default.
+    #
     #   working:
     #       Full-working internal table. Columns are:
-    #       - model
-    #           Name of this model.
-    #       - description
-    #           Description of this model.
-    #       - npar
+    #       - model [character]
+    #           Name of this model (supplied by the caller).
+    #       - description [character]
+    #           Description of this model (supplied by the caller).
+    #       - fixed [integer]
+    #           Number of fixed-effect predictors.
+    #           From ncol(model.matrix(m, "fixed")).
+    #       - random [integer]
+    #           Number of random effect predictors.
+    #           From ncol(model.matrix(m, "random")).
+    #       - df [numeric]
     #           Estimated number of parameters in the model; the degrees of
     #           freedom from stats::logLik().
-    #       - R2m
+    #       - nobs [integer]
+    #           Number of observations being predicted. From stats::nobs().
+    #       - R2m [numeric]
     #           Pseudo-R-squared, marginal: the variance explained by the fixed
     #           effects. Via MuMIn::r.squaredGLMM().
-    #       - R2c
+    #       - R2c [numeric]
     #           Pseudo-R-squared, conditional: the variance explained by the
     #           entire model (fixed and random effects). Via
     #           MuMIn::r.squaredGLMM().
-    #       - logLik
+    #       - logLik [numeric]
     #           Log likelihood for the model. From stats::logLik().
-    #       - AIC
+    #       - AIC [numeric]
     #           The Akaike Information Criterion, from stats::AIC().
-    #       - AIC_rank
-    #           Rank of AIC (1 best).
-    #       - BIC
+    #       - AIC_rank [numeric]
+    #           Rank of AIC (1 best). Uses the default behaviour of rank(),
+    #           rank(..., ties.method = "average").
+    #       - BIC [numeric]
     #           The Bayesian Information Criterion, from stats::BIC().
-    #       - BIC_rank
-    #           Rank of AIC (1 best).
-    #       - versus
-    #           Name of the (base) model being compared to.
-    #       - comparison
+    #       - BIC_rank [numeric]
+    #           Rank of AIC (1 best). Uses the default behaviour of rank(),
+    #           rank(..., ties.method = "average").
+    #       - versus [character]
+    #           Name of the (base) model being compared to (supplied by the
+    #           caller).
+    #       - comparison [character]
     #           Textual version of the statistical test of "this" model versus
     #           the "base" model. The comparison is performed via
     #           anova(this_model, base_model). It may be an F test or a
     #           chi-square test.
+    #
     #   table_markdown:
     #       Markdown table, designed to be converted to a flextable.
     #       Row-compatible with "working", but with formatted headings and
     #       numerical content. Column-compatible unless you do not include
     #       AIC/BIC, as above.
+    #
     #   table_flex:
     #       Version of table_markdown formatted, in basic style, as a flextable
     #       table, with an explanatory footnote. You may want to start with
