@@ -94,6 +94,7 @@ pak::pak(c(
     "matrixStats",  # High-performance matrix functions.
     "MCMCglmm",  # MCMC generalized linear mixed models.
     "merTools",  # e.g. for merTools::predictInterval().
+    "microbenchmark",  # Benchmarks.
     "moments",  # E.g. skewness, kurtosis.
     "multcomp",  # Multiple comparisons for generalized linear models etc.
     "multidplyr",  # Parallel processing for dplyr (part of tidyverse).

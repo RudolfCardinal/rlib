@@ -256,6 +256,9 @@ datetimefunc$mk_pulsetable_dimensionless <- function(
     #   time_units
     #       Units of time (e.g. "years" or NA). (From this function: always NA.
     #       But included for compatibility with mk_pulsetable_dates().)
+    #
+    # Note that datetimefunc$mk_pulsetable_dimensionless(NULL) is a quick way
+    # to return an empty pulsetable.
 
     n_events <- length(event_times)
 
