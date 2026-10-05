@@ -4704,7 +4704,9 @@ miscresults$compare_models_via_anova <- function(
     check_alpha = DEFAULT_ALPHA,
     df_format = miscresults$DF_FORMAT_OPTIONS,
     dp = miscresults$DEFAULT_DP,
+    sort_order = c("input", "LL", "AIC", "BIC"),
     include_model_list = FALSE,
+    include_ll_rank = TRUE,
     include_aic = TRUE,
     include_bic = TRUE,
     include_pairwise = TRUE,
@@ -4750,6 +4752,18 @@ miscresults$compare_models_via_anova <- function(
     #   df_format               }
     #   dp                      }
     #
+    #   sort_order
+    #       Sort order for the result. Options:
+    #       - "input": keep the input order
+    #       - "LL": sort by log-likelihood (worst to best)
+    #       - "AIC": sort by AIC (worst to best)
+    #       - "BIC": sort by BIC (worst to best)
+    #   include_model_list
+    #       Include the input (model_info_list) in the output? See below -- the
+    #       reason to avoid this by default is because these can be extremely
+    #       large.
+    #   include_ll_rank
+    #       Include log likelihood rank in the formatted output?
     #   include_aic
     #       Include AIC and AIC rank in the formatted output?
     #   include_bic
@@ -4792,16 +4806,19 @@ miscresults$compare_models_via_anova <- function(
     #           MuMIn::r.squaredGLMM().
     #       - logLik [numeric]
     #           Log likelihood for the model. From stats::logLik().
+    #       - logLik_rank [numeric]
+    #           Rank of log likelihood (1 best = highest LL). Uses the default
+    #           behaviour of rank(), rank(..., ties.method = "average").
     #       - AIC [numeric]
     #           The Akaike Information Criterion, from stats::AIC().
     #       - AIC_rank [numeric]
-    #           Rank of AIC (1 best). Uses the default behaviour of rank(),
-    #           rank(..., ties.method = "average").
+    #           Rank of AIC (1 best = lowest AIC). Uses the default behaviour
+    #           of rank(), rank(..., ties.method = "average").
     #       - BIC [numeric]
     #           The Bayesian Information Criterion, from stats::BIC().
     #       - BIC_rank [numeric]
-    #           Rank of AIC (1 best). Uses the default behaviour of rank(),
-    #           rank(..., ties.method = "average").
+    #           Rank of BIC (1 best = lowest BIC). Uses the default behaviour
+    #           of rank(), rank(..., ties.method = "average").
     #       - versus [character]
     #           Name of the (base) model being compared to (supplied by the
     #           caller).
@@ -4832,6 +4849,7 @@ miscresults$compare_models_via_anova <- function(
     # Arguments
     # -------------------------------------------------------------------------
 
+    sort_order <- match.arg(sort_order)
     model_names <- names(model_info_list)
     if (any(is.na(model_names) | is.null(model_names))) {
         cat("Missing model names:\n")
@@ -5069,6 +5087,7 @@ miscresults$compare_models_via_anova <- function(
     working <- (
         working
         %>% mutate(
+            logLik_rank = rank(-logLik),  # highest gets rank 1 (best)
             AIC_rank = rank(AIC),  # lowest gets rank 1 (best)
             BIC_rank = rank(BIC)  # lowest gets rank 1 (best)
         )
@@ -5083,6 +5102,7 @@ miscresults$compare_models_via_anova <- function(
             R2m,
             R2c,
             logLik,
+            logLik_rank,
             AIC,
             AIC_rank,
             BIC,
@@ -5091,6 +5111,18 @@ miscresults$compare_models_via_anova <- function(
             comparison
         )
     )
+
+    # Sort, if desired.
+    # All our sorts here are worst-to-best.
+    # arrange() sorts in ascending order unless specified.
+    if (sort_order == "LL") {
+        working <- working %>% arrange(logLik)
+    } else if (sort_order == "AIC") {
+        working <- working %>% arrange(-AIC)
+    } else if (sort_order == "BIC") {
+        working <- working %>% arrange(-BIC)
+    }
+
     table_markdown <- (
         working
         %>% mutate(
@@ -5102,6 +5134,7 @@ miscresults$compare_models_via_anova <- function(
             R2m = miscresults$fmt_float(R2m, allow_sci_notation = FALSE),
             R2c = miscresults$fmt_float(R2c, allow_sci_notation = FALSE),
             logLik = miscresults$fmt_dp(logLik, dp = dp),
+            logLik_rank = miscresults$fmt_int_or_max_dp(logLik_rank),
             AIC = miscresults$fmt_dp(AIC, dp = dp),
             AIC_rank = miscresults$fmt_int_or_max_dp(AIC_rank),
             BIC = miscresults$fmt_dp(BIC, dp = dp),
@@ -5117,6 +5150,7 @@ miscresults$compare_models_via_anova <- function(
             "*R*^2^~*m*~" = R2m,
             "*R*^2^~*c*~" = R2c,
             "LL" = logLik,
+            "LL rank" = logLik_rank,
             "AIC rank" = AIC_rank,
             "BIC rank" = BIC_rank,
             "Versus" = versus,
@@ -5138,6 +5172,9 @@ miscresults$compare_models_via_anova <- function(
         " ∝ *P*(data | model); higher (less negative) values indicate a",
         " better fit."
     )
+    if (!include_ll_rank) {
+        table_markdown <- table_markdown %>% select(-"LL rank")
+    }
     if (include_aic) {
         footer_elements <- c(
             footer_elements,
@@ -5146,7 +5183,6 @@ miscresults$compare_models_via_anova <- function(
     } else {
         table_markdown <- table_markdown %>% select(-AIC, -"AIC rank")
     }
-
     if (include_bic) {
         footer_elements <- c(
             footer_elements,

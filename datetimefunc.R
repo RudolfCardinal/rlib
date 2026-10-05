@@ -710,14 +710,16 @@ datetimefunc$query_pulsetable_times_v1 <- function(
         # ---------------------------------------------------------------------
         t_on_since_last_off <- ifelse(
             current,
-            query_times - relevant_starts,  # currently on; invalid_indexes cannot be true
+            query_times - relevant_starts,
+                # ... currently on; invalid_indexes cannot be true
             0  # currently off
         )
         t_off_since_last_on <- ifelse(
             current,
             0,  # currently on
             ifelse(  # currently off
-                invalid_indexes,  # is the query time before the first start time?
+                invalid_indexes,
+                    # ... is the query time before the first start time?
                 0,  # never previously on
                 query_times - relevant_ends
             )
